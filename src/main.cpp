@@ -55,6 +55,7 @@ int main() {
   std::getline(std::cin, temp);
   Symbol ast = get_ast(get_tokens(temp));
   rec_print_ast(ast);
+  std::cout << "\n";
   Symbol result = eval(ast);
   rec_print_ast(result);
   return 0;
@@ -394,7 +395,6 @@ Symbol eval(Symbol root) {
   Symbol result;
   std::stack<Symbol> node_stk;
   Symbol current_node;
-  Symbol parent_node;
   // results of intermediate nodes (i.e. nodes below the root)
   std::vector<Symbol> intermediate_results;
   // this is the data on which the actual computation takes place,
@@ -402,22 +402,45 @@ Symbol eval(Symbol root) {
   // to get compute the value for each node, including the root.
   std::vector<std::vector<Symbol>> leaves;
   current_node = root;
-  parent_node = root;
   do {
     // for each node, visit each child and backtrack to the last parent node
     // when the last child is null, and continue with the second last node and so on
+
+    for (auto v: leaves) {
+      std::cout << "{ ";
+      for (auto e: v) {
+	rec_print_ast(e);
+	std::cout << ' ';
+      }
+      std::cout << "}";
+    }
+    std::cout << "\n";
+    std::cout << "( ";
+    for (auto e: intermediate_results) {
+      rec_print_ast(e);
+      std::cout << ' ';
+    }
+    std::cout << ")\n";
     if (current_node.type == Type::List) {
       if (std::get<std::list<Symbol>>(current_node.value).empty()) {
+	std::cout << "empty list!\n";
+	rec_print_ast(current_node);
+	std::cout << "\n";
 	// if we're back to the root node, and we don't have any
 	// children left, we're done.
-	if (leaves.empty() && current_node.name == "root") break;
+	if (leaves.empty() && (current_node.name == "root")) break;
 	Symbol eval_temp_arg;
 	// insert the intermediate results gotten so far into the leaves, so we
 	// can compute the value for the current node.
-	if (!intermediate_results.empty())
-	  leaves[leaves.size() - 1].insert(leaves[leaves.size() - 1].end(),
-					   intermediate_results.begin(),
-					   intermediate_results.end());
+	if (leaves.size() == 1) {
+	  // we reached the top node, compute the final result:
+	  if (!intermediate_results.empty()) {
+	    leaves[leaves.size() - 1]
+	      .insert(leaves[leaves.size() - 1].end(),
+		      intermediate_results.begin(),
+		      intermediate_results.end());
+	  }
+	}
 	eval_temp_arg = Symbol(
 			       "",
 			       std::list(leaves[leaves.size() - 1].begin(),
@@ -425,25 +448,40 @@ Symbol eval(Symbol root) {
 			       Type::List
 			       );
 	result = eval_primitive_node(eval_temp_arg);
-	intermediate_results.push_back(result);
-        if (current_node.name != "root") current_node = parent_node;
+        intermediate_results.push_back(result);
+        if (!node_stk.empty()) {
+	  current_node = node_stk.top();
+	  node_stk.pop();
+	}
 	leaves.pop_back();
       }
       else {
+	std::cout << "non-empty list!\n";
+	rec_print_ast(current_node);
+	std::cout << "\n";
 	Symbol child = std::get<std::list<Symbol>>(current_node.value).back();
+	std::cout << "child: ";
+	rec_print_ast(child);
+	std::cout << "\n";
 	auto templ = std::get<std::list<Symbol>>(current_node.value);
 	templ.pop_back();
+	current_node.value = templ;
+	node_stk.push(current_node);
 	current_node = child;
-	parent_node.value = templ;
-	if ((child.type == Type::List) && (leaves.empty() || templ.empty()))
+	std::cout << "\n";
+	if ((child.type == Type::List) || leaves.empty())
 	  leaves.push_back(std::vector<Symbol>{});
       }
     } else {
+      std::cout << "literal!\n";
+      rec_print_ast(current_node);
+      std::cout << "\n";
       if (!leaves.empty())
 	leaves[leaves.size() - 1].push_back(current_node);
       else
 	leaves.push_back(std::vector<Symbol>{current_node});
-      current_node = parent_node;
+      current_node = node_stk.top();
+      node_stk.pop();
     }
   } while (1);
   return result;
