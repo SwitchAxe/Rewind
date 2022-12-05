@@ -12,6 +12,7 @@
 #include <stack>
 #include <charconv>
 #include <type_traits>
+#include <functional>
 
 
 enum Type {
@@ -29,6 +30,7 @@ using _Type = std::variant<std::monostate,
 			   std::list<Symbol>,
 			   bool>;
 struct Symbol {
+  auto operator<=>(const Symbol&) const = default;
   Symbol() = default;
   Symbol(std::string _n, _Type _v, Type _t) {
     name = _n;
@@ -44,12 +46,17 @@ struct Symbol {
 std::vector<std::string> get_tokens(std::string stream);
 Symbol get_ast(std::vector<std::string> tokens);
 void rec_print_ast(Symbol root);
+Symbol eval_primitive_node(Symbol node);
+Symbol eval(Symbol node);
+
 
 int main() {
   std::string temp;
   std::getline(std::cin, temp);
   Symbol ast = get_ast(get_tokens(temp));
   rec_print_ast(ast);
+  Symbol result = eval(ast);
+  rec_print_ast(result);
   return 0;
 }
 
@@ -136,8 +143,113 @@ get_tokens(std::string stream) {
   return tokens;
 }
 
-static std::array<std::string, 4> operators = {
-  "+", "-", "*", "/",
+// static std::vector<std::string> operators = {
+//   "+", "-", "*", "/", "define", 
+// };
+
+// this will be used to store variables
+std::map<std::string, _Type> variables;
+
+using fnsig = std::function<Symbol(std::vector<Symbol>)>;
+static std::map<std::string, fnsig> procedures = {
+  {
+    "+",
+    [](std::vector<Symbol> args) -> Symbol {
+      int r = 0;
+      for (auto e: args) {
+	if (e.type != Type::Number) {
+	  throw std::logic_error {
+	    "Unexpected operand to the '+' procedure!\n"
+	  };
+	}
+	r += std::get<int>(e.value);
+      }
+      Symbol ret("", r, Type::Number);
+      return ret;
+    }
+  },
+  {
+    "-",
+    [](std::vector<Symbol> args) -> Symbol {
+      int r;
+      if (!std::holds_alternative<int>(args[0].value)) {
+	throw std::logic_error {
+	  "Unexpected operand to the '-' procedure!\n"
+	};
+      }
+      r = std::get<int>(args[0].value);
+      for (int i = 1; i < args.size(); ++i) {
+	if (args[i].type != Type::Number) {
+	  throw std::logic_error{
+	    "Unexpected operand to the '-' procedure!\n"
+	  };
+	}
+	r -= std::get<int>(args[i].value);
+      }
+      Symbol ret("", r, Type::Number);
+      return ret;
+    }
+  },
+  {
+    "/",
+    [](std::vector<Symbol> args) -> Symbol {
+      int r;
+      if (!std::holds_alternative<int>(args[0].value)) {
+	throw std::logic_error {
+	  "Unexpected operand to the '/' procedure!\n"
+	};
+      }
+      r = std::get<int>(args[0].value);
+      for (int i = 1; i < args.size(); ++i) {
+	if (args[i].type != Type::Number) {
+	  throw std::logic_error{
+	    "Unexpected operand to the '/' procedure!\n"
+	  };
+	}
+	r /= std::get<int>(args[i].value);
+      }
+      Symbol ret("", r, Type::Number);
+      return ret;
+    }
+  },
+  {
+    "*",
+    [](std::vector<Symbol> args) -> Symbol {
+      int r;
+      if (!std::holds_alternative<int>(args[0].value)) {
+	throw std::logic_error {
+	  "Unexpected operand to the '*' procedure!\n"
+	};
+      }
+      r = std::get<int>(args[0].value);
+      for (int i = 1; i < args.size(); ++i) {
+	if (args[i].type != Type::Number) {
+	  throw std::logic_error{
+	    "Unexpected operand to the '*' procedure!\n"
+	  };
+	}
+	r *= std::get<int>(args[i].value);
+      }
+      Symbol ret("", r, Type::Number);
+      return ret;
+    }
+  },
+  {
+    "define",
+    [](std::vector<Symbol> args) -> Symbol {
+      if (args.size() > 2)
+	throw std::logic_error{
+	  "Wrong amount of arguments to 'define'!\n"
+	};
+      if (args[0].type != Type::Identifier)
+	throw std::logic_error{
+	  "First argument to 'define' must be an identifier!\n"
+	};
+      variables.insert_or_assign(std::get<std::string>(args[0].value),
+				 args[1].value);
+      return args[1];
+    }
+  }
 };
 
 Symbol get_ast(std::vector<std::string> tokens) {
@@ -153,6 +265,7 @@ Symbol get_ast(std::vector<std::string> tokens) {
       if (std::holds_alternative
 	  <std::monostate>(node.value)) {
 	node.type = Type::List;
+	node.name = "root";
 	node.value = std::list<Symbol>();
       }
       else {
@@ -197,9 +310,7 @@ Symbol get_ast(std::vector<std::string> tokens) {
 	// a number!
         child.type = Type::Number;
         child.value = v;
-      } else if (std::find(operators.begin(),
-			   operators.end(),
-			   tok) != operators.end()) {
+      } else if (procedures.contains(tok)) {
 	child.type = Type::Operator;
 	child.value = tok;
       } else if (tok[0] == '"') {
@@ -233,17 +344,108 @@ Symbol get_ast(std::vector<std::string> tokens) {
 }
 
 void rec_print_ast(Symbol root) {
-  std::cout << "[ ";
-  for (auto s: std::get<std::list<Symbol>>(root.value)) {
-    if (s.type == Type::List) {
-      rec_print_ast(s);
-    } else {
-      std::visit([]<class T>(T&& v) -> void {
-	  if constexpr (std::is_same_v<std::decay_t<T>, std::monostate>) {}
-	  else if constexpr (std::is_same_v<std::decay_t<T>, std::list<Symbol>>) {}
-	  else std::cout << v << " ";
-	}, s.value);
+  std::cout << std::boolalpha;
+  if (root.type == Type::List) {
+    std::cout << "[ ";
+    for (auto s: std::get<std::list<Symbol>>(root.value)) {
+      if (s.type == Type::List) {
+	rec_print_ast(s);
+      }
+      else {
+	std::visit([]<class T>(T&& v) -> void {
+	    if constexpr (std::is_same_v<std::decay_t<T>, std::monostate>) {}
+	    else if constexpr (std::is_same_v<std::decay_t<T>, std::list<Symbol>>) {}
+	    else std::cout << v << " ";
+	  }, s.value);
+      }
     }
+    std::cout << "]";
+  } else {
+    std::visit([]<class T>(T&& v) -> void {
+	if constexpr (std::is_same_v<std::decay_t<T>, std::monostate>) {}
+	else if constexpr (std::is_same_v<std::decay_t<T>, std::list<Symbol>>) {}
+	else std::cout << v << " ";
+      }, root.value);
   }
-  std::cout << " ]";
 }
+
+
+// to use with nodes with only leaf children.
+Symbol eval_primitive_node(Symbol node) {
+  std::vector<Symbol> intermediate_results;
+  Symbol result;
+  for (auto e: std::get<std::list<Symbol>>(node.value)) {
+    intermediate_results.push_back(e);
+  }
+  if (intermediate_results[0].type == Type::Operator) {
+    Symbol op = intermediate_results[0];
+    intermediate_results.erase(intermediate_results.begin());
+    if (!procedures.contains(std::get<std::string>(op.value)))
+      throw std::logic_error{"Unbound procedure!\n"};
+    result = procedures[std::get<std::string>(op.value)](intermediate_results);
+    return result;
+  } else {
+    // it's a list, not a function call.
+    return node;
+  }
+}
+
+Symbol eval(Symbol root) {
+  Symbol result;
+  std::stack<Symbol> node_stk;
+  Symbol current_node;
+  Symbol parent_node;
+  // results of intermediate nodes (i.e. nodes below the root)
+  std::vector<Symbol> intermediate_results;
+  // this is the data on which the actual computation takes place,
+  // as we copy every intermediate result we get into this as a "leaf"
+  // to get compute the value for each node, including the root.
+  std::vector<std::vector<Symbol>> leaves;
+  current_node = root;
+  parent_node = root;
+  do {
+    // for each node, visit each child and backtrack to the last parent node
+    // when the last child is null, and continue with the second last node and so on
+    if (current_node.type == Type::List) {
+      if (std::get<std::list<Symbol>>(current_node.value).empty()) {
+	// if we're back to the root node, and we don't have any
+	// children left, we're done.
+	if (leaves.empty() && current_node.name == "root") break;
+	Symbol eval_temp_arg;
+	// insert the intermediate results gotten so far into the leaves, so we
+	// can compute the value for the current node.
+	if (!intermediate_results.empty())
+	  leaves[leaves.size() - 1].insert(leaves[leaves.size() - 1].end(),
+					   intermediate_results.begin(),
+					   intermediate_results.end());
+	eval_temp_arg = Symbol(
+			       "",
+			       std::list(leaves[leaves.size() - 1].begin(),
+					 leaves[leaves.size() - 1].end()),
+			       Type::List
+			       );
+	result = eval_primitive_node(eval_temp_arg);
+	intermediate_results.push_back(result);
+        if (current_node.name != "root") current_node = parent_node;
+	leaves.pop_back();
+      }
+      else {
+	Symbol child = std::get<std::list<Symbol>>(current_node.value).back();
+	auto templ = std::get<std::list<Symbol>>(current_node.value);
+	templ.pop_back();
+	current_node = child;
+	parent_node.value = templ;
+	if ((child.type == Type::List) && (leaves.empty() || templ.empty()))
+	  leaves.push_back(std::vector<Symbol>{});
+      }
+    } else {
+      if (!leaves.empty())
+	leaves[leaves.size() - 1].push_back(current_node);
+      else
+	leaves.push_back(std::vector<Symbol>{current_node});
+      current_node = parent_node;
+    }
+  } while (1);
+  return result;
+}
+
