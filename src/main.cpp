@@ -405,27 +405,8 @@ Symbol eval(Symbol root) {
   do {
     // for each node, visit each child and backtrack to the last parent node
     // when the last child is null, and continue with the second last node and so on
-
-    for (auto v: leaves) {
-      std::cout << "{ ";
-      for (auto e: v) {
-	rec_print_ast(e);
-	std::cout << ' ';
-      }
-      std::cout << "}";
-    }
-    std::cout << "\n";
-    std::cout << "( ";
-    for (auto e: intermediate_results) {
-      rec_print_ast(e);
-      std::cout << ' ';
-    }
-    std::cout << ")\n";
     if (current_node.type == Type::List) {
       if (std::get<std::list<Symbol>>(current_node.value).empty()) {
-	std::cout << "empty list!\n";
-	rec_print_ast(current_node);
-	std::cout << "\n";
 	// if we're back to the root node, and we don't have any
 	// children left, we're done.
 	if (leaves.empty() && (current_node.name == "root")) break;
@@ -456,26 +437,16 @@ Symbol eval(Symbol root) {
 	leaves.pop_back();
       }
       else {
-	std::cout << "non-empty list!\n";
-	rec_print_ast(current_node);
-	std::cout << "\n";
 	Symbol child = std::get<std::list<Symbol>>(current_node.value).back();
-	std::cout << "child: ";
-	rec_print_ast(child);
-	std::cout << "\n";
 	auto templ = std::get<std::list<Symbol>>(current_node.value);
 	templ.pop_back();
 	current_node.value = templ;
 	node_stk.push(current_node);
 	current_node = child;
-	std::cout << "\n";
 	if ((child.type == Type::List) || leaves.empty())
 	  leaves.push_back(std::vector<Symbol>{});
       }
     } else {
-      std::cout << "literal!\n";
-      rec_print_ast(current_node);
-      std::cout << "\n";
       if (!leaves.empty())
 	leaves[leaves.size() - 1].push_back(current_node);
       else
