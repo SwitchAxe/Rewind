@@ -3,7 +3,7 @@
 #include <map>
 #include <exception>
 #include <stdexcept>
-std::map<std::string, Symbol> variables;
+std::vector<std::map<std::string, Symbol>> variables;
 
 std::map<std::string, fnsig> procedures = {
   {
@@ -99,8 +99,12 @@ std::map<std::string, fnsig> procedures = {
 	throw std::logic_error{
 	  "First argument to 'let' must be an identifier!\n"
 	};
-      variables.insert_or_assign(std::get<std::string>(args[0].value),
-				 args[1]);
+      if (variables.empty()) {
+	variables.push_back(std::map<std::string, Symbol>());
+      }
+      variables[variables.size()-1]
+	.insert_or_assign(std::get<std::string>(args[0].value),
+			  args[1]);
       return args[1];
     }
   }

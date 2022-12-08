@@ -38,6 +38,9 @@ Symbol eval(Symbol root) {
     // when the last child is null, and continue with the second last node and so on
     if (current_node.type == Type::List) {
       if (std::get<std::list<Symbol>>(current_node.value).empty()) {
+	// first, delete the most recent (most inner) scope:
+	if (!variables.empty()) variables.pop_back();
+	
 	// if we're back to the root node, and we don't have any
 	// children left, we're done.
 	if (leaves.empty() && (current_node.name == "root")) break;
@@ -81,12 +84,15 @@ Symbol eval(Symbol root) {
       Symbol maybe_ref;
       if ((current_node.type == Type::Identifier) &&
 	  (std::get<std::string>(leaves[leaves.size() - 1][0].value) != "let")) {
-	if (!variables.contains(std::get<std::string>(current_node.value))) {
-	  throw std::logic_error {"Unbound identifier " + 
-				  std::get<std::string>(current_node.value) + 
-				  "!\n"};
+	int last_scope = variables.size() - 1;
+	std::string ref_value = std::get<std::string>(current_node.value);
+	if (last_scope < 0) {
+	  throw std::logic_error{"Unbound identifier " + ref_value + "\n!"};
 	}
-	maybe_ref = variables[std::get<std::string>(current_node.value)];
+	if (!variables[last_scope].contains(ref_value)) {
+	  throw std::logic_error {"Unbound identifier " + ref_value + "!\n"};
+	}
+	maybe_ref = variables[last_scope][ref_value];
 	if (!leaves.empty())
 	  leaves[leaves.size() - 1].push_back(maybe_ref);
 	else
