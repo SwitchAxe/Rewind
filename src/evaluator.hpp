@@ -47,14 +47,11 @@ Symbol eval(Symbol root) {
 	Symbol eval_temp_arg;
 	// insert the intermediate results gotten so far into the leaves, so we
 	// can compute the value for the current node.
-	if (leaves.size() == 1) {
-	  // we reached the top node, compute the final result:
-	  if (!intermediate_results.empty()) {
-	    leaves[leaves.size() - 1]
-	      .insert(leaves[leaves.size() - 1].end(),
-		      intermediate_results.begin(),
-		      intermediate_results.end());
-	  }
+	if (!intermediate_results.empty()) {
+	  leaves[leaves.size() - 1]
+	    .insert(leaves[leaves.size() - 1].end(),
+		    intermediate_results.begin(),
+		    intermediate_results.end());
 	}
 	eval_temp_arg = Symbol(
 			       "",
