@@ -11,7 +11,7 @@ and exit. Here are some of the things Rewind can currently do (not much, admitte
 - `(+ 1 2 3)`
   * This will evaluate the sum of 1, 2, and 3, yielding 6.
 - `(* 3 (let x 3))`
-  * This first defines x with the value 3, and then multiplies it by two, giving the
+  * This first defines x with the value 3, and then multiplies it by 3, giving the
   user 9.
   Note, you can also repeat the newly bound variable x in the _same_ expression it was defined in,
   and in any inner subexpressions, but not in any level above, which in this case means the level of
