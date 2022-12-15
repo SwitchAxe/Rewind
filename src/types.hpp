@@ -12,6 +12,7 @@ enum Type {
   Boolean,
   List,
   Operator,
+  Defunc,
   Identifier,
 };
 struct Symbol;
@@ -20,6 +21,7 @@ using _Type = std::variant<std::monostate,
 			   int, std::string,
 			   std::list<Symbol>,
 			   bool>;
+
 struct Symbol {
   auto operator<=>(const Symbol&) const = default;
   Symbol() = default;
@@ -36,4 +38,3 @@ struct Symbol {
 
 // function signature for the builtins
 using fnsig = std::function<Symbol(std::vector<Symbol>)>;
-
