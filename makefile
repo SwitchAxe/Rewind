@@ -1,5 +1,5 @@
 CXX     = g++
-FLAGS   = -std=c++20
+FLAGS   = -std=c++20 -I.
 OUT     = rewind
 SRC     = src/main.cpp
 LIBS    = src/*.hpp
