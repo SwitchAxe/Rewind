@@ -4,6 +4,10 @@ A Scheme-inspired shell and a programming language.
 # Building
 Build with `make` and run with `./rewind`.
 
+# Dependencies
+* Matchit (for pattern matching in some code regions).
+  - You can find it [here](https://github.com/BowenFu/matchit.cpp)
+
 # Examples
 Once started, Rewind will greet you with a very barebone REPL which will
 take precisely one expression, evaluate it to the (hopefully) correct result,
