@@ -3,7 +3,6 @@
 #include "procedures.hpp"
 #include <iostream>
 #include <algorithm>
-#include <optional>
 
 Symbol eval(Symbol root);
 
@@ -27,207 +26,219 @@ Symbol eval_function(Symbol node) {
     throw std::logic_error {"Wrong amount of arguments to procedure " +
 			    op + "!\n"};
   }
-  variables.push_back(std::map<std::string, Symbol> {});
+  std::map<std::string, Symbol> frame = {};
   size_t paramls = paraml.size();
   for (int i = 0; i < paramls; ++i) {
-    variables[variables.size() - 1]
-      .insert_or_assign(
-			std::get<std::string>(paraml.front().value),
-			argl.front());
+    frame.insert_or_assign(
+			   std::get<std::string>(paraml.front().value),
+			   argl.front());
     paraml.pop_front();
     argl.pop_front();
   }
+  call_stack.push_back(std::make_pair(op, frame));
   for (auto e: std::get<std::list<Symbol>>(body.value)) {
     result = eval(e);
   }
+  call_stack.pop_back();
   return result;
 }
 
 // to use with nodes with only leaf children.
 Symbol eval_primitive_node(Symbol node) {
-  std::vector<Symbol> intermediate_results;
   Symbol result;
-  for (auto e: std::get<std::list<Symbol>>(node.value)) {
-    intermediate_results.push_back(e);
-  }
-  Symbol op = intermediate_results[0];
-  intermediate_results.erase(intermediate_results.begin());
+  Symbol op = std::get<std::list<Symbol>>(node.value).front();
   if (op.type == Type::Operator) {
-    if (procedures.contains(std::get<std::string>(op.value)))
-      result = procedures[
-			  std::get<std::string>(op.value)
-			  ](intermediate_results);
+    auto temp = std::get<std::list<Symbol>>(node.value);
+    temp.pop_front();
+    node.value = temp;
+    if (std::get<std::string>(op.value) == "if") {
+      Symbol branch = procedures
+	[std::get<std::string>(op.value)]
+	(std::get<std::list<Symbol>>(node.value));
+      using namespace matchit;
+      Id<int> i;
+      Id<std::string> s;
+      Id<std::list<Symbol>> l;
+      Id<bool> b;
+      #define p pattern
+      if (std::holds_alternative<std::list<Symbol>>(branch.value)) {
+	return eval(branch);
+      }
+      return branch;
+    }
+    else if (procedures.contains(std::get<std::string>(op.value))) {
+      result = procedures
+	[std::get<std::string>(op.value)]
+	(std::get<std::list<Symbol>>(node.value));
+      return result;
+    }
     else
       throw std::logic_error{"Unbound procedure!\n"};
-    return result;
   }
   else if (user_defined_procedures[user_defined_procedures.size() - 1]
 	   .contains(std::get<std::string>(op.value))) {
-    auto l = std::list<Symbol>(intermediate_results.begin(),
-			       intermediate_results.end());
-    l.push_front(op);
-    Symbol fn("", l, Type::List);
-    result = eval_function(fn);
+    result = eval_function(node);
     return result;
   }
   return node;
 }
-
-std::optional<Symbol> variable_lookup(Symbol id) {
-  if (variables.empty() ||
-      !variables[variables.size() - 1]
-      .contains(std::get<std::string>(id.value))) {
-    return std::nullopt;
-  }
-  return std::optional<Symbol>
-    {variables
-     [variables.size() - 1]
-     [std::get<std::string>(id.value)]};
-}
-
-std::optional<std::pair<Symbol, Symbol>> procedure_lookup(Symbol id) {
-  if (user_defined_procedures.empty() ||
-      !user_defined_procedures[user_defined_procedures.size() - 1]
-      .contains(std::get<std::string>(id.value))) {
-    return std::nullopt;
-  }
-  return std::optional<std::pair<Symbol, Symbol>>
-    {user_defined_procedures
-     [user_defined_procedures.size() - 1]
-     [std::get<std::string>(id.value)]};
-}
-
 
 Symbol eval(Symbol root) {
   Symbol result;
   std::stack<Symbol> node_stk;
   Symbol current_node;
   // results of intermediate nodes (i.e. nodes below the root)
-  std::vector<Symbol> intermediate_results;
+  std::vector<std::vector<Symbol>> intermediate_results;
   // this is the data on which the actual computation takes place,
   // as we copy every intermediate result we get into this as a "leaf"
   // to get compute the value for each node, including the root.
-  std::vector<std::vector<Symbol>> leaves;
-  bool in_function_def = false;
+  std::vector<std::list<Symbol>> leaves;
   current_node = root;
   do {
     // for each node, visit each child and backtrack to the last parent node
     // when the last child is null, and continue with the second last node and so on
     if (current_node.type == Type::List) {
       if (std::get<std::list<Symbol>>(current_node.value).empty()) {
-	// first, delete the most recent (most inner) scope:
-	if (!variables.empty()) variables.pop_back();
-	
 	// if we're back to the root node, and we don't have any
 	// children left, we're done.
 	if (leaves.empty() && (current_node.name == "root")) break;
 	Symbol eval_temp_arg;
 	// insert the intermediate results gotten so far into the leaves, so we
 	// can compute the value for the current node.
-	if (!intermediate_results.empty()) {
+	if (!intermediate_results.empty() &&
+	    !(intermediate_results[intermediate_results.size() - 1]
+	      .empty())) {
 	  leaves[leaves.size() - 1]
 	    .insert(leaves[leaves.size() - 1].end(),
-		    intermediate_results.begin(),
-		    intermediate_results.end());
+		    intermediate_results[intermediate_results.size() - 1]
+		    .begin(),
+		    intermediate_results[intermediate_results.size() - 1]
+		    .end());
 	}
 	// clean up for any function definition...
 	std::erase_if(leaves[leaves.size() - 1],
 		      [](Symbol& s) -> bool {
 			return s.type == Type::Defunc;
-		      }); 
-	eval_temp_arg = Symbol(
-			       "",
-			       std::list(leaves[leaves.size() - 1].begin(),
-					 leaves[leaves.size() - 1].end()),
-			       Type::List
-			       );
+		      });
+	eval_temp_arg = Symbol("", leaves[leaves.size() - 1], Type::List);
 	result = eval_primitive_node(eval_temp_arg);
-	intermediate_results.push_back(result);
+	if (!intermediate_results.empty())
+	  intermediate_results.pop_back();
+	if (intermediate_results.empty())
+	  intermediate_results.push_back(std::vector<Symbol>{result});
+	else
+	  intermediate_results[intermediate_results.size() - 1]
+	    .push_back(result);
 	if (!node_stk.empty()) {
 	  current_node = node_stk.top();
 	  node_stk.pop();
-	}
+	} else return result;
 	leaves.pop_back();
+	if (leaves.empty() && (current_node.name == "root")) break;
       }
       else {
-	Symbol child = std::get<std::list<Symbol>>(current_node.value).back();
+	Symbol child = std::get<std::list<Symbol>>(current_node.value)
+	  .front();
 	auto templ = std::get<std::list<Symbol>>(current_node.value);
-	templ.pop_back();
+	templ.pop_front();
 	current_node.value = templ;
 	node_stk.push(current_node);
 	current_node = child;
 	if ((child.type == Type::List) || leaves.empty())
-	  leaves.push_back(std::vector<Symbol>{});
+	  leaves.push_back(std::list<Symbol>{});
       }
     } else {
-      if ((leaves.empty() || leaves[leaves.size() - 1].empty()) &&
+      if ((current_node.type == Type::Operator) &&
+	  (std::get<std::string>(current_node.value) == "if")) {
+	// evaluate the if special form correctly, i.e. delaying the evaluation
+	// of the second/first block depending on the branch.
+	auto ifl = std::get<std::list<Symbol>>(node_stk.top().value);
+	if (ifl.size() != 3)
+	  throw std::logic_error {
+	    "Wrong number of arguments to the 'if' procedure!"
+	  };
+	leaves[leaves.size() - 1] = ifl;
+	leaves[leaves.size() - 1].push_front(current_node);
+	Symbol dummy = Symbol(node_stk.top().name, std::list<Symbol>(), Type::List);
+	node_stk.pop();
+	node_stk.push(dummy);	
+      }
+      else if ((leaves.empty() || leaves[leaves.size() - 1].empty()) &&
 	  (current_node.type == Type::Identifier)) {
 	// TODO: find a way to not duplicate variable lookup (see a few blocks below)
 	auto opt = variable_lookup(current_node);
 	auto popt = procedure_lookup(current_node);
-	if (opt == std::nullopt) {
-	  if (popt == std::nullopt) {
-	    throw std::logic_error {"Unbound Identifier " +
-				    std::get<std::string>(current_node.value) +
-				    "!\n"};
-	  } else {
-	    if (!leaves.empty())
-	      leaves[leaves.size() - 1].push_back(current_node);
-	    else
-	      leaves.push_back(std::vector<Symbol>{current_node});
-	    
-	  }
-	} else
+	auto csopt = callstack_variable_lookup(current_node);
+	if (csopt != std::nullopt) {
 	  if (!leaves.empty())
-	    leaves[leaves.size() - 1].push_back(*opt);
+	    leaves[leaves.size() - 1].push_front(*csopt);
 	  else
-	    leaves.push_back(std::vector<Symbol>{*opt});
+	    leaves.push_back(std::list<Symbol>{*csopt});
+	} else if (popt != std::nullopt) {
+	  if (!leaves.empty())
+	    leaves[leaves.size() - 1].push_front(current_node);
+	  else
+	    leaves.push_back(std::list<Symbol>{current_node});
+	} else if (opt != std::nullopt) {
+	  if (!leaves.empty())
+	    leaves[leaves.size() - 1].push_front(*opt);
+	  else
+	    leaves.push_back(std::list<Symbol>{*opt});
+	} else {
+	  throw std::logic_error {
+	    "Unbound Identifier " +
+	    std::get<std::string>(current_node.value) + "!\n"
+	  };
+	}
       }
       else if (current_node.type == Type::Operator &&
 	  std::get<std::string>(current_node.value) == "let") {
 	// might be a function definition...
 	auto letl = std::get<std::list<Symbol>>(node_stk.top().value);
-        if (letl.size() >= 2) {
-	  // function definition:
-	  for (auto e: letl) {
-	    leaves[leaves.size() - 1].push_back(e);
-	  }
-	  if (!leaves.empty())
-	    leaves[leaves.size() - 1].push_back(current_node);
-	  else
-	    leaves.push_back(std::vector<Symbol>{current_node});
-	  std::reverse(leaves[leaves.size() - 1].begin(),
-		       leaves[leaves.size() - 1].end());
-	} else {
+        if (letl.size() < 2) {
+	  // function/constant definition:
 	  throw std::logic_error {"Insufficient arguments to the 'let'"
 				  " procedure!\n"};
 	}
-	Symbol dummy = node_stk.top();
+        leaves[leaves.size() - 1] = letl;
+	leaves[leaves.size() - 1].push_front(current_node);
+        Symbol dummy = Symbol(node_stk.top().name, std::list<Symbol>(), Type::List);
 	node_stk.pop();
-	auto dummyl = std::get<std::list<Symbol>>(dummy.value);
-	dummyl.clear();
-	dummy.value = dummyl;
 	node_stk.push(dummy);
       }
       else if ((current_node.type == Type::Identifier) &&
-	  (std::get<std::string>(leaves[leaves.size() - 1][0].value) != "let")) {
-	auto opt = variable_lookup(current_node);
-	if (opt == std::nullopt) {
-	  throw std::logic_error {"Unbound Identifier " +
-				  std::get<std::string>(current_node.value) +
-				  "!\n"};
+	       (std::get<std::string>(leaves[leaves.size() - 1].front().value) != "let")) {
+        auto opt = variable_lookup(current_node);
+	auto popt = procedure_lookup(current_node);
+	auto csopt = callstack_variable_lookup(current_node);
+	if (csopt != std::nullopt) {
+	  if (!leaves.empty())
+	    leaves[leaves.size() - 1].push_back(*csopt);
+	  else
+	    leaves.push_back(std::list<Symbol>{*csopt});
+	} else if (popt != std::nullopt) {
+	  if (!leaves.empty())
+	    leaves[leaves.size() - 1].push_back(current_node);
+	  else
+	    leaves.push_back(std::list<Symbol>{current_node});
+	} else if (opt != std::nullopt) {
+	  if (!leaves.empty())
+	    leaves[leaves.size() - 1].push_back(*opt);
+	  else
+	    leaves.push_back(std::list<Symbol>{*opt});
+	} else {
+	  throw std::logic_error {
+	    "Unbound Identifier " +
+	    std::get<std::string>(current_node.value) + "!\n"
+	  };
 	}
-	if (!leaves.empty())
-	  leaves[leaves.size() - 1].push_back(*opt);
-	else
-	  leaves.push_back(std::vector<Symbol>{*opt});
       } else {
 	if (!leaves.empty())
 	  leaves[leaves.size() - 1].push_back(current_node);
 	else
-	  leaves.push_back(std::vector<Symbol>{current_node});
+	  leaves.push_back(std::list<Symbol>{current_node});
       }
-      if (node_stk.empty()) return leaves[leaves.size() - 1][0];
+      if (node_stk.empty()) return leaves[leaves.size() - 1].front();
       current_node = node_stk.top();
       node_stk.pop();
     }

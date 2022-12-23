@@ -37,4 +37,4 @@ struct Symbol {
 };
 
 // function signature for the builtins
-using fnsig = std::function<Symbol(std::vector<Symbol>)>;
+using fnsig = std::function<Symbol(std::list<Symbol>)>;
