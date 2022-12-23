@@ -28,3 +28,5 @@ and exit. Here are some of the things Rewind can currently do (not much, admitte
   Any amount of arguments can appear in a definition; This is permitted:
   `(+ 1 (let sum (a b) (+ a b)) (sum 4 5)) => 9`.
   Variadic functions, template functions, or lambda functions are not presently supported.
+  * You can also do simple recursion, and it should work:
+	* `(+ (let ! (n) (if n (* n (! (- n 1))) 1)) (! 5)) => 120`
