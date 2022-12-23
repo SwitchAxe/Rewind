@@ -50,7 +50,7 @@ Symbol get_ast(std::vector<std::string> tokens) {
 	  };
 	}
 	auto temp = std::get<std::list<Symbol>>(node.value);
-	temp.push_front(child);
+	temp.push_back(child);
         node.value = temp;
       } else return node;
     } else {
@@ -78,7 +78,7 @@ Symbol get_ast(std::vector<std::string> tokens) {
       }
       if (std::holds_alternative<std::list<Symbol>>(node.value)) {
 	auto temp = std::get<std::list<Symbol>>(node.value);
-	temp.push_front(child);
+	temp.push_back(child);
 	node.value = temp;
       }
       else {
