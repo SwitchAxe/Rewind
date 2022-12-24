@@ -1,8 +1,6 @@
 #include "evaluator.hpp"
-
+#include "shell/shell.hpp"
 int main(int argc, char** argv) {
-  std::string temp;
-  std::getline(std::cin, temp);
-  rec_print_ast(eval(get_ast(get_tokens(temp))));
+  rewind_sh_loop();
   return 0;
 }
