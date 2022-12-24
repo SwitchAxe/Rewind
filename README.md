@@ -9,9 +9,9 @@ Build with `make` and run with `./rewind`.
   - You can find it [here](https://github.com/BowenFu/matchit.cpp)
 
 # Examples
-Once started, Rewind will greet you with a very barebone REPL which will
-take precisely one expression, evaluate it to the (hopefully) correct result,
-and exit. Here are some of the things Rewind can currently do (not much, admittedly):
+Once started, Rewind will greet you with a very barebone REPL in which you may enter any
+valid Rewind expression. The special expressions `exit` and `(exit)` terminate the program.
+Below is an up-to-date list of examples for all the (not many!) things that Rewind can currently do.
 - `(+ 1 2 3)`
   * This will evaluate the sum of 1, 2, and 3, yielding 6.
 - `(* 3 (let x 3))`
