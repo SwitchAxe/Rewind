@@ -200,9 +200,29 @@ Symbol eval(Symbol root, const std::vector<std::string>& PATH) {
 	  };
 	leaves[leaves.size() - 1] = ifl;
 	leaves[leaves.size() - 1].push_front(current_node);
-	Symbol dummy = Symbol(node_stk.top().name, std::list<Symbol>(), Type::List);
+	Symbol dummy = Symbol(node_stk.top().name,
+			      std::list<Symbol>(),
+			      Type::List);
 	node_stk.pop();
 	node_stk.push(dummy);	
+      }
+      else if ((current_node.type == Type::Identifier) &&
+	       (std::get<std::string>(current_node.value) == "->")) {
+	auto pipel =
+	  std::get<std::list<Symbol>>(node_stk.top().value);
+	if (pipel.size() == 0) {
+	  throw std::logic_error {
+	    "A pipe must have at least one argument!\n"
+	  };
+	}
+	leaves[leaves.size() - 1] = pipel;
+	leaves[leaves.size() - 1].push_front(current_node);
+	Symbol dummy = Symbol(node_stk.top().name,
+			      std::list<Symbol>(),
+			      Type::List);
+	node_stk.pop();
+	node_stk.push(dummy);
+	
       }
       else if ((leaves.empty() || leaves[leaves.size() - 1].empty()) &&
 	  (current_node.type == Type::Identifier)) {

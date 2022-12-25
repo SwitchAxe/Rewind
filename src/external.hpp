@@ -17,7 +17,7 @@ int rewind_call_ext_program(Symbol node, const std::vector<std::string>& PATH,
     std::get<std::list<Symbol>>(node.value);
   std::string prog = std::get<std::string>(nodel.front().value);
 
-  char* argv[std::get<std::list<Symbol>>(node.value).size() + 1];
+  char* argv[nodel.size() + 1];
   argv[0] = const_cast<char*>(prog.c_str());
   nodel.pop_front();
   Symbol cur_arg;
@@ -67,18 +67,23 @@ int rewind_call_ext_program(Symbol node, const std::vector<std::string>& PATH,
 	  return -1;
 	}
 	std::cout << prog << " writes!\n";
+	close(pipe_fd_in);
       }
-      if (pipe_fd_in) {
+      else if (pipe_fd_in) {
 	if (dup2(pipe_fd_in, STDIN_FILENO) != STDIN_FILENO) {
 	  std::cerr << "Error while piping " + prog + " (reading)!\n";
 	  return -1;
 	}
+	close(pipe_fd_out);
 	std::cout << prog << " reads!\n";
-
       }
     }
     return execv(prog.c_str(), argv);
   } else if (pid > 0) {
+    if (must_pipe && pipe_fd_out)
+      close(pipe_fd_in);
+    else if (must_pipe && pipe_fd_in)
+      close(pipe_fd_out);
     wait(&status);
     return status;
   } else {
@@ -90,21 +95,21 @@ int rewind_call_ext_program(Symbol node, const std::vector<std::string>& PATH,
 int rewind_pipe(Symbol node, const std::vector<std::string>& PATH) {
   int fd[2]; //fd[0] reads, fd[1] writes
   int status;
-  pipe(fd);
   std::list<Symbol> nodel =
     std::get<std::list<Symbol>>(node.value);
   nodel.pop_front();
   Symbol prev_p = nodel.front(); // writes to cur
-  if ((prev_p.type == Type::Operator) || prev_p.type == Type::Identifier) {
-    prev_p = Symbol("", std::list<Symbol>{prev_p}, Type::List);
-  }
+  // if ((prev_p.type == Type::Operator) || prev_p.type == Type::Identifier) {
+  //   prev_p = Symbol("", std::list<Symbol>{prev_p}, Type::List);
+  // }
   nodel.pop_front();
   for (auto cur: nodel) {
-    if (cur.type != Type::List) {
-      cur = Symbol("", std::list<Symbol>{cur}, Type::List);
-    }
+    // if (cur.type != Type::List) {
+    //   cur = Symbol("", std::list<Symbol>{cur}, Type::List);
+    // }
+    pipe(fd);
     status = rewind_call_ext_program(prev_p, PATH, true, fd[1], 0);
-    status = rewind_call_ext_program(cur, PATH, true, 0, fd[0]);    
+    status = rewind_call_ext_program(cur, PATH, true, 0, fd[0]);
     prev_p = cur;
   }
   close(fd[0]);
