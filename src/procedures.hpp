@@ -181,6 +181,26 @@ std::map<std::string, fnsig> procedures = {
     }
   },
   {
+    "<",
+    [](std::list<Symbol> args) -> Symbol {
+      bool is_true = true;
+      if (args.empty()) return Symbol("", true, Type::Boolean);
+      auto first = args.front();
+      args.pop_front();
+      for (auto e: args) {
+	if (!std::holds_alternative<int>(first.value) ||
+	    !std::holds_alternative<int>(e.value)) {
+	  throw std::logic_error {
+	    "The '<' operator only accepts integers!\n"
+	  };
+	}
+	is_true = is_true && (std::get<int>(first.value) < std::get<int>(e.value));
+	first = e;
+      }
+      return Symbol("", is_true, Type::Boolean);
+    }
+  },
+  {
     "let",
     [](std::list<Symbol> args) -> Symbol {
       if (args.front().type != Type::Identifier)
@@ -207,17 +227,6 @@ std::map<std::string, fnsig> procedures = {
       }
       Symbol id = args.front();
       args.pop_front();
-      call_stack.push_back(
-			   std::pair<std::string,
-			   std::map<std::string, Symbol>> {
-			     "let",
-			     {
-			       {
-				 std::get<std::string>(id.value),
-				 args.front()
-			       }
-			     }
-			   });
       if (variables.empty()) {
 	variables.push_back(std::map<std::string, Symbol>());
       }

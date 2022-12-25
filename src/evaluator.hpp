@@ -3,10 +3,12 @@
 #include "procedures.hpp"
 #include <iostream>
 #include <algorithm>
+#include <filesystem>
+#include <unistd.h>
+#include "external.hpp"
+Symbol eval(Symbol root, const std::vector<std::string>& PATH);
 
-Symbol eval(Symbol root);
-
-Symbol eval_function(Symbol node) {
+Symbol eval_function(Symbol node, const std::vector<std::string>& PATH) {
   Symbol result;
   auto argl = std::get<std::list<Symbol>>(node.value);
   std::string op = std::get<std::string>(argl.front().value);
@@ -37,15 +39,17 @@ Symbol eval_function(Symbol node) {
   }
   call_stack.push_back(std::make_pair(op, frame));
   for (auto e: std::get<std::list<Symbol>>(body.value)) {
-    result = eval(e);
+    result = eval(e, PATH);
   }
   call_stack.pop_back();
   return result;
 }
 
 // to use with nodes with only leaf children.
-Symbol eval_primitive_node(Symbol node) {
+Symbol
+eval_primitive_node(Symbol node, const std::vector<std::string>& PATH) {
   Symbol result;
+  auto it = PATH.begin();
   Symbol op = std::get<std::list<Symbol>>(node.value).front();
   if (op.type == Type::Operator) {
     auto temp = std::get<std::list<Symbol>>(node.value);
@@ -62,7 +66,7 @@ Symbol eval_primitive_node(Symbol node) {
       Id<bool> b;
       #define p pattern
       if (std::holds_alternative<std::list<Symbol>>(branch.value)) {
-	return eval(branch);
+	return eval(branch, PATH);
       }
       return branch;
     }
@@ -75,15 +79,35 @@ Symbol eval_primitive_node(Symbol node) {
     else
       throw std::logic_error{"Unbound procedure!\n"};
   }
+  else if ((it = std::find_if(PATH.begin(), PATH.end(),
+			[&](const std::string& entry) -> bool {
+			  namespace fs = std::filesystem;
+			  std::string full_path;
+			  auto prog = std::get<std::string>(op.value);
+			  full_path = entry + "/" + prog;
+			  if (fs::directory_entry(full_path).exists())
+			    return true;
+			  return false;
+			})) != PATH.end()) {
+    auto temp = std::get<std::list<Symbol>>(node.value);
+    std::string full_path;
+    auto prog = std::get<std::string>(op.value);
+    full_path = *it + "/" + prog;
+    temp.pop_front();
+    temp.push_front(Symbol("", full_path, Type::List));
+    node.value = temp;
+    int status = rewind_call_ext_program(node, PATH);
+    return Symbol("", status, Type::Number);
+  }
   else if (user_defined_procedures[user_defined_procedures.size() - 1]
 	   .contains(std::get<std::string>(op.value))) {
-    result = eval_function(node);
+    result = eval_function(node, PATH);
     return result;
   }
   return node;
 }
 
-Symbol eval(Symbol root) {
+Symbol eval(Symbol root, const std::vector<std::string>& PATH) {
   Symbol result;
   std::stack<Symbol> node_stk;
   Symbol current_node;
@@ -103,6 +127,8 @@ Symbol eval(Symbol root) {
 	// children left, we're done.
 	if (leaves.empty() && (current_node.name == "root")) break;
 	Symbol eval_temp_arg;
+	if (!call_stack.empty())
+	  bool must_pop_let = (call_stack[call_stack.size() - 1].first == "let");
 	// insert the intermediate results gotten so far into the leaves, so we
 	// can compute the value for the current node.
 	if (!intermediate_results.empty() &&
@@ -121,7 +147,7 @@ Symbol eval(Symbol root) {
 			return s.type == Type::Defunc;
 		      });
 	eval_temp_arg = Symbol("", leaves[leaves.size() - 1], Type::List);
-	result = eval_primitive_node(eval_temp_arg);
+	result = eval_primitive_node(eval_temp_arg, PATH);
 	if (!intermediate_results.empty())
 	  intermediate_results.pop_back();
 	if (intermediate_results.empty())
@@ -129,10 +155,15 @@ Symbol eval(Symbol root) {
 	else
 	  intermediate_results[intermediate_results.size() - 1]
 	    .push_back(result);
+	if (!variables.empty()) {
+	  variables.pop_back();
+	}
 	if (!node_stk.empty()) {
 	  current_node = node_stk.top();
 	  node_stk.pop();
 	} else return result;
+
+	// check and pop if there was a 'let' somewhere before this point
 	leaves.pop_back();
 	if (leaves.empty() && (current_node.name == "root")) break;
       }
@@ -174,21 +205,16 @@ Symbol eval(Symbol root) {
 	    leaves[leaves.size() - 1].push_front(*csopt);
 	  else
 	    leaves.push_back(std::list<Symbol>{*csopt});
-	} else if (popt != std::nullopt) {
-	  if (!leaves.empty())
-	    leaves[leaves.size() - 1].push_front(current_node);
-	  else
-	    leaves.push_back(std::list<Symbol>{current_node});
 	} else if (opt != std::nullopt) {
 	  if (!leaves.empty())
 	    leaves[leaves.size() - 1].push_front(*opt);
 	  else
 	    leaves.push_back(std::list<Symbol>{*opt});
 	} else {
-	  throw std::logic_error {
-	    "Unbound Identifier " +
-	    std::get<std::string>(current_node.value) + "!\n"
-	  };
+	  if (!leaves.empty())
+	    leaves[leaves.size() - 1].push_front(current_node);
+	  else
+	    leaves.push_back(std::list<Symbol>{current_node});
 	}
       }
       else if (current_node.type == Type::Operator &&
@@ -216,21 +242,16 @@ Symbol eval(Symbol root) {
 	    leaves[leaves.size() - 1].push_back(*csopt);
 	  else
 	    leaves.push_back(std::list<Symbol>{*csopt});
-	} else if (popt != std::nullopt) {
-	  if (!leaves.empty())
-	    leaves[leaves.size() - 1].push_back(current_node);
-	  else
-	    leaves.push_back(std::list<Symbol>{current_node});
 	} else if (opt != std::nullopt) {
 	  if (!leaves.empty())
 	    leaves[leaves.size() - 1].push_back(*opt);
 	  else
 	    leaves.push_back(std::list<Symbol>{*opt});
 	} else {
-	  throw std::logic_error {
-	    "Unbound Identifier " +
-	    std::get<std::string>(current_node.value) + "!\n"
-	  };
+	  if (!leaves.empty())
+	    leaves[leaves.size() - 1].push_back(current_node);
+	  else
+	    leaves.push_back(std::list<Symbol>{current_node});
 	}
       } else {
 	if (!leaves.empty())
