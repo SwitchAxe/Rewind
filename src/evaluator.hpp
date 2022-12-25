@@ -99,8 +99,13 @@ eval_primitive_node(Symbol node, const std::vector<std::string>& PATH) {
     temp.pop_front();
     temp.push_front(Symbol("", full_path, Type::Identifier));
     node.value = temp;
-    int status = rewind_call_ext_program(node, PATH);
-    return Symbol("", status, Type::Number);
+    rewind_call_ext_program(node, PATH);
+    return Symbol("", true, Type::Command);
+  }
+  else if (std::get<std::string>(op.value) == "->") {
+    // a pipe operator!
+    int status = rewind_pipe(node, PATH);
+    return Symbol("", true, Type::Command);
   }
   else if (user_defined_procedures[user_defined_procedures.size() - 1]
 	   .contains(std::get<std::string>(op.value))) {
@@ -147,7 +152,9 @@ Symbol eval(Symbol root, const std::vector<std::string>& PATH) {
 	// clean up for any function definition...
 	std::erase_if(leaves[leaves.size() - 1],
 		      [](Symbol& s) -> bool {
-			return s.type == Type::Defunc;
+			return
+			  (s.type == Type::Defunc) ||
+			  (s.type == Type::Command);
 		      });
 	eval_temp_arg = Symbol("", leaves[leaves.size() - 1], Type::List);
 	result = eval_primitive_node(eval_temp_arg, PATH);

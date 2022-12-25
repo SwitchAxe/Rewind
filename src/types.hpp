@@ -14,6 +14,7 @@ enum Type {
   Operator,
   Defunc,
   Identifier,
+  Command,
 };
 struct Symbol;
 
