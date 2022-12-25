@@ -28,8 +28,6 @@ int rewind_call_ext_program(Symbol node,
     Id<int> in;
     Id<bool> b;
 #define p pattern
-    std::cout << "yoloo!!!\n" << "\n";
-
     std::string arg = match (cur_arg.value)
       (p | as<std::string>(s) = [&] {return *s;},
        p | as<int>(in) = [&] {
@@ -39,7 +37,6 @@ int rewind_call_ext_program(Symbol node,
 	 return (*b == true) ? "true" : "false";
        });
     argv[i] = (char*) malloc(arg.length() + 1);
-    std::cout << "len(A): " << arg.length() + 1 << "\n";
     argv[i] = const_cast<char*>(arg.c_str());
     i++;
 #undef p
