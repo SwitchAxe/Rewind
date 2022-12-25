@@ -7,12 +7,32 @@
 #include <utility>
 #include <iostream>
 #include <optional>
+#include <filesystem>
 std::vector<std::map<std::string, Symbol>> variables;
 std::vector<std::pair<std::string,
 		      std::map<std::string,
 			       Symbol>>> call_stack;
 std::vector<std::map<std::string, std::pair<Symbol, Symbol>>>
 user_defined_procedures;
+
+namespace fs = std::filesystem;
+
+std::map<std::string, std::function<int(std::list<std::string>)>>
+builtin_commands = {
+  {
+    "cd",
+    [](std::list<std::string> args) -> int {
+      if (args.size() != 1)
+	throw std::logic_error {
+	  "The 'cd' builtin command expects precisely one argument!"
+	};
+      auto cur = fs::current_path();
+      fs::current_path(std::string{cur.c_str()} + "/" + args.front());
+      return 0;
+    }
+  }
+};
+
 
 std::optional<Symbol> variable_lookup(Symbol id) {
   if (!std::holds_alternative<std::string>(id.value))

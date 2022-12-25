@@ -5,31 +5,12 @@
 
 Symbol eval(Symbol root, const std::vector<std::string>& PATH);
 
-namespace fs = std::filesystem;
-
-std::map<std::string, std::function<int(std::list<std::string>)>>
-builtin_commands = {
-  {
-    "cd",
-    [](std::list<std::string> args) -> int {
-      if (args.size() != 1)
-	throw std::logic_error {
-	  "The 'cd' builtin command expects precisely one argument!"
-	};
-      auto cur = fs::current_path();
-      fs::current_path(std::string{cur.c_str()} + "/" + args.front());
-      return 0;
-    }
-  }
-};
-
-
-
 int rewind_call_ext_program(Symbol node,
 			    const std::vector<std::string>& PATH) {
   std::list<Symbol> nodel =
     std::get<std::list<Symbol>>(node.value);
   std::string prog = std::get<std::string>(nodel.front().value);
+
   char* argv[std::get<std::list<Symbol>>(node.value).size() + 1];
   argv[0] = const_cast<char*>(prog.c_str());
   nodel.pop_front();
@@ -64,8 +45,8 @@ int rewind_call_ext_program(Symbol node,
   argv[i] = nullptr;
   if (builtin_commands.contains(prog)) {
     auto l = std::list<std::string>();
-    for (int i = 0; i < sizeof(argv); ++i) {
-      l.push_back(std::string{argv[i]});
+    for (int idx = 1; idx < i; ++idx) {
+      l.push_back(std::string{argv[idx]});
     }
     return builtin_commands[prog](l);
   }

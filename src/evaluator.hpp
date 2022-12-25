@@ -79,7 +79,8 @@ eval_primitive_node(Symbol node, const std::vector<std::string>& PATH) {
     else
       throw std::logic_error{"Unbound procedure!\n"};
   }
-  else if ((it = std::find_if(PATH.begin(), PATH.end(),
+  else if ((builtin_commands.contains(std::get<std::string>(op.value))) ||
+	   (it = std::find_if(PATH.begin(), PATH.end(),
 			[&](const std::string& entry) -> bool {
 			  namespace fs = std::filesystem;
 			  std::string full_path;
@@ -92,9 +93,11 @@ eval_primitive_node(Symbol node, const std::vector<std::string>& PATH) {
     auto temp = std::get<std::list<Symbol>>(node.value);
     std::string full_path;
     auto prog = std::get<std::string>(op.value);
-    full_path = *it + "/" + prog;
+    if (!builtin_commands.contains(std::get<std::string>(op.value))) {
+      full_path = *it + "/" + prog;
+    } else full_path = prog;
     temp.pop_front();
-    temp.push_front(Symbol("", full_path, Type::List));
+    temp.push_front(Symbol("", full_path, Type::Identifier));
     node.value = temp;
     int status = rewind_call_ext_program(node, PATH);
     return Symbol("", status, Type::Number);
