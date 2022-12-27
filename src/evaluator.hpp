@@ -104,6 +104,41 @@ eval_primitive_node(Symbol node, const std::vector<std::string>& PATH) {
   }
   else if (std::get<std::string>(op.value) == "->") {
     // a pipe operator!
+    // append a path to each executable, if there's any valid one
+    auto temp = std::get<std::list<Symbol>>(node.value);
+    temp.pop_front();
+    rec_print_ast(node);
+    std::cout << "\n";
+    for (auto& e: temp) {
+      auto progl =
+	std::get<std::list<Symbol>>(e.value);
+      auto prog = 
+	std::get<std::string>(progl.front().value);
+      progl.pop_front();
+      it = std::find_if(PATH.begin(), PATH.end(),
+			[&](const std::string& entry) -> bool {
+			  namespace fs = std::filesystem;
+			  std::string full_path;
+			  full_path = entry + "/" + prog;
+			  return
+			    fs::directory_entry(full_path).exists();
+			});
+      if (it != PATH.end()) {
+	std::string full_path;
+	if (!builtin_commands.contains(prog)) {
+	  full_path = *it + "/" + prog;
+	} else full_path = prog;
+	progl.push_front(Symbol("", full_path, Type::Identifier));
+	e.value = progl;
+      } else {
+	throw std::logic_error {
+	  "Unknown command/executable " + prog + "!\n"
+	};
+      }
+    }
+    node.value = temp;
+    rec_print_ast(node);
+    std::cout << "\n";
     int status = rewind_pipe(node, PATH);
     return Symbol("", true, Type::Command);
   }

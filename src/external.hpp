@@ -61,43 +61,35 @@ int rewind_call_ext_program(Symbol node, const std::vector<std::string>& PATH,
   int status;
   int pid = fork();
   if (pid == 0) {
-    int out = dup(1);
-    int in = dup(0);
     if (must_pipe) {
       if (pipe_fd_out) {
 	if (dup2(pipe_fd_out, STDOUT_FILENO) != STDOUT_FILENO) {
-	  std::cerr << "Error while piping " + prog + " (writing)!\n";
-	  return -1;
+	  throw std::logic_error {
+	    "Error while piping " + prog + " (writing)!\n"
+	  };
 	}
 	std::cerr << prog << " writes!\n";
       }
-      else if (pipe_fd_in) {
+      if (pipe_fd_in) {
 	if (dup2(pipe_fd_in, STDIN_FILENO) != STDIN_FILENO) {
-	  std::cerr << "Error while piping " + prog + " (reading)!\n";
-	  return -1;
+	  throw std::logic_error {
+	    "Error while piping " + prog + " (reading)!\n"
+	  };
 	}
 	std::cerr << prog << " reads!\n";
-	wait(nullptr);
       }
     }
-    if (pipe_fd_out)
-      if (dup2(out, 1) < 0) {
-	std::cerr << "Error while restoring stdout for " + prog + "!\n";
-	exit(1);
-      } else close(out);
-    else if (pipe_fd_in)
-      if (dup2(in, 0) < 0) {
-	std::cerr << "Error while restoring stdin for " + prog + "!\n";
-	exit(1);
-      } else close(in);
     status = execv(prog.c_str(), argv);
-    exit(0);
+    exit(1);
   } else if (pid > 0) {
-    wait(&status);
+    if (pipe_fd_out) close(pipe_fd_out);
+    if (pipe_fd_in) close(pipe_fd_in);
+    waitpid(pid, &status, 0);
     return status;
   } else {
-    std::cerr << "Error while executing child process " + prog + "!\n";
-    return -1;
+    throw std::logic_error {
+      "Error while executing child process " + prog + "!\n"
+    };
   }
 }
 
@@ -108,26 +100,22 @@ int rewind_pipe(Symbol node, const std::vector<std::string>& PATH) {
     std::get<std::list<Symbol>>(node.value);
   rec_print_ast(node);
   std::cout << "\n";
-  nodel.pop_front();
-  Symbol prev_p = nodel.front(); // writes to cur
-  // if ((prev_p.type == Type::Operator) || prev_p.type == Type::Identifier) {
-  //   prev_p = Symbol("", std::list<Symbol>{prev_p}, Type::List);
-  // }
-  nodel.pop_front();
+  // Symbol prev_p = nodel.front(); // writes to cur
+  // nodel.pop_front();
   int out = dup(1);
   int in = dup(0);
+  auto last = nodel.back();
+  nodel.pop_back();
+  pipe(fd);
+  auto first = nodel.front();
+  nodel.pop_front();
+  rewind_call_ext_program(first, PATH, true, fd[1], 0);
   for (auto cur: nodel) {
-    // if (cur.type != Type::List) {
-    //   cur = Symbol("", std::list<Symbol>{cur}, Type::List);
-    // }
-    pipe(fd);
-    status = rewind_call_ext_program(prev_p, PATH, true, fd[1], 0);
-    wait(nullptr);
-    status = rewind_call_ext_program(cur, PATH, true, 0, fd[0]);
-    wait(nullptr);
-    prev_p = cur;
-    close(fd[0]);
-    close(fd[1]);
+    status = rewind_call_ext_program(cur, PATH, true, fd[0], fd[1]);
   }
+  wait(nullptr);
+  close(fd[1]);
+  rewind_call_ext_program(last, PATH, true, 0, fd[0]);
+  close(fd[0]);
   return status;
 }
