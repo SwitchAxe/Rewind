@@ -2,6 +2,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include "evaluator.hpp"
+#include <cstring>
 
 Symbol eval(Symbol root, const std::vector<std::string>& PATH);
 
@@ -9,14 +10,9 @@ int rewind_call_ext_program(Symbol node, const std::vector<std::string>& PATH,
 			    bool must_pipe = false,
 			    int pipe_fd_out = 0,
 			    int pipe_fd_in = 0) {
-  std::cout << std::boolalpha << must_pipe << "\n";
-  std::cout << pipe_fd_out << "\n";
-  std::cout << pipe_fd_in << "\n";
-
   std::list<Symbol> nodel =
     std::get<std::list<Symbol>>(node.value);
   std::string prog = std::get<std::string>(nodel.front().value);
-  rec_print_ast(node);
   std::cout << "\n";
   char* argv[nodel.size() + 1];
   argv[0] = const_cast<char*>(prog.c_str());
@@ -45,9 +41,9 @@ int rewind_call_ext_program(Symbol node, const std::vector<std::string>& PATH,
        p | as<bool>(b) = [&] {
 	 return (*b == true) ? "true" : "false";
        });
-    argv[i] = const_cast<char*>(arg.c_str());
+    argv[i] = (char*) malloc(arg.length() + 1);
+    std::strcpy(argv[i], arg.c_str());
     i++;
-    std::cout << "arg: " << arg << "\n";
 #undef p
   }
   argv[i] = nullptr;
@@ -55,6 +51,7 @@ int rewind_call_ext_program(Symbol node, const std::vector<std::string>& PATH,
     auto l = std::list<std::string>();
     for (int idx = 1; idx < i; ++idx) {
       l.push_back(std::string{argv[idx]});
+      free(argv[idx]);
     }
     return builtin_commands[prog](l);
   }
@@ -68,7 +65,7 @@ int rewind_call_ext_program(Symbol node, const std::vector<std::string>& PATH,
 	    "Error while piping " + prog + " (writing)!\n"
 	  };
 	}
-	std::cerr << prog << " writes!\n";
+	close(pipe_fd_out);
       }
       if (pipe_fd_in) {
 	if (dup2(pipe_fd_in, STDIN_FILENO) != STDIN_FILENO) {
@@ -76,7 +73,7 @@ int rewind_call_ext_program(Symbol node, const std::vector<std::string>& PATH,
 	    "Error while piping " + prog + " (reading)!\n"
 	  };
 	}
-	std::cerr << prog << " reads!\n";
+	close(pipe_fd_in);
       }
     }
     status = execv(prog.c_str(), argv);
@@ -84,7 +81,9 @@ int rewind_call_ext_program(Symbol node, const std::vector<std::string>& PATH,
   } else if (pid > 0) {
     if (pipe_fd_out) close(pipe_fd_out);
     if (pipe_fd_in) close(pipe_fd_in);
-    waitpid(pid, &status, 0);
+    for (int idx = 0; argv[idx] != nullptr; ++idx) {
+      free(argv[i]);
+    }
     return status;
   } else {
     throw std::logic_error {
@@ -98,24 +97,22 @@ int rewind_pipe(Symbol node, const std::vector<std::string>& PATH) {
   int status;
   std::list<Symbol> nodel =
     std::get<std::list<Symbol>>(node.value);
-  rec_print_ast(node);
-  std::cout << "\n";
-  // Symbol prev_p = nodel.front(); // writes to cur
-  // nodel.pop_front();
-  int out = dup(1);
-  int in = dup(0);
   auto last = nodel.back();
   nodel.pop_back();
   pipe(fd);
   auto first = nodel.front();
   nodel.pop_front();
+  int old_read_end;
   rewind_call_ext_program(first, PATH, true, fd[1], 0);
   for (auto cur: nodel) {
-    status = rewind_call_ext_program(cur, PATH, true, fd[0], fd[1]);
+    old_read_end = dup(fd[0]);
+    pipe(fd);
+    status = rewind_call_ext_program(cur, PATH, true, fd[1], old_read_end);
   }
-  wait(nullptr);
   close(fd[1]);
+  close(old_read_end);
   rewind_call_ext_program(last, PATH, true, 0, fd[0]);
+  wait(nullptr);
   close(fd[0]);
   return status;
 }
