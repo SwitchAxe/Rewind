@@ -8,6 +8,7 @@
 #include <iostream>
 #include <optional>
 #include <filesystem>
+#include <cstdlib>
 std::vector<std::map<std::string, Symbol>> variables;
 std::vector<std::pair<std::string,
 		      std::map<std::string,
@@ -17,18 +18,45 @@ user_defined_procedures;
 
 namespace fs = std::filesystem;
 
-std::map<std::string, std::function<int(std::list<std::string>)>>
+std::map<std::string, std::function<Symbol(std::list<Symbol>)>>
 builtin_commands = {
   {
     "cd",
-    [](std::list<std::string> args) -> int {
+    [](std::list<Symbol> args) -> Symbol {
       if (args.size() != 1)
 	throw std::logic_error {
 	  "The 'cd' builtin command expects precisely one argument!"
 	};
       auto cur = fs::current_path();
-      fs::current_path(std::string{cur.c_str()} + "/" + args.front());
-      return 0;
+      fs::current_path(std::string{
+	  (cur).c_str()
+	} + "/" + std::get<std::string>(args.front().value));
+      return Symbol("", fs::current_path(), Type::String);
+    }
+  },
+  {
+    "set",
+    [](std::list<Symbol> args) -> Symbol {
+      if (args.size() != 2)
+	throw std::logic_error {
+	  "The 'set' builtin command expects precisely two arguments!\n"
+	};
+      std::string var = std::get<std::string>(args.front().value);
+      std::string val = std::get<std::string>(args.back().value);
+      return Symbol("", setenv(var.c_str(), val.c_str(), 1), Type::Number);
+    }
+  },
+  {
+    "get",
+    [](std::list<Symbol> args) -> Symbol {
+      if (args.size() != 1)
+	throw std::logic_error {
+	  "The 'get' builtin command expects precisely one argument!"
+	};
+      char* s = std::getenv(std::get<std::string>(args.front().value)
+			    .c_str());
+      if (s) return Symbol("", std::string(s), Type::String);
+      return Symbol("", "Nil", Type::String);
     }
   }
 };

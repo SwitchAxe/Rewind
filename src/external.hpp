@@ -6,7 +6,7 @@
 
 Symbol eval(Symbol root, const std::vector<std::string>& PATH);
 
-int rewind_call_ext_program(Symbol node, const std::vector<std::string>& PATH,
+Symbol rewind_call_ext_program(Symbol node, const std::vector<std::string>& PATH,
 			    bool must_pipe = false,
 			    int pipe_fd_out = 0,
 			    int pipe_fd_in = 0) {
@@ -48,9 +48,10 @@ int rewind_call_ext_program(Symbol node, const std::vector<std::string>& PATH,
   }
   argv[i] = nullptr;
   if (builtin_commands.contains(prog)) {
-    auto l = std::list<std::string>();
+    auto l = std::list<Symbol>();
     for (int idx = 1; idx < i; ++idx) {
-      l.push_back(std::string{argv[idx]});
+      l.push_back(eval(nodel.front(), PATH));
+      nodel.pop_front();
       free(argv[idx]);
     }
     return builtin_commands[prog](l);
@@ -84,7 +85,7 @@ int rewind_call_ext_program(Symbol node, const std::vector<std::string>& PATH,
     for (int idx = 0; argv[idx] != nullptr; ++idx) {
       free(argv[i]);
     }
-    return status;
+    return Symbol("", status, Type::Number);
   } else {
     throw std::logic_error {
       "Error while executing child process " + prog + "!\n"
@@ -92,9 +93,9 @@ int rewind_call_ext_program(Symbol node, const std::vector<std::string>& PATH,
   }
 }
 
-int rewind_pipe(Symbol node, const std::vector<std::string>& PATH) {
+Symbol rewind_pipe(Symbol node, const std::vector<std::string>& PATH) {
   int fd[2]; //fd[0] reads, fd[1] writes
-  int status;
+  Symbol status;
   std::list<Symbol> nodel =
     std::get<std::list<Symbol>>(node.value);
   auto last = nodel.back();

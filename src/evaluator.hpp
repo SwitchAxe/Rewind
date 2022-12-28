@@ -99,9 +99,9 @@ eval_primitive_node(Symbol node, const std::vector<std::string>& PATH) {
     temp.pop_front();
     temp.push_front(Symbol("", full_path, Type::Identifier));
     node.value = temp;
-    rewind_call_ext_program(node, PATH);
+    auto status = rewind_call_ext_program(node, PATH);
     wait(nullptr);
-    return Symbol("", true, Type::Command);
+    return status;
   }
   else if (std::get<std::string>(op.value) == "->") {
     // a pipe operator!
@@ -136,8 +136,7 @@ eval_primitive_node(Symbol node, const std::vector<std::string>& PATH) {
       }
     }
     node.value = temp;
-    int status = rewind_pipe(node, PATH);
-    return Symbol("", true, Type::Command);
+    return rewind_pipe(node, PATH); 
   }
   else if (user_defined_procedures[user_defined_procedures.size() - 1]
 	   .contains(std::get<std::string>(op.value))) {
