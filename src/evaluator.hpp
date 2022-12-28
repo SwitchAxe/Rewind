@@ -100,6 +100,7 @@ eval_primitive_node(Symbol node, const std::vector<std::string>& PATH) {
     temp.push_front(Symbol("", full_path, Type::Identifier));
     node.value = temp;
     rewind_call_ext_program(node, PATH);
+    wait(nullptr);
     return Symbol("", true, Type::Command);
   }
   else if (std::get<std::string>(op.value) == "->") {
@@ -107,8 +108,6 @@ eval_primitive_node(Symbol node, const std::vector<std::string>& PATH) {
     // append a path to each executable, if there's any valid one
     auto temp = std::get<std::list<Symbol>>(node.value);
     temp.pop_front();
-    rec_print_ast(node);
-    std::cout << "\n";
     for (auto& e: temp) {
       auto progl =
 	std::get<std::list<Symbol>>(e.value);
@@ -137,8 +136,6 @@ eval_primitive_node(Symbol node, const std::vector<std::string>& PATH) {
       }
     }
     node.value = temp;
-    rec_print_ast(node);
-    std::cout << "\n";
     int status = rewind_pipe(node, PATH);
     return Symbol("", true, Type::Command);
   }

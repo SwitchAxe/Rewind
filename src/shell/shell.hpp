@@ -46,7 +46,8 @@ void rewind_sh_loop() {
 	(line == "(exit)"))
       break;
     try {
-      rec_print_ast(eval(get_ast(get_tokens(line)), *PATH));
+      Symbol ast = eval(get_ast(get_tokens(line)), *PATH);
+      if (ast.type != Type::Command) rec_print_ast(ast);
       std::cout << "\n> " << std::flush;
     } catch (std::logic_error ex) {
       std::cout << ex.what() << "\n> " << std::flush;

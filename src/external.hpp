@@ -112,7 +112,7 @@ int rewind_pipe(Symbol node, const std::vector<std::string>& PATH) {
   close(fd[1]);
   close(old_read_end);
   rewind_call_ext_program(last, PATH, true, 0, fd[0]);
-  wait(nullptr);
+  while (wait(nullptr) != -1);
   close(fd[0]);
   return status;
 }
