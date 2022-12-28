@@ -34,3 +34,6 @@ Below is an up-to-date list of examples for all the (not many!) things that Rewi
   * `(ls -al)` runs `ls -al` on the current directory;
   * `(-> (ls -a) (grep make) (cat) (tr -d '\n') (xargs wc))` is an overcomplicated way to run `wc` on the
 	makefile of the project, assuming you're situated in the root directory.
+- There's also the ability to set, and get, environment variables for the current Rewind session:
+  * `(get PATH) => your $PATH`;
+  * `(set PATH src) => sets $PATH to 'src'` (assuming you're in the root directory of the project).
