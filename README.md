@@ -30,3 +30,7 @@ Below is an up-to-date list of examples for all the (not many!) things that Rewi
   Variadic functions, template functions, or lambda functions are not presently supported.
   * You can also do simple recursion, and it should work:
 	* `(+ (let ! (n) (if n (* n (! (- n 1))) 1)) (! 5)) => 120`
+- Rewind has rudimentary support for external programs and pipes:
+  * `(ls -al)` runs `ls -al` on the current directory;
+  * `(-> (ls -a) (grep make) (cat) (tr -d '\n') (xargs wc))` is an overcomplicated way to run `wc` on the
+	makefile of the project, assuming you're situated in the root directory.
