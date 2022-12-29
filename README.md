@@ -37,3 +37,6 @@ Below is an up-to-date list of examples for all the (not many!) things that Rewi
 - There's also the ability to set, and get, environment variables for the current Rewind session:
   * `(get PATH) => your $PATH`;
   * `(set PATH src) => sets $PATH to 'src'` (assuming you're in the root directory of the project).
+- You can write and append to files with the `+>` and `++>` operators, respectively:
+  * `(+> "This will create a file if test.txt does not exist" test.txt)`;
+  * `(++> "this text will be appended at the end of the file" test.txt)`;
