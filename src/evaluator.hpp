@@ -137,6 +137,18 @@ eval_primitive_node(Symbol node, const std::vector<std::string>& PATH) {
     }
     node.value = temp;
     return rewind_pipe(node, PATH); 
+  } else if (std::get<std::string>(op.value) == "+>") {
+    //redirect with overwrite into a file
+    auto temp = std::get<std::list<Symbol>>(node.value);
+    temp.pop_front();
+    node.value = temp;
+    return rewind_redirect_overwrite(node, PATH);
+  } else if (std::get<std::string>(op.value) == "++>") {
+    //redirect by appending into a file
+    auto temp = std::get<std::list<Symbol>>(node.value);
+    temp.pop_front();
+    node.value = temp;
+    return rewind_redirect_append(node, PATH);
   }
   else if (user_defined_procedures[user_defined_procedures.size() - 1]
 	   .contains(std::get<std::string>(op.value))) {

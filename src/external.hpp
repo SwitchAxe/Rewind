@@ -3,6 +3,7 @@
 #include <sys/wait.h>
 #include "evaluator.hpp"
 #include <cstring>
+#include <fstream>
 
 Symbol eval(Symbol root, const std::vector<std::string>& PATH);
 
@@ -116,4 +117,83 @@ Symbol rewind_pipe(Symbol node, const std::vector<std::string>& PATH) {
   while (wait(nullptr) != -1);
   close(fd[0]);
   return status;
+}
+
+Symbol rewind_redirect_append(Symbol node, const std::vector<std::string>& PATH) {
+  auto nodel = std::get<std::list<Symbol>>(node.value);
+  Symbol content = nodel.front();
+  nodel.pop_front();
+  std::string filename = std::get<std::string>(nodel.front().value);
+  std::ofstream out;
+  out.open(filename, std::ios::app);
+  out << std::boolalpha;
+  using namespace matchit;
+  Id<std::string> s;
+  Id<int> i;
+  Id<std::list<Symbol>> l;
+  Id<bool> b;
+  auto is_strlit = [](const std::string& s) -> bool {
+    return !s.empty() && s[0] == '"' && s[s.length() - 1] == '"';
+  };
+  auto strlit_to_bare = [&](std::string s) -> std::string {
+    if (is_strlit(s)) {
+      s.erase(0, 1);
+      s.erase(s.length() - 1, 1);
+    }
+    return s;
+  };
+  match (content.value)
+    (pattern | as<int>(i) = [&] { out << *i; },
+     pattern | as<std::string>(s) = [&] {
+       out << strlit_to_bare(process_escapes(*s));
+     },
+     pattern | as<bool>(b) = [&] { out << *b; },
+     pattern | as<std::list<Symbol>>(l) = [&]{
+       auto coutbuf = std::cout.rdbuf();
+       std::cout.rdbuf(out.rdbuf());
+       rec_print_ast(node);
+       std::cout.rdbuf(coutbuf);
+     });
+  out.close();
+  return Symbol("", true, Type::Boolean);
+}
+
+Symbol rewind_redirect_overwrite(Symbol node,
+				 const std::vector<std::string>& PATH) {
+  auto nodel = std::get<std::list<Symbol>>(node.value);
+  Symbol content = nodel.front();
+  nodel.pop_front();
+  std::string filename = std::get<std::string>(nodel.front().value);
+  std::ofstream out;
+  out.open(filename, std::ios::trunc);
+  out << std::boolalpha;
+  using namespace matchit;
+  Id<std::string> s;
+  Id<int> i;
+  Id<std::list<Symbol>> l;
+  Id<bool> b;
+  auto is_strlit = [](const std::string& s) -> bool {
+    return !s.empty() && s[0] == '"' && s[s.length() - 1] == '"';
+  };
+  auto strlit_to_bare = [&](std::string s) -> std::string {
+    if (is_strlit(s)) {
+      s.erase(0, 1);
+      s.erase(s.length() - 1, 1);
+    }
+    return s;
+  };
+  match (content.value)
+    (pattern | as<int>(i) = [&] { out << *i; },
+     pattern | as<std::string>(s) = [&] {
+       out << strlit_to_bare(process_escapes(*s));
+     },
+     pattern | as<bool>(b) = [&] { out << *b; },
+     pattern | as<std::list<Symbol>>(l) = [&]{
+       auto coutbuf = std::cout.rdbuf();
+       std::cout.rdbuf(out.rdbuf());
+       rec_print_ast(node);
+       std::cout.rdbuf(coutbuf);
+     });
+  out.close();
+  return Symbol("", true, Type::Boolean);
 }
