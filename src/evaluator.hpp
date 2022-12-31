@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <filesystem>
 #include <unistd.h>
-#include "external.hpp"
 Symbol eval(Symbol root, const std::vector<std::string>& PATH);
 
 Symbol eval_function(Symbol node, const std::vector<std::string>& PATH) {
@@ -55,47 +54,31 @@ eval_primitive_node(Symbol node, const std::vector<std::string>& PATH) {
     auto temp = std::get<std::list<Symbol>>(node.value);
     temp.pop_front();
     node.value = temp;
-    if (std::get<std::string>(op.value) == "if") {
-      Symbol branch = procedures
-	[std::get<std::string>(op.value)]
-	(std::get<std::list<Symbol>>(node.value));
-      using namespace matchit;
-      Id<int> i;
-      Id<std::string> s;
-      Id<std::list<Symbol>> l;
-      Id<bool> b;
-      #define p pattern
-      if (std::holds_alternative<std::list<Symbol>>(branch.value)) {
-	return eval(branch, PATH);
+    if (procedures.contains(std::get<std::string>(op.value))) {
+      Functor fun = procedures[std::get<std::string>(op.value)];
+      result = fun(std::get<std::list<Symbol>>(node.value), PATH);
+      if (std::holds_alternative<std::list<Symbol>>(result.value)) {
+	return eval(result, PATH);
       }
-      return branch;
-    }
-    else if (procedures.contains(std::get<std::string>(op.value))) {
-      result = procedures
-	[std::get<std::string>(op.value)]
-	(std::get<std::list<Symbol>>(node.value));
       return result;
     }
     else
       throw std::logic_error{"Unbound procedure!\n"};
   }
-  else if ((builtin_commands.contains(std::get<std::string>(op.value))) ||
-	   (it = std::find_if(PATH.begin(), PATH.end(),
-			[&](const std::string& entry) -> bool {
-			  namespace fs = std::filesystem;
-			  std::string full_path;
-			  auto prog = std::get<std::string>(op.value);
-			  full_path = entry + "/" + prog;
-			  if (fs::directory_entry(full_path).exists())
-			    return true;
-			  return false;
-			})) != PATH.end()) {
+  else if (it = std::find_if(PATH.begin(), PATH.end(),
+			     [&](const std::string& entry) -> bool {
+			       namespace fs = std::filesystem;
+			       std::string full_path;
+			       auto prog = std::get<std::string>(op.value);
+			       full_path = entry + "/" + prog;
+			       return
+				 fs::directory_entry(full_path)
+				 .exists();
+			     }); it != PATH.end()) {
     auto temp = std::get<std::list<Symbol>>(node.value);
     std::string full_path;
     auto prog = std::get<std::string>(op.value);
-    if (!builtin_commands.contains(std::get<std::string>(op.value))) {
-      full_path = *it + "/" + prog;
-    } else full_path = prog;
+    full_path = *it + "/" + prog;
     temp.pop_front();
     temp.push_front(Symbol("", full_path, Type::Identifier));
     node.value = temp;
@@ -103,41 +86,7 @@ eval_primitive_node(Symbol node, const std::vector<std::string>& PATH) {
     wait(nullptr);
     return status;
   }
-  else if (std::get<std::string>(op.value) == "->") {
-    // a pipe operator!
-    // append a path to each executable, if there's any valid one
-    auto temp = std::get<std::list<Symbol>>(node.value);
-    temp.pop_front();
-    for (auto& e: temp) {
-      auto progl =
-	std::get<std::list<Symbol>>(e.value);
-      auto prog = 
-	std::get<std::string>(progl.front().value);
-      progl.pop_front();
-      it = std::find_if(PATH.begin(), PATH.end(),
-			[&](const std::string& entry) -> bool {
-			  namespace fs = std::filesystem;
-			  std::string full_path;
-			  full_path = entry + "/" + prog;
-			  return
-			    fs::directory_entry(full_path).exists();
-			});
-      if (it != PATH.end()) {
-	std::string full_path;
-	if (!builtin_commands.contains(prog)) {
-	  full_path = *it + "/" + prog;
-	} else full_path = prog;
-	progl.push_front(Symbol("", full_path, Type::Identifier));
-	e.value = progl;
-      } else {
-	throw std::logic_error {
-	  "Unknown command/executable " + prog + "!\n"
-	};
-      }
-    }
-    node.value = temp;
-    return rewind_pipe(node, PATH); 
-  } else if (std::get<std::string>(op.value) == "+>") {
+  else if (std::get<std::string>(op.value) == "+>") {
     //redirect with overwrite into a file
     auto temp = std::get<std::list<Symbol>>(node.value);
     temp.pop_front();
@@ -249,7 +198,7 @@ Symbol eval(Symbol root, const std::vector<std::string>& PATH) {
 	node_stk.pop();
 	node_stk.push(dummy);	
       }
-      else if ((current_node.type == Type::Identifier) &&
+      else if ((current_node.type == Type::Operator) &&
 	       (std::get<std::string>(current_node.value) == "->")) {
 	auto pipel =
 	  std::get<std::list<Symbol>>(node_stk.top().value);

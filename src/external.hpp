@@ -4,17 +4,15 @@
 #include "evaluator.hpp"
 #include <cstring>
 #include <fstream>
-
-Symbol eval(Symbol root, const std::vector<std::string>& PATH);
-
-Symbol rewind_call_ext_program(Symbol node, const std::vector<std::string>& PATH,
-			    bool must_pipe = false,
-			    int pipe_fd_out = 0,
-			    int pipe_fd_in = 0) {
+#include <iostream>
+Symbol rewind_call_ext_program(Symbol node,
+			       const std::vector<std::string>& PATH,
+			       bool must_pipe,
+			       int pipe_fd_out,
+			       int pipe_fd_in) {
   std::list<Symbol> nodel =
     std::get<std::list<Symbol>>(node.value);
   std::string prog = std::get<std::string>(nodel.front().value);
-  std::cout << "\n";
   char* argv[nodel.size() + 1];
   argv[0] = const_cast<char*>(prog.c_str());
   nodel.pop_front();
@@ -48,14 +46,14 @@ Symbol rewind_call_ext_program(Symbol node, const std::vector<std::string>& PATH
 #undef p
   }
   argv[i] = nullptr;
-  if (builtin_commands.contains(prog)) {
+  if (procedures.contains(prog)) {
     auto l = std::list<Symbol>();
     for (int idx = 1; idx < i; ++idx) {
       l.push_back(eval(nodel.front(), PATH));
       nodel.pop_front();
       free(argv[idx]);
     }
-    return builtin_commands[prog](l);
+    return procedures[prog](l);
   }
   int status;
   int pid = fork();
@@ -102,10 +100,17 @@ Symbol rewind_pipe(Symbol node, const std::vector<std::string>& PATH) {
   auto last = nodel.back();
   nodel.pop_back();
   pipe(fd);
+  if (nodel.empty()) {
+    close(fd[0]);
+    close(fd[1]);
+    auto status = rewind_call_ext_program(last, PATH, true, 0, 0);
+    wait(nullptr);
+    return status;
+  }
   auto first = nodel.front();
   nodel.pop_front();
   int old_read_end;
-  rewind_call_ext_program(first, PATH, true, fd[1], 0);
+  status = rewind_call_ext_program(first, PATH, true, fd[1], 0);
   for (auto cur: nodel) {
     old_read_end = dup(fd[0]);
     pipe(fd);
@@ -113,7 +118,7 @@ Symbol rewind_pipe(Symbol node, const std::vector<std::string>& PATH) {
   }
   close(fd[1]);
   close(old_read_end);
-  rewind_call_ext_program(last, PATH, true, 0, fd[0]);
+  status = rewind_call_ext_program(last, PATH, true, 0, fd[0]);
   while (wait(nullptr) != -1);
   close(fd[0]);
   return status;
