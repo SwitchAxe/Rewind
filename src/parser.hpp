@@ -117,7 +117,7 @@ void rec_print_ast(Symbol root) {
               } else if constexpr (std::is_same_v<std::decay_t<T>,
                                                   std::list<Symbol>>) {
               } else
-                std::cout << "(" << s.depth << ") " << v << " ";
+                std::cout << v << " ";
             },
             s.value);
       }
@@ -130,7 +130,7 @@ void rec_print_ast(Symbol root) {
           } else if constexpr (std::is_same_v<std::decay_t<T>,
                                               std::list<Symbol>>) {
           } else
-            std::cout << "(" << root.depth << ") " << v << " ";
+            std::cout << v << " ";
         },
         root.value);
   }
