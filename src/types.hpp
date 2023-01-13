@@ -24,14 +24,20 @@ using _Type = std::variant<std::monostate,
 			   bool>;
 
 struct Symbol {
-  auto operator<=>(const Symbol&) const = default;
   Symbol() = default;
+  auto operator<=>(const Symbol&) const = default;
   Symbol(std::string _n, _Type _v, Type _t) {
     name = _n;
     value = _v;
     type = _t;
   }
-
+  Symbol(std::string _n, _Type _v, Type _t, int _d) {
+    name = _n;
+    value = _v;
+    type = _t;
+    depth = _d;
+  }
+  int depth = 0;
   std::string name; // empty string if not present
   _Type value;
   Type type;
@@ -55,7 +61,7 @@ struct Functor {
   Functor(psig f) { _Pfn = f; };
   //Functor(Functor& other) { _fn = other._fn; _Pfn = other._Pfn; }
   auto operator()(std::list<Symbol> l, path P) -> Symbol {
-    return _Pfn(l, P);
+    return (_Pfn) ? _Pfn(l, P) : _fn(l);
   };
   auto operator()(std::list<Symbol> l) -> Symbol{ return _fn(l); };
 private:
