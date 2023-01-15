@@ -42,3 +42,4 @@ Below is an up-to-date list of examples for all the (not many!) things that Rewi
   * `(++> "this text will be appended at the end of the file" test.txt)`;
 - Rewind has support for redirecting program output to files, also:
   * `(> (-> (ls -al)) log.txt)` will _append_ the output of `ls -al` to `log.txt`.
+    Note: the file is created if it doesn't exist.
