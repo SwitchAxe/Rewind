@@ -40,3 +40,5 @@ Below is an up-to-date list of examples for all the (not many!) things that Rewi
 - You can write and append to files with the `+>` and `++>` operators, respectively:
   * `(+> "This will create a file if test.txt does not exist" test.txt)`;
   * `(++> "this text will be appended at the end of the file" test.txt)`;
+- Rewind has support for redirecting program output to files, also:
+  * `(> (-> (ls -al)) log.txt)` will _append_ the output of `ls -al` to `log.txt`.
