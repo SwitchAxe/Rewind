@@ -55,7 +55,7 @@ Symbol rewind_call_ext_program(Symbol node,
     }
     return procedures[prog](l);
   }
-  int status;
+  int status = 0;
   int pid = fork();
   if (pid == 0) {
     if (must_pipe) {
@@ -75,8 +75,11 @@ Symbol rewind_call_ext_program(Symbol node,
 	}
 	close(pipe_fd_in);
       }
-    }
+    } 
     status = execv(prog.c_str(), argv);
+    if (status) {
+      return Symbol("", status, Type::Number);
+    }
     exit(1);
   } else if (pid > 0) {
     if (pipe_fd_out) close(pipe_fd_out);
@@ -103,8 +106,8 @@ Symbol rewind_pipe(Symbol node, const std::vector<std::string>& PATH) {
   if (nodel.empty()) {
     close(fd[0]);
     close(fd[1]);
-    auto status = rewind_call_ext_program(last, PATH, true, 0, 0);
-    wait(nullptr);
+    auto status = rewind_call_ext_program(last, PATH, false, 0, 0);
+    while (wait(nullptr) != -1);
     return status;
   }
   auto first = nodel.front();
@@ -116,9 +119,9 @@ Symbol rewind_pipe(Symbol node, const std::vector<std::string>& PATH) {
     pipe(fd);
     status = rewind_call_ext_program(cur, PATH, true, fd[1], old_read_end);
   }
+  status = rewind_call_ext_program(last, PATH, true, 0, fd[0]);
   close(fd[1]);
   close(old_read_end);
-  status = rewind_call_ext_program(last, PATH, true, 0, fd[0]);
   while (wait(nullptr) != -1);
   close(fd[0]);
   return status;

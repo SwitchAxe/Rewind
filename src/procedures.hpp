@@ -3,11 +3,14 @@
 #include "types.hpp"
 #include <cstdlib>
 #include <exception>
+#include <fcntl.h>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <map>
 #include <optional>
 #include <stdexcept>
+#include <unistd.h>
 #include <utility>
 std::vector<std::map<std::string, Symbol>> variables;
 std::vector<std::pair<std::string, std::map<std::string, Symbol>>> call_stack;
@@ -143,8 +146,7 @@ std::map<std::string, Functor> procedures = {
        auto cur = fs::current_path();
        fs::current_path(std::string{(cur).c_str()} + "/" +
                         std::get<std::string>(args.front().value));
-       return Symbol("", fs::current_path(), Type::String,
-                     args.front().depth);
+       return Symbol("", fs::current_path(), Type::String, args.front().depth);
      }}},
     {"set", {[](std::list<Symbol> args) -> Symbol {
        if (args.size() != 2)
@@ -190,6 +192,54 @@ std::map<std::string, Functor> procedures = {
        Symbol node = Symbol("", args, Type::List);
        Symbol result = rewind_pipe(node, PATH);
        return Symbol("", result.value, result.type, args.front().depth);
+     }}},
+    {">", {[](std::list<Symbol> args, path PATH) -> Symbol {
+       if (args.size() != 2) {
+         throw std::logic_error{
+             "Expected exactly two arguments to the '>' operator!\n"};
+       }
+       if (args.front().type != Type::List) {
+         throw std::logic_error{"Invalid first argument to the '>' operator!\n"
+                                "Expected a command or an executable.\n"};
+       }
+       auto it = PATH.begin();
+       auto pipe_args = std::get<std::list<Symbol>>(args.front().value);
+       pipe_args.pop_front();
+       for (auto &e : pipe_args) {
+         auto progl = std::get<std::list<Symbol>>(e.value);
+         auto prog = std::get<std::string>(progl.front().value);
+         progl.pop_front();
+         it = std::find_if(PATH.begin(), PATH.end(),
+                           [&](const std::string &query) -> bool {
+                             std::string full_path;
+                             full_path = query + "/" + prog;
+                             return fs::directory_entry(full_path).exists();
+                           });
+         if (it == PATH.end())
+           throw std::logic_error{"Unknown executable " + prog + "!\n"};
+         std::string full_path;
+         if (procedures.contains(prog))
+           full_path = prog;
+         else
+           full_path = (*it) + "/" + prog;
+         progl.push_front(Symbol("", full_path, Type::Identifier));
+         e.value = progl;
+       }
+       args.pop_front();
+       if (args.front().type != Type::Identifier) {
+         throw std::logic_error{"Invalid second argument to the '>' operator!\n"
+                                "Expected a file name.\n"};
+       }
+       int out = open(std::get<std::string>(args.front().value).c_str(),
+                      O_WRONLY | O_APPEND | O_CREAT, 0666);
+       int stdoutcpy = dup(STDOUT_FILENO);
+       dup2(out, STDOUT_FILENO);
+       auto node = Symbol("", pipe_args, Type::List);
+       Symbol status = rewind_pipe(node, PATH);
+       close(out);
+       dup2(stdoutcpy, STDOUT_FILENO);
+       close(stdoutcpy);
+       return status;
      }}},
     {"+", {[](std::list<Symbol> args) -> Symbol {
        int r = 0;
@@ -325,6 +375,4 @@ std::map<std::string, Functor> procedures = {
                      args.front().depth);
      }}}};
 
-std::array<std::string, 3> special_forms = {
-  "->", "let", "if"
-};
+std::array<std::string, 4> special_forms = {"->", "let", "if", ">"};
