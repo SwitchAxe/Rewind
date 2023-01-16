@@ -40,13 +40,13 @@ Symbol eval_function(Symbol node, const std::vector<std::string> &PATH) {
     result = eval(e, PATH);
   }
   call_stack.pop_back();
-  std::cout << "depth = " << node.depth << "\n";
   return Symbol("", result.value, result.type, node.depth);
 }
 
 // to use with nodes with only leaf children.
 Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH) {
   Symbol result;
+  std::optional<std::string> absolute; // absolute path of an executable, if any
   auto it = PATH.begin();
   Symbol op = std::get<std::list<Symbol>>(node.value).front();
   if (op.type == Type::Operator) {
@@ -67,19 +67,10 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH) {
                  .contains(std::get<std::string>(op.value))) {
     result = eval_function(node, PATH);
     return result;
-  } else if (it = std::find_if(PATH.begin(), PATH.end(),
-                               [&](const std::string &entry) -> bool {
-                                 namespace fs = std::filesystem;
-                                 std::string full_path;
-                                 auto prog = std::get<std::string>(op.value);
-                                 full_path = entry + "/" + prog;
-                                 return fs::directory_entry(full_path).exists();
-                               });
-             it != PATH.end()) {
+  } else if (absolute = get_absolute_path(std::get<std::string>(op.value), PATH);
+              absolute != std::nullopt) {
     auto temp = std::get<std::list<Symbol>>(node.value);
-    std::string full_path;
-    auto prog = std::get<std::string>(op.value);
-    full_path = *it + "/" + prog;
+    std::string full_path = *absolute;
     temp.pop_front();
     temp.push_front(Symbol("", full_path, Type::Identifier));
     node.value = temp;
