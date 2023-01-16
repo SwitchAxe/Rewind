@@ -62,7 +62,8 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH) {
       return result;
     } else
       throw std::logic_error{"Unbound procedure!\n"};
-  } else if (user_defined_procedures[user_defined_procedures.size() - 1]
+  } else if (!user_defined_procedures.empty() &&
+             user_defined_procedures[user_defined_procedures.size() - 1]
                  .contains(std::get<std::string>(op.value))) {
     result = eval_function(node, PATH);
     return result;

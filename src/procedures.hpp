@@ -29,6 +29,21 @@ void rec_print_ast(Symbol root);
 namespace fs = std::filesystem;
 // just so the compiler doesn't complain about nonexistent PATH
 // later in the 'procedures' map.
+
+std::optional<std::string> get_absolute_path(std::string progn, path &PATH) {
+  std::string full_path;
+  auto it = PATH.begin();
+  it = std::find_if(PATH.begin(), PATH.end(),
+                    [&](const std::string &dir) -> bool {
+                      std::string query = dir + "/" + progn;
+                      return fs::directory_entry(query).exists();
+                    });
+  if (it != PATH.end()) {
+    return std::string{(*it) + "/" + progn};
+  }
+  return std::nullopt;
+}
+
 std::string process_escapes(const std::string &s) {
   std::string r;
   for (int i = 0; i < s.length(); ++i) {
@@ -168,24 +183,19 @@ std::map<std::string, Functor> procedures = {
        return Symbol("", "Nil", Type::String, args.front().depth);
      }}},
     {"->", {[](std::list<Symbol> args, path PATH) -> Symbol {
-       auto it = PATH.begin();
        for (auto &e : args) {
          auto progl = std::get<std::list<Symbol>>(e.value);
          auto prog = std::get<std::string>(progl.front().value);
          progl.pop_front();
-         it = std::find_if(PATH.begin(), PATH.end(),
-                           [&](const std::string &query) -> bool {
-                             std::string full_path;
-                             full_path = query + "/" + prog;
-                             return fs::directory_entry(full_path).exists();
-                           });
-         if (it == PATH.end())
+         auto abs = get_absolute_path(prog, PATH);
+         if (abs == std::nullopt) {
            throw std::logic_error{"Unknown executable " + prog + "!\n"};
+         }
          std::string full_path;
          if (procedures.contains(prog))
            full_path = prog;
          else
-           full_path = (*it) + "/" + prog;
+           full_path = *abs;
          progl.push_front(Symbol("", full_path, Type::Identifier));
          e.value = progl;
        }
@@ -202,26 +212,21 @@ std::map<std::string, Functor> procedures = {
          throw std::logic_error{"Invalid first argument to the '>' operator!\n"
                                 "Expected a command or an executable.\n"};
        }
-       auto it = PATH.begin();
        auto pipe_args = std::get<std::list<Symbol>>(args.front().value);
        pipe_args.pop_front();
        for (auto &e : pipe_args) {
          auto progl = std::get<std::list<Symbol>>(e.value);
          auto prog = std::get<std::string>(progl.front().value);
          progl.pop_front();
-         it = std::find_if(PATH.begin(), PATH.end(),
-                           [&](const std::string &query) -> bool {
-                             std::string full_path;
-                             full_path = query + "/" + prog;
-                             return fs::directory_entry(full_path).exists();
-                           });
-         if (it == PATH.end())
+         auto abs = get_absolute_path(prog, PATH);
+         if (abs == std::nullopt) {
            throw std::logic_error{"Unknown executable " + prog + "!\n"};
+         }
          std::string full_path;
          if (procedures.contains(prog))
            full_path = prog;
          else
-           full_path = (*it) + "/" + prog;
+           full_path = *abs;
          progl.push_front(Symbol("", full_path, Type::Identifier));
          e.value = progl;
        }
