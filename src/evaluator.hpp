@@ -170,20 +170,22 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH) {
         // we might have an external program call with env vars, so we must
         // act carefully and delay the evaluation up until 'eval_primitive_node'
         // is invoked.
-        if (child.type == Type::List) {
+        if ((child.type == Type::List) && leaves.empty()) {
           leaves.push_back(templ);
           leaves[leaves.size() - 1].push_front(child);
           Symbol dummy;
-          if (!node_stk.empty())  
-            dummy = Symbol(node_stk.top().name, std::list<Symbol>(), Type::List);
+          if (!node_stk.empty())
+            dummy =
+                Symbol(node_stk.top().name, std::list<Symbol>(), Type::List);
           else
-            dummy = Symbol("root", std::list<Symbol>(), Type::List);
+            dummy =
+                Symbol(node_stk.top().name, std::list<Symbol>(), Type::List);
           current_node = dummy;
         } else {
           node_stk.push(current_node);
           current_node = child;
         }
-        if (leaves.empty())
+        if (leaves.empty() || (child.type == Type::List))
           leaves.push_back(std::list<Symbol>{});
       }
     } else {

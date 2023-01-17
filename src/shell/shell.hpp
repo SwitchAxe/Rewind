@@ -1,9 +1,15 @@
 #include "src/external.hpp"
 #include <filesystem>
 #include <cstdlib>
+#include <cstdio>
+#include <readline/readline.h>
+#include <readline/history.h>
+
+
 std::string rewind_readline() {
-  std::string line;
-  std::getline(std::cin, line);
+  char* read_line = readline("> ");
+  std::string line{read_line};
+  free(read_line);
   return line;
 }
 
@@ -39,7 +45,6 @@ void rewind_sh_loop() {
     throw std::logic_error {
       "The system PATH is empty! I can't proceed. Aborting... \n"
     };
-  std::cout << "> " << std::flush;
   do {
     line = rewind_readline();
     if ((line == "exit") ||
@@ -48,9 +53,9 @@ void rewind_sh_loop() {
     try {
       Symbol ast = eval(get_ast(get_tokens(line)), *PATH);
       if (ast.type != Type::Command) rec_print_ast(ast);
-      std::cout << "\n> " << std::flush;
+      std::cout << "\n";
     } catch (std::logic_error ex) {
-      std::cout << ex.what() << "\n> " << std::flush;
+      std::cout << ex.what() << "\n";
       continue;
     }
   } while (1);
