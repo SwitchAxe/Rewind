@@ -7,6 +7,7 @@ Build with `make` and run with `./rewind`.
 # Dependencies
 * Matchit (for pattern matching in some code regions).
   - You can find it [here](https://github.com/BowenFu/matchit.cpp)
+* GNU Readline.
 
 # Examples
 Once started, Rewind will greet you with a very barebone REPL in which you may enter any
