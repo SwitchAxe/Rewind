@@ -6,6 +6,7 @@
 #include <iostream>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <variant>
 Symbol eval(Symbol root, const std::vector<std::string> &PATH);
 
 Symbol eval_function(Symbol node, const std::vector<std::string> &PATH) {
@@ -67,14 +68,23 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH) {
                  .contains(std::get<std::string>(op.value))) {
     result = eval_function(node, PATH);
     return result;
-  } else if (absolute = get_absolute_path(std::get<std::string>(op.value), PATH);
-              absolute != std::nullopt) {
-    auto temp = std::get<std::list<Symbol>>(node.value);
-    std::string full_path = *absolute;
-    temp.pop_front();
-    temp.push_front(Symbol("", full_path, Type::Identifier));
-    node.value = temp;
-    auto status = rewind_call_ext_program(node, PATH);
+  } else if (auto lit = std::find_if(
+                 std::get<std::list<Symbol>>(node.value).begin(),
+                 std::get<std::list<Symbol>>(node.value).end(),
+                 [&](Symbol &s) -> bool {
+                   return std::holds_alternative<std::string>(s.value) &&
+                          get_absolute_path(std::get<std::string>(s.value),
+                                            PATH) != std::nullopt;
+                 });
+             lit != std::get<std::list<Symbol>>(node.value).end()) {
+    auto nodel = std::get<std::list<Symbol>>(node.value);
+    get_env_vars(node, PATH);
+    auto rest = std::list<Symbol>(lit, nodel.end());
+    rest.pop_front();
+    auto ext = *lit;
+    ext.value = *get_absolute_path(std::get<std::string>((*lit).value), PATH);
+    rest.push_front(ext);
+    auto status = rewind_call_ext_program(Symbol("", rest, Type::List), PATH);
     wait(nullptr);
     return status;
   } else if (std::get<std::string>(op.value) == "+>") {
@@ -155,9 +165,25 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH) {
         auto templ = std::get<std::list<Symbol>>(current_node.value);
         templ.pop_front();
         current_node.value = templ;
-        node_stk.push(current_node);
-        current_node = child;
-        if ((child.type == Type::List) || leaves.empty())
+
+        // if the first element of the 'templ' list is another list then
+        // we might have an external program call with env vars, so we must
+        // act carefully and delay the evaluation up until 'eval_primitive_node'
+        // is invoked.
+        if (child.type == Type::List) {
+          leaves.push_back(templ);
+          leaves[leaves.size() - 1].push_front(child);
+          Symbol dummy;
+          if (!node_stk.empty())  
+            dummy = Symbol(node_stk.top().name, std::list<Symbol>(), Type::List);
+          else
+            dummy = Symbol("root", std::list<Symbol>(), Type::List);
+          current_node = dummy;
+        } else {
+          node_stk.push(current_node);
+          current_node = child;
+        }
+        if (leaves.empty())
           leaves.push_back(std::list<Symbol>{});
       }
     } else {

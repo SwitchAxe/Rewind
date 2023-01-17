@@ -1,6 +1,7 @@
 #pragma once
 #include "matchit.h"
 #include "types.hpp"
+#include <algorithm>
 #include <cstdlib>
 #include <exception>
 #include <fcntl.h>
@@ -13,6 +14,72 @@
 #include <unistd.h>
 #include <utility>
 std::vector<std::map<std::string, Symbol>> variables;
+// this is used to pass single-use environment variables to external programs.
+// if this vector contains more than *number of elements in a pipe* or more than
+// 1 for a single program call, it's most likely an error.
+std::vector<std::map<std::string, std::string>> environment_variables;
+
+// forward declaration so i can use it in the next function definition
+std::optional<std::string>
+get_absolute_path(std::string progn, const std::vector<std::string> &PATH);
+
+void get_env_vars(Symbol node, path PATH) {
+  // called for the side effect of modifying the vector above.
+  auto nodel = std::get<std::list<Symbol>>(node.value);
+  auto _it = nodel.begin();
+  auto lit = nodel.begin();
+  lit = std::find_if(nodel.begin(), nodel.end(), [&](Symbol &s) -> bool {
+    return std::holds_alternative<std::string>(s.value) &&
+           get_absolute_path(std::get<std::string>(s.value), PATH) !=
+               std::nullopt;
+  });
+  while (_it != lit) {
+    if (_it->type == Type::List) {
+      // either a key/value pair for an env var, or a user error.
+      auto pairl = std::get<std::list<Symbol>>(_it->value);
+      if (pairl.size() != 2) {
+        throw std::logic_error{
+            "Invalid key/value assignment for an environment variable!\n"
+            "Correct syntax: '(<key> <value>)'.\n"};
+      }
+      auto fst = pairl.front();
+      auto snd = pairl.back();
+      if (!std::holds_alternative<std::string>(fst.value)) {
+        throw std::logic_error{
+            "Invalid value for a key in a key/value assignment for an env "
+            "var!\n"
+            "Expected a string.\n"};
+      }
+      std::string key = std::get<std::string>(fst.value);
+      using namespace matchit;
+      Id<std::string> s;
+      Id<int> i;
+      Id<bool> b;
+      Id<std::list<Symbol>> l;
+      std::string value = match(snd.value)(
+          pattern | as<std::string>(s) = [&] { return *s; },
+          pattern | as<int>(i) = [&] { return std::to_string(*i); },
+          pattern | as<bool>(b) = [&] { return *b ? "true" : "false"; },
+          pattern | as<std::list<Symbol>>(_) =
+              [&] {
+                throw std::logic_error{
+                    "Unexpected list in key/value pair for an env var!\n"};
+                return "";
+              });
+      if (environment_variables.empty()) {
+        environment_variables.push_back(
+            std::map<std::string, std::string>{{key, value}});
+      } else {
+        environment_variables[environment_variables.size() - 1]
+            .insert_or_assign(key, value);
+      }
+    } else {
+      throw std::logic_error{"Ill-formed external program call!\n"};
+    }
+    _it++;
+  }
+}
+
 std::vector<std::pair<std::string, std::map<std::string, Symbol>>> call_stack;
 std::vector<std::map<std::string, std::pair<Symbol, Symbol>>>
     user_defined_procedures;
@@ -185,8 +252,17 @@ std::map<std::string, Functor> procedures = {
     {"->", {[](std::list<Symbol> args, path PATH) -> Symbol {
        for (auto &e : args) {
          auto progl = std::get<std::list<Symbol>>(e.value);
-         auto prog = std::get<std::string>(progl.front().value);
-         progl.pop_front();
+         auto lit =
+             std::find_if(progl.begin(), progl.end(), [&](Symbol &s) -> bool {
+               return std::holds_alternative<std::string>(s.value) &&
+                      get_absolute_path(std::get<std::string>(s.value), PATH) !=
+                          std::nullopt;
+             });
+         std::string prog = std::get<std::string>(lit->value);
+         auto rest = std::list<Symbol>(lit, progl.end());
+         rest.pop_front();
+         auto ext = *lit;
+         get_env_vars(e, PATH);
          auto abs = get_absolute_path(prog, PATH);
          if (abs == std::nullopt) {
            throw std::logic_error{"Unknown executable " + prog + "!\n"};
@@ -196,9 +272,11 @@ std::map<std::string, Functor> procedures = {
            full_path = prog;
          else
            full_path = *abs;
-         progl.push_front(Symbol("", full_path, Type::Identifier));
-         e.value = progl;
+         ext.value = full_path;
+         rest.push_front(ext);
+         e.value = rest;
        }
+       std::reverse(environment_variables.begin(), environment_variables.end());
        Symbol node = Symbol("", args, Type::List);
        Symbol result = rewind_pipe(node, PATH);
        return Symbol("", result.value, result.type, args.front().depth);
@@ -365,7 +443,7 @@ std::map<std::string, Functor> procedures = {
        // (if <clause> (expr1 ... exprn) (else1 ... elsen))
        // if <clause> converts to Cpp's "true" then return
        // (expr1 ... exprn) to the caller, and the other
-       // list otherwise.
+       // list otherwisestd::cout << "ciaooo".
        if (args.size() != 3) {
          throw std::logic_error{
              "An if statement must have precisely three arguments!\n"};
