@@ -43,3 +43,11 @@ Below is an up-to-date list of examples for all the (not many!) things that Rewi
 - Rewind has support for redirecting program output to files, also:
   * `(> (-> (ls -al)) log.txt)` will _append_ the output of `ls -al` to `log.txt`.
     Note: the file is created if it doesn't exist.
+- There's the possibility, if need be, to pass specific environment variables to programs. The syntax is
+  as follows:  
+  * `(-> ((ENV1 something) ls -al) ((ENV2 whatever) (IDK idk) grep src -))`;
+  * `((A a) (B b) cat makefile)`.
+  currently booleans, strings, and numbers will be parsed correctly. Each will be translated into a string
+  representation of the value: `true` => "true", 42 => "42".
+  The program _should_ run fine if instead of barewords (strings without leading and trailing '"') you put string
+  literals, but i haven't tested that scenario.
