@@ -13,6 +13,17 @@ std::string rewind_readline() {
   return line;
 }
 
+std::string rewind_read_file(std::string filename) {
+  std::string expr;
+  std::string temp;
+  std::ifstream in(filename);
+  while (std::getline(in, temp)) {
+    expr += temp;
+  }
+  in.close();
+  return expr;
+}
+
 std::optional<std::string>
 rewind_get_env_var(const std::string& query) {
   const char* r = std::getenv(query.c_str());

@@ -9,6 +9,9 @@ Symbol rewind_call_ext_program(Symbol node,
                                const std::vector<std::string> &PATH,
                                bool must_pipe, int pipe_fd_out,
                                int pipe_fd_in) {
+  const auto is_strlit = [](std::string s) -> bool {
+    return (s.size() > 1) && (s[0] == '"') && (s[s.size() - 1] == '"');
+  };
   std::list<Symbol> nodel = std::get<std::list<Symbol>>(node.value);
   std::string prog = std::get<std::string>(nodel.front().value);
   char *argv[nodel.size() + 1];
@@ -33,7 +36,11 @@ Symbol rewind_call_ext_program(Symbol node,
         p | as<std::string>(s) = [&] { return *s; },
         p | as<int>(in) = [&] { return std::to_string(*in); },
         p | as<bool>(b) = [&] { return (*b == true) ? "true" : "false"; });
-    argv[i] = (char *)malloc(arg.length() + 1);
+    argv[i] = (char *) malloc(arg.length() + 1);
+    if (is_strlit(arg)) {
+      arg = arg.substr(1, arg.size() - 2);
+    }
+    std::cout << arg << "\n";
     std::strcpy(argv[i], arg.c_str());
     i++;
 #undef p
@@ -71,12 +78,14 @@ Symbol rewind_call_ext_program(Symbol node,
     if (environment_variables.empty()) {
       status = execv(prog.c_str(), argv);
     } else {
-      char* envp[environment_variables[environment_variables.size() - 1].size() + 1];
+      char
+          *envp[environment_variables[environment_variables.size() - 1].size() +
+                1];
       int j = 0;
-      for (auto e: environment_variables[environment_variables.size() - 1]) {
-	std::string kv = e.first + "=" + e.second;
-	envp[j] = (char*) malloc(kv.size());
-	strcpy(envp[j], kv.c_str());
+      for (auto e : environment_variables[environment_variables.size() - 1]) {
+        std::string kv = e.first + "=" + e.second;
+        envp[j] = (char *)malloc(kv.size());
+        strcpy(envp[j], kv.c_str());
         j++;
       }
       envp[j] = nullptr;
@@ -92,8 +101,8 @@ Symbol rewind_call_ext_program(Symbol node,
       close(pipe_fd_out);
     if (pipe_fd_in)
       close(pipe_fd_in);
-    for (int idx = 0; argv[idx] != nullptr; ++idx) {
-      free(argv[i]);
+    for (int idx = 1; argv[idx] != nullptr; ++idx) {
+      free(argv[idx]);
     }
     return Symbol("", status, Type::Number);
   } else {

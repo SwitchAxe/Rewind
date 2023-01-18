@@ -79,7 +79,7 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH) {
              lit != std::get<std::list<Symbol>>(node.value).end()) {
     auto nodel = std::get<std::list<Symbol>>(node.value);
     get_env_vars(node, PATH);
-    auto rest = std::list<Symbol>(lit, nodel.end());
+    auto rest = std::list<Symbol>(lit, std::get<std::list<Symbol>>(node.value).end());
     rest.pop_front();
     auto ext = *lit;
     ext.value = *get_absolute_path(std::get<std::string>((*lit).value), PATH);
