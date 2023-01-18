@@ -1,5 +1,5 @@
 CXX     = g++
-FLAGS   = -std=c++20 -I. -ggdb -lreadline
+FLAGS   = -std=c++20 -I. -ggdb -lreadline -fsanitize=address
 OUT     = rewind
 SRC     = src/main.cpp
 LIBS    = src/*.hpp
