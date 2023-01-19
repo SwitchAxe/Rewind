@@ -55,3 +55,7 @@ Below is an up-to-date list of examples for all the (not many!) things that Rewi
   representation of the value: `true` => "true", 42 => "42".
   The program _should_ run fine if instead of barewords (strings without leading and trailing '"') you put string
   literals, but i haven't tested that scenario.
+- The _reference_ (`$`) operator allows you to explicitly reference variables inside external commands:
+  * `(+ (let x 4) (+ 1 (toi (let y (echo ($ x)))))) => 9`.  
+    - While it _can_ be used for referencing variables even outside of external commands, it is not strictly
+      necessary in that scenario.
