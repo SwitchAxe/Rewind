@@ -33,6 +33,9 @@ Below is an up-to-date list of examples for all the (not many!) things that Rewi
 	* `(+ (let ! (n) (if n (* n (! (- n 1))) 1)) (! 5)) => 120`
 - Rewind has rudimentary support for external programs and pipes:
   * `(ls -al)` runs `ls -al` on the current directory;
+    - Assigning output to variables instead of writing to stdout is also possible, in which case the
+      variable will hold a string representation of the command output:
+      * `(+ 1 (toi (let x (echo "3")))) => 4`.
   * `(-> (ls -a) (grep make) (cat) (tr -d '\n') (xargs wc))` is an overcomplicated way to run `wc` on the
 	makefile of the project, assuming you're situated in the root directory.
 - There's also the ability to set, and get, environment variables for the current Rewind session:
