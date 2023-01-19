@@ -164,12 +164,15 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH) {
           intermediate_results.pop_back();
         }
 
-        if (!variables.empty()) {
-          variables.pop_back();
-        }
         if (!node_stk.empty()) {
           current_node = node_stk.top();
           node_stk.pop();
+          if (std::holds_alternative<std::list<Symbol>>(current_node.value) &&
+              std::get<std::list<Symbol>>(current_node.value).empty()) {
+            if (!variables.empty()) {
+              variables.pop_back();
+            }
+          }
         } else
           return result;
 

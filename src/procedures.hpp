@@ -474,6 +474,19 @@ std::map<std::string, Functor> procedures = {
        args.pop_front();
        return Symbol("", args.front().value, args.front().type,
                      args.front().depth);
+     }}},
+    {"$", {[](std::list<Symbol> args) -> Symbol {
+       if (args.size() != 1) {
+         throw std::logic_error{
+             "the reference '$' operator expects a variable!\n"};
+       }
+       auto var = variable_lookup(args.front());
+       if (var == std::nullopt) {
+         std::cout << "aiaa\n";
+         return Symbol("", "", Type::String, args.front().depth);
+       }
+       return (
+           Symbol((*var).name, (*var).value, (*var).type, args.front().depth));
      }}}};
 
-std::array<std::string, 4> special_forms = {"->", "let", "if", ">"};
+std::array<std::string, 5> special_forms = {"->", "let", "if", ">", "$"};
