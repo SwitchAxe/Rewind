@@ -23,7 +23,9 @@
 
 
 std::string rewind_readline() {
-  char* read_line = readline("> ");
+  auto cur = fs::current_path();
+  std::string prompt = cur.string() + "> ";
+  char* read_line = readline(prompt.c_str());
   std::string line{read_line};
   free(read_line);
   return line;
