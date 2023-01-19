@@ -1,5 +1,6 @@
 #pragma once
 #include "evaluator.hpp"
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <iostream>
@@ -36,11 +37,10 @@ Symbol rewind_call_ext_program(Symbol node,
         p | as<std::string>(s) = [&] { return *s; },
         p | as<int>(in) = [&] { return std::to_string(*in); },
         p | as<bool>(b) = [&] { return (*b == true) ? "true" : "false"; });
-    argv[i] = (char *) malloc(arg.length() + 1);
+    argv[i] = (char *)malloc(arg.length() + 1);
     if (is_strlit(arg)) {
       arg = arg.substr(1, arg.size() - 2);
     }
-    std::cout << arg << "\n";
     std::strcpy(argv[i], arg.c_str());
     i++;
 #undef p
@@ -56,6 +56,7 @@ Symbol rewind_call_ext_program(Symbol node,
     return procedures[prog](l);
   }
   int status = 0;
+  std::string result_s = "";
   int pid = fork();
   if (pid == 0) {
     if (must_pipe) {
@@ -97,12 +98,30 @@ Symbol rewind_call_ext_program(Symbol node,
     }
     exit(1);
   } else if (pid > 0) {
-    if (pipe_fd_out)
+    if ((node.depth > 1) && must_pipe) {
+      char *buf = (char *)malloc(1024);
+      int cnt;
       close(pipe_fd_out);
+      while ((cnt = read(pipe_fd_in, buf, 1023))) {
+        if (cnt == -1) {
+          throw std::logic_error{"Read failed in rewind_call_ext_program.\n"};
+        }
+        buf[cnt] = '\0';
+        std::string temp{buf};
+        result_s += temp;
+      }
+      free(buf);
+    }
+    if (pipe_fd_out) {
+      close(pipe_fd_out);
+    }
     if (pipe_fd_in)
       close(pipe_fd_in);
     for (int idx = 1; argv[idx] != nullptr; ++idx) {
       free(argv[idx]);
+    }
+    if ((result_s != "") || (node.depth > 1)) {
+      return Symbol("", result_s, Type::String, node.depth);
     }
     return Symbol("", status, Type::Number);
   } else {

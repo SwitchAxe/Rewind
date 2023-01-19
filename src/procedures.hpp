@@ -2,6 +2,7 @@
 #include "matchit.h"
 #include "types.hpp"
 #include <algorithm>
+#include <charconv>
 #include <cstdlib>
 #include <exception>
 #include <fcntl.h>
@@ -407,6 +408,23 @@ std::map<std::string, Functor> procedures = {
          first = e;
        }
        return Symbol("", is_true, Type::Boolean, args.front().depth);
+     }}},
+    {"toi", {[](std::list<Symbol> args) -> Symbol {
+       if (args.size() != 1) {
+         throw std::logic_error{"'toi' expects precisely one string to try and "
+                                "convert to an integer!\n"};
+       }
+       if (args.front().type != Type::String) {
+         throw std::logic_error{"'toi' expects a string!\n"};
+       }
+       std::string s = std::get<std::string>(args.front().value);
+       int n;
+       auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.length(), n);
+       if (ec != std::errc()) {
+         throw std::logic_error{"Exception in 'toi': Failed to convert the "
+                                "string to an integer!\n"};
+       }
+       return Symbol("", n, Type::Number, args.front().depth);
      }}},
     {"let", {[](std::list<Symbol> args) -> Symbol {
        if (args.front().type != Type::Identifier)

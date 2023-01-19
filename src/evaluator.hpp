@@ -79,12 +79,24 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH) {
              lit != std::get<std::list<Symbol>>(node.value).end()) {
     auto nodel = std::get<std::list<Symbol>>(node.value);
     get_env_vars(node, PATH);
-    auto rest = std::list<Symbol>(lit, std::get<std::list<Symbol>>(node.value).end());
+    auto rest =
+        std::list<Symbol>(lit, std::get<std::list<Symbol>>(node.value).end());
     rest.pop_front();
     auto ext = *lit;
     ext.value = *get_absolute_path(std::get<std::string>((*lit).value), PATH);
     rest.push_front(ext);
-    auto status = rewind_call_ext_program(Symbol("", rest, Type::List), PATH);
+    if (node.depth > 1) {
+      int fd[2];
+      pipe(fd);
+      auto status = rewind_call_ext_program(
+          Symbol("", rest, Type::List, node.depth), PATH, true, fd[1], fd[0]);
+      close(fd[1]);
+      close(fd[0]);
+      wait(nullptr);
+      return status;
+    }
+    auto status =
+        rewind_call_ext_program(Symbol("", rest, Type::List, node.depth), PATH);
     wait(nullptr);
     return status;
   } else if (std::get<std::string>(op.value) == "+>") {
@@ -126,6 +138,7 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH) {
           break;
         Symbol eval_temp_arg;
         // clean up for any function definition...
+
         std::erase_if(leaves[leaves.size() - 1], [](Symbol &s) -> bool {
           return (s.type == Type::Defunc) || (s.type == Type::Command);
         });
