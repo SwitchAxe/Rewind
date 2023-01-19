@@ -482,7 +482,6 @@ std::map<std::string, Functor> procedures = {
        }
        auto var = variable_lookup(args.front());
        if (var == std::nullopt) {
-         std::cout << "aiaa\n";
          return Symbol("", "", Type::String, args.front().depth);
        }
        return (
