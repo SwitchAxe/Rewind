@@ -29,6 +29,14 @@ Below is an up-to-date list of examples for all the (not many!) things that Rewi
   Any amount of arguments can appear in a definition; This is permitted:
   `(+ 1 (let sum (a b) (+ a b)) (sum 4 5)) => 10`.
   Variadic functions, template functions, or lambda functions are not presently supported.
+  On the other hand, Rewind also supports Higher Order Functions in the sense that you can pass functions
+  as arguments to other functions:
+  ```
+    (+ (let o (f g x) (f (g x)))
+       (let sqr (x) (* x x))
+       (let +1 (x) (+ x 1))
+       (o sqr +1 5)) => 36
+  ```
   * You can also do simple recursion, and it should work:
 	* `(+ (let ! (n) (if n (* n (! (- n 1))) 1)) (! 5)) => 120`
 - Rewind has rudimentary support for external programs and pipes:
