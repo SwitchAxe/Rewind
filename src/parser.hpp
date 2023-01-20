@@ -15,6 +15,14 @@
   Rewind. If not, see <https://www.gnu.org/licenses/>.
 */
 
+#include "lexer.hpp"
+#include "procedures.hpp"
+#include <charconv>
+#include <iostream>
+#include <stack>
+#include <type_traits>
+
+
 std::string process_escapes(const std::string &s) {
   std::string r;
   for (int i = 0; i < s.length(); ++i) {
@@ -60,12 +68,7 @@ std::string process_escapes(const std::string &s) {
   return r;
 }
 
-#include "lexer.hpp"
-#include "procedures.hpp"
-#include <charconv>
-#include <iostream>
-#include <stack>
-#include <type_traits>
+
 Symbol get_ast(std::vector<std::string> tokens) {
   int round_balance = 0;  // for paren balancing
   int square_balance = 0; // see above
