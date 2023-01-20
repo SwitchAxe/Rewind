@@ -127,50 +127,7 @@ std::optional<std::string> get_absolute_path(std::string progn, path &PATH) {
   return std::nullopt;
 }
 
-std::string process_escapes(const std::string &s) {
-  std::string r;
-  for (int i = 0; i < s.length(); ++i) {
-    if (!(s[i] == '\\')) {
-      r += s[i];
-      continue;
-    }
-    switch (s[i + 1]) {
-    case 'n':
-      r += '\n';
-      break;
-    case '\\':
-      r += '\\';
-      break;
-    case 'a':
-      r += '\a';
-      break;
-    case 'b':
-      r += '\b';
-      break;
-    case 'v':
-      r += '\v';
-      break;
-    case 'f':
-      r += '\f';
-      break;
-    case 'r':
-      r += '\r';
-      break;
-    case 'e':
-      r += '\x1b';
-      break;
-    case 't':
-      r += '\t';
-      break;
-    default:
-      r += s[i];
-      r += s[i + 1];
-      break;
-    }
-    i++;
-  }
-  return r;
-}
+
 
 std::optional<Symbol> variable_lookup(Symbol id) {
   if (!std::holds_alternative<std::string>(id.value))
@@ -501,6 +458,12 @@ std::map<std::string, Functor> procedures = {
        }
        return (
            Symbol((*var).name, (*var).value, (*var).type, args.front().depth));
-     }}}};
+     }}},
+  {"print", {[](std::list<Symbol> args) -> Symbol {
+    for (auto e: args) {
+      rec_print_ast(e);
+    }
+    return Symbol("", false, Type::Command);
+  }}}};
 
 std::array<std::string, 5> special_forms = {"->", "let", "if", ">", "$"};

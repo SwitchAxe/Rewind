@@ -14,6 +14,52 @@
   You should have received a copy of the GNU General Public License along with
   Rewind. If not, see <https://www.gnu.org/licenses/>.
 */
+
+std::string process_escapes(const std::string &s) {
+  std::string r;
+  for (int i = 0; i < s.length(); ++i) {
+    if (!(s[i] == '\\')) {
+      r += s[i];
+      continue;
+    }
+    switch (s[i + 1]) {
+    case 'n':
+      r += '\n';
+      break;
+    case '\\':
+      r += '\\';
+      break;
+    case 'a':
+      r += '\a';
+      break;
+    case 'b':
+      r += '\b';
+      break;
+    case 'v':
+      r += '\v';
+      break;
+    case 'f':
+      r += '\f';
+      break;
+    case 'r':
+      r += '\r';
+      break;
+    case 'e':
+      r += '\x1b';
+      break;
+    case 't':
+      r += '\t';
+      break;
+    default:
+      r += s[i];
+      r += s[i + 1];
+      break;
+    }
+    i++;
+  }
+  return r;
+}
+
 #include "lexer.hpp"
 #include "procedures.hpp"
 #include <charconv>
@@ -131,6 +177,9 @@ void rec_print_ast(Symbol root) {
               if constexpr (std::is_same_v<std::decay_t<T>, std::monostate>) {
               } else if constexpr (std::is_same_v<std::decay_t<T>,
                                                   std::list<Symbol>>) {
+              } else if constexpr (std::is_same_v<std::decay_t<T>,
+                                                  std::string>) {
+                std::cout << process_escapes(v) << " ";
               } else
                 std::cout << v << " ";
             },
