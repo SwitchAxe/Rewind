@@ -125,6 +125,8 @@ Symbol rewind_call_ext_program(Symbol node,
         std::string temp{buf};
         result_s += temp;
       }
+      result_s.insert(0, 1, '"');
+      result_s.append("\"");
       free(buf);
     }
     if (pipe_fd_out) {
