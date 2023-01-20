@@ -393,6 +393,23 @@ std::map<std::string, Functor> procedures = {
        }
        return Symbol("", is_true, Type::Boolean, prev.depth);
      }}},
+    {"s+", {[](std::list<Symbol> args) -> Symbol {
+       const auto is_strlit = [](const std::string &s) -> bool {
+         return (s.size() > 1) && (s[0] == '"') && (s[s.length() - 1] == '"');
+       };
+       std::string ret;
+       for (auto e : args) {
+         if (!std::holds_alternative<std::string>(e.value)) {
+           throw std::logic_error{"Expected a string in 's+'!\n"};
+         }
+         if (is_strlit(std::get<std::string>(e.value))) {
+           std::string no_strlit = std::get<std::string>(e.value);
+           no_strlit = no_strlit.substr(1, no_strlit.length() - 2);
+           ret += no_strlit;
+         }
+       }
+       return Symbol("", ret, Type::String, args.front().depth);
+     }}},
     {"toi", {[](std::list<Symbol> args) -> Symbol {
        if (args.size() != 1) {
          throw std::logic_error{"'toi' expects precisely one string to try and "
