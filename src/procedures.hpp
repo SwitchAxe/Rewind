@@ -127,8 +127,6 @@ std::optional<std::string> get_absolute_path(std::string progn, path &PATH) {
   return std::nullopt;
 }
 
-
-
 std::optional<Symbol> variable_lookup(Symbol id) {
   if (!std::holds_alternative<std::string>(id.value))
     return std::nullopt;
@@ -381,6 +379,20 @@ std::map<std::string, Functor> procedures = {
        }
        return Symbol("", is_true, Type::Boolean, args.front().depth);
      }}},
+    {"=", {[](std::list<Symbol> args) -> Symbol {
+       bool is_true = true;
+       Symbol prev = args.front();
+       args.pop_front();
+       for (auto e : args) {
+         if (e.type != prev.type) {
+           throw std::logic_error{
+               "Types of the arguments to '=' don't match!\n"};
+         }
+         is_true = e.value == prev.value;
+         prev = e;
+       }
+       return Symbol("", is_true, Type::Boolean, prev.depth);
+     }}},
     {"toi", {[](std::list<Symbol> args) -> Symbol {
        if (args.size() != 1) {
          throw std::logic_error{"'toi' expects precisely one string to try and "
@@ -459,11 +471,11 @@ std::map<std::string, Functor> procedures = {
        return (
            Symbol((*var).name, (*var).value, (*var).type, args.front().depth));
      }}},
-  {"print", {[](std::list<Symbol> args) -> Symbol {
-    for (auto e: args) {
-      rec_print_ast(e);
-    }
-    return Symbol("", false, Type::Command);
-  }}}};
+    {"print", {[](std::list<Symbol> args) -> Symbol {
+       for (auto e : args) {
+         rec_print_ast(e);
+       }
+       return Symbol("", false, Type::Command);
+     }}}};
 
 std::array<std::string, 5> special_forms = {"->", "let", "if", ">", "$"};
