@@ -108,6 +108,7 @@ Symbol rewind_redirect_append(Symbol node,
                               const std::vector<std::string> &PATH);
 Symbol rewind_redirect_overwrite(Symbol node,
                                  const std::vector<std::string> &PATH);
+Symbol eval(Symbol root, path PATH);
 void rec_print_ast(Symbol root);
 namespace fs = std::filesystem;
 // just so the compiler doesn't complain about nonexistent PATH
@@ -488,8 +489,10 @@ std::map<std::string, Functor> procedures = {
        return (
            Symbol((*var).name, (*var).value, (*var).type, args.front().depth));
      }}},
-    {"print", {[](std::list<Symbol> args) -> Symbol {
+    {"print", {[](std::list<Symbol> args, path PATH) -> Symbol {
        for (auto e : args) {
+         if (e.type == Type::Defunc) continue;
+         if (e.type == Type::List) e = eval(e, PATH);
          rec_print_ast(e);
        }
        return Symbol("", false, Type::Command);
