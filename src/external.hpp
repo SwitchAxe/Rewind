@@ -52,10 +52,10 @@ Symbol rewind_call_ext_program(Symbol node,
         p | as<std::string>(s) = [&] { return *s; },
         p | as<int>(in) = [&] { return std::to_string(*in); },
         p | as<bool>(b) = [&] { return (*b == true) ? "true" : "false"; });
-    argv[i] = (char *)malloc(arg.length());
     if (is_strlit(arg)) {
       arg = arg.substr(1, arg.size() - 2);
     }
+    argv[i] = (char *)malloc(arg.length() + 1);
     std::strcpy(argv[i], arg.c_str());
     i++;
 #undef p

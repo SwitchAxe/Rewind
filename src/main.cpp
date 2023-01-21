@@ -18,15 +18,20 @@
 #include "src/lexer.hpp"
 #include "src/parser.hpp"
 #include "src/procedures.hpp"
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
   if (argc == 2) {
     std::string filename{argv[1]};
     std::string expr = rewind_read_file(filename);
+    std::vector<std::string> expr_list = rewind_split_file(expr);
     auto PATH = rewind_get_system_PATH();
     if (PATH != std::nullopt)
-      rec_print_ast(eval(get_ast(get_tokens(expr)), *PATH));
+      for (auto s : expr_list) {
+        std::cout << s << "\n";
+        rec_print_ast(eval(get_ast(get_tokens(expr)), *PATH));
+      }
     else
-      rec_print_ast(eval(get_ast(get_tokens(expr)), {}));
+      for (auto s : expr_list)
+        rec_print_ast(eval(get_ast(get_tokens(expr)), {}));
     std::cout << "\n";
     return 0;
   }
