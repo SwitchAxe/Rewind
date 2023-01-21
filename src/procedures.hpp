@@ -409,6 +409,8 @@ std::map<std::string, Functor> procedures = {
            ret += no_strlit;
          }
        }
+       ret.insert(0, 1, '\"');
+       ret.push_back('\"');
        return Symbol("", ret, Type::String, args.front().depth);
      }}},
     {"toi", {[](std::list<Symbol> args) -> Symbol {
@@ -491,11 +493,32 @@ std::map<std::string, Functor> procedures = {
      }}},
     {"print", {[](std::list<Symbol> args, path PATH) -> Symbol {
        for (auto e : args) {
-         if (e.type == Type::Defunc) continue;
-         if (e.type == Type::List) e = eval(e, PATH);
+         if (e.type == Type::Defunc)
+           continue;
+         if (e.type == Type::List)
+           e = eval(e, PATH);
          rec_print_ast(e);
        }
        return Symbol("", false, Type::Command);
+     }}},
+    {"strip", {[](std::list<Symbol> args) -> Symbol {
+       if (args.size() != 1) {
+         throw std::logic_error{"'strip' expects a single string to which "
+                                "remove the trailing newline!\n"};
+       }
+       if (args.front().type != Type::String) {
+         throw std::logic_error{"'strip' expects a string!\n"};
+       }
+       auto str = std::get<std::string>(args.front().value);
+       std::cout << "in strip: \"" << str << "\"\n";
+       if (str[str.size() - 2] != '\n') {
+         return Symbol(args.front().name, str, args.front().type,
+                       args.front().depth);
+       }
+       str = str.substr(0, str.size() - 2);
+       str.push_back('"');
+       return Symbol(args.front().name, str, args.front().type,
+                     args.front().depth);
      }}}};
 
 std::array<std::string, 5> special_forms = {"->", "let", "if", ">", "$"};

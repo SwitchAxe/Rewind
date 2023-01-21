@@ -55,6 +55,7 @@ Symbol rewind_call_ext_program(Symbol node,
     if (is_strlit(arg)) {
       arg = arg.substr(1, arg.size() - 2);
     }
+    std::cout << "\"" << arg << "\"\n";
     argv[i] = (char *)malloc(arg.length() + 1);
     std::strcpy(argv[i], arg.c_str());
     i++;
