@@ -113,7 +113,7 @@ Symbol rewind_call_ext_program(Symbol node,
     }
     exit(1);
   } else if (pid > 0) {
-    if ((node.depth > 1) && must_pipe && pipe_fd_in) {
+    if ((node.depth > 2) && must_pipe && pipe_fd_in) {
       char *buf = (char *)malloc(1024);
       int cnt;
       close(pipe_fd_out);
