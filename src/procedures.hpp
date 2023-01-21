@@ -510,7 +510,6 @@ std::map<std::string, Functor> procedures = {
          throw std::logic_error{"'strip' expects a string!\n"};
        }
        auto str = std::get<std::string>(args.front().value);
-       std::cout << "in strip: \"" << str << "\"\n";
        if (str[str.size() - 2] != '\n') {
          return Symbol(args.front().name, str, args.front().type,
                        args.front().depth);
