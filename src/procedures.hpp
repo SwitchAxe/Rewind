@@ -518,6 +518,24 @@ std::map<std::string, Functor> procedures = {
        str.push_back('"');
        return Symbol(args.front().name, str, args.front().type,
                      args.front().depth);
+     }}},
+    {"nostr", {[](std::list<Symbol> args) -> Symbol {
+       if ((args.size() != 1) ||
+           !std::holds_alternative<std::string>(args.front().value)) {
+         throw std::logic_error {
+           "'nostr' expects a single string literal to try and convert to a "
+           "bareword!\n"
+         };
+       }
+       const auto is_strlit = [](const std::string &s) -> bool {
+         return (s.size() > 1) && (s[0] == '"') && (s[s.length() - 1] == '"');
+       };
+       auto s = std::get<std::string>(args.front().value);
+       if (is_strlit(std::get<std::string>(args.front().value))) {
+         s = s.substr(1, s.length() - 1);
+       }
+       args.front().value = s;
+       return args.front();
      }}}};
 
 std::array<std::string, 5> special_forms = {"->", "let", "if", ">", "$"};

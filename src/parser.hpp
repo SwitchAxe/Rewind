@@ -23,50 +23,7 @@
 #include <type_traits>
 
 
-std::string process_escapes(const std::string &s) {
-  std::string r;
-  for (int i = 0; i < s.length(); ++i) {
-    if (!(s[i] == '\\')) {
-      r += s[i];
-      continue;
-    }
-    switch (s[i + 1]) {
-    case 'n':
-      r += '\n';
-      break;
-    case '\\':
-      r += '\\';
-      break;
-    case 'a':
-      r += '\a';
-      break;
-    case 'b':
-      r += '\b';
-      break;
-    case 'v':
-      r += '\v';
-      break;
-    case 'f':
-      r += '\f';
-      break;
-    case 'r':
-      r += '\r';
-      break;
-    case 'e':
-      r += '\x1b';
-      break;
-    case 't':
-      r += '\t';
-      break;
-    default:
-      r += s[i];
-      r += s[i + 1];
-      break;
-    }
-    i++;
-  }
-  return r;
-}
+
 
 
 Symbol get_ast(std::vector<std::string> tokens) {
