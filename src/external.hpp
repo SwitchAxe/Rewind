@@ -39,8 +39,6 @@ Symbol rewind_call_ext_program(Symbol node,
   for (auto cur : nodel) {
     if (cur.type == Type::List) {
       cur_arg = eval(cur, PATH);
-      rec_print_ast(cur_arg);
-      std::cout << "\n";
       if (cur_arg.type == Type::List) {
         throw std::logic_error{"Can't have lists as arguments to programs!\n"};
       }
