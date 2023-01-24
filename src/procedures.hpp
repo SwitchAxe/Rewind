@@ -38,7 +38,7 @@ std::vector<std::map<std::string, std::string>> environment_variables;
 // forward declaration so i can use it in the next function definition
 std::optional<std::string>
 get_absolute_path(std::string progn, const std::vector<std::string> &PATH);
-
+std::map<std::string, Symbol> cmdline_args;
 void get_env_vars(Symbol node, path PATH) {
   // called for the side effect of modifying the vector above.
   auto nodel = std::get<std::list<Symbol>>(node.value);
@@ -553,6 +553,20 @@ std::map<std::string, Functor> procedures = {
        }
        args.front().value = s;
        return args.front();
+     }}},
+    {"cmd", {[](std::list<Symbol> args) -> Symbol {
+       if (args.size() != 1) {
+         throw std::logic_error{"'cmd' expects exactly one command argument "
+                                "name (a number) to get the value of!\n"};
+       }
+       if (args.front().type != Type::Number) {
+         throw std::logic_error{
+             "The command line argument name must be a string!\n"};
+       }
+       if (cmdline_args.contains(std::to_string(std::get<int>(args.front().value)))) {
+         return cmdline_args.at(std::to_string(std::get<int>(args.front().value)));
+       }
+       return Symbol("", "", Type::String);
      }}}};
 
 std::array<std::string, 5> special_forms = {"->", "let", "if", ">", "$"};

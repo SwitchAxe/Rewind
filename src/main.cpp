@@ -18,16 +18,34 @@
 #include "src/lexer.hpp"
 #include "src/parser.hpp"
 #include "src/procedures.hpp"
+#include <string>
 int main(int argc, char **argv) {
-  if (argc == 2) {
+  auto PATH = rewind_get_system_PATH();
+  if ((argc > 1) && (std::string{argv[1]} == "--")) {
+    for (int i = 1; i < argc; ++i) {
+      std::string __argvi{argv[i]};
+      Symbol sym = Symbol("", __argvi, Type::String);
+      cmdline_args.insert({std::to_string(i - 1), eval(sym, *PATH)});
+    }
+  }
+  else if (argc > 2) {
     std::string filename{argv[1]};
     std::string expr = rewind_read_file(filename);
     std::vector<std::string> expr_list = rewind_split_file(expr);
-    auto PATH = rewind_get_system_PATH();
+    if (std::string{argv[2]} != "--") {
+      throw std::logic_error{
+          "please separate the script name from the arguments with '--'!\n"};
+    }
+    for (int i = 2; i < argc; ++i) {
+      std::string __argvi{argv[i]};
+      Symbol sym = Symbol("", __argvi, Type::String);
+      cmdline_args.insert({std::to_string(i - 2), eval(sym, *PATH)});
+    }
     if (PATH != std::nullopt)
       for (auto s : expr_list) {
         std::cout << s << "\n";
         rec_print_ast(eval(get_ast(get_tokens(expr)), *PATH));
+        std::cout << "\n";
       }
     else
       for (auto s : expr_list)
