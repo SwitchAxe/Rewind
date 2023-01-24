@@ -76,6 +76,7 @@ std::vector<std::string> get_tokens(std::string stream) {
   std::string temp;
   bool in_singles = false;
   for (auto ch : stream) {
+    std::cout << temp << "\n";
     if ((ch == ' ') || (ch == '\t') || (ch == '\n')) {
       if (in_identifier || in_numlit) {
         in_identifier = false;
@@ -90,7 +91,8 @@ std::vector<std::string> get_tokens(std::string stream) {
         if (in_string) {
           if (in_singles) {
             in_string = false;
-            tokens.push_back(temp + std::string{ch});
+            in_singles = false;
+            tokens.push_back(temp);
             temp = "";
           } else {
             temp += ch;
@@ -100,16 +102,20 @@ std::vector<std::string> get_tokens(std::string stream) {
         } else if (in_identifier) {
           throw std::logic_error{"Found single quotes in an identifier!\n"};
         } else {
+          in_identifier = false;
+          in_numlit = false;
           in_string = true;
           in_singles = true;
-          temp += ch;
         }
-      }
-      if (ch == '"') {
-        if (in_string && !in_singles) {
-          in_string = false;
-          tokens.push_back(temp + std::string{ch});
-          temp = "";
+      } else if (ch == '"') {
+        if (in_string) {
+          if (in_singles) {
+            temp += ch;
+          } else {
+            in_string = false;
+            tokens.push_back(temp + std::string{ch});
+            temp = ch;
+          }
         } else if (in_numlit) {
           throw std::logic_error{"Failed to parse the input stream!\n"
                                  "Found double quotes in a numeric literal!\n"};
@@ -119,6 +125,8 @@ std::vector<std::string> get_tokens(std::string stream) {
               "Found double quotes in an identifier (illegal character)!\n"};
         } else {
           in_string = true;
+          in_identifier = false;
+          in_numlit = false;
           temp += ch;
         }
       } else if (in_identifier) {
