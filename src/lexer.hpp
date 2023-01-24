@@ -76,7 +76,6 @@ std::vector<std::string> get_tokens(std::string stream) {
   std::string temp;
   bool in_singles = false;
   for (auto ch : stream) {
-    std::cout << temp << "\n";
     if ((ch == ' ') || (ch == '\t') || (ch == '\n')) {
       if (in_identifier || in_numlit) {
         in_identifier = false;
