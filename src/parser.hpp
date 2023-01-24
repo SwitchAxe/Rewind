@@ -22,17 +22,12 @@
 #include <stack>
 #include <type_traits>
 
-
-
-
-
 Symbol get_ast(std::vector<std::string> tokens) {
   int round_balance = 0;  // for paren balancing
   int square_balance = 0; // see above
   bool list_entered = false;
   Symbol node;
   std::stack<Symbol> node_stk;
-  int depth = 0;
   for (auto tok : tokens) {
     if ((tok == "(") || (tok == "[")) {
       if (tok == "(")
@@ -43,7 +38,6 @@ Symbol get_ast(std::vector<std::string> tokens) {
         node.type = Type::List;
         node.name = "root";
         node.value = std::list<Symbol>();
-        node.depth = ++depth;
       } else {
         if (!std::holds_alternative<std::list<Symbol>>(node.value)) {
           throw std::logic_error{"Failed to parse the input expression!"
@@ -53,7 +47,6 @@ Symbol get_ast(std::vector<std::string> tokens) {
           // the current node 'node'.
           node_stk.push(node);
           node.value = std::list<Symbol>();
-          node.depth = ++depth;
         }
       }
     } else if ((tok == ")") || (tok == "]")) {
@@ -63,7 +56,6 @@ Symbol get_ast(std::vector<std::string> tokens) {
         square_balance--;
       // we finished parsing the subexpression/sublist, so we can
       // append the resulting tree to the previous one.
-      depth--;
       Symbol child = node;
       if (!node_stk.empty()) {
         node = node_stk.top();
@@ -100,7 +92,6 @@ Symbol get_ast(std::vector<std::string> tokens) {
         child.type = Type::Identifier;
         child.value = tok;
       }
-      child.depth = depth;
       if (std::holds_alternative<std::list<Symbol>>(node.value)) {
         auto temp = std::get<std::list<Symbol>>(node.value);
         temp.push_back(child);
@@ -110,8 +101,6 @@ Symbol get_ast(std::vector<std::string> tokens) {
       }
     }
   }
-  if (depth)
-    throw std::logic_error{"Missing closing parenthesis for a list!\n"};
   if (round_balance) {
     throw std::logic_error{"Missing closing parenthesis for an list!\n"};
   }

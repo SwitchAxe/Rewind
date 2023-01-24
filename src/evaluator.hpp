@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <iostream>
+#include <list>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <variant>
@@ -56,7 +57,7 @@ Symbol eval_function(Symbol node, const std::vector<std::string> &PATH) {
     result = eval(e, PATH);
   }
   call_stack.pop_back();
-  return Symbol("", result.value, result.type, node.depth);
+  return Symbol("", result.value, result.type);
 }
 
 // to use with nodes with only leaf children.
@@ -100,20 +101,12 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH) {
     auto ext = *lit;
     ext.value = *get_absolute_path(std::get<std::string>((*lit).value), PATH);
     rest.push_front(ext);
-    if (node.depth > 1) {
-      int fd[2];
-      pipe(fd);
-      auto status = rewind_call_ext_program(
-          Symbol("", rest, Type::List, node.depth), PATH, true, fd[1], fd[0]);
-      close(fd[1]);
-      close(fd[0]);
-      wait(nullptr);
-      return status;
-    }
-    auto status =
-        rewind_call_ext_program(Symbol("", rest, Type::List, node.depth), PATH);
-    wait(nullptr);
-    return status;
+    Symbol pipel =
+        Symbol("", std::list<Symbol>{Symbol("", rest, Type::List)}, Type::List);
+    rec_print_ast(pipel);
+    std::cout << "\n";
+    auto result = rewind_pipe(pipel, PATH);
+    return result;
   } else if (std::get<std::string>(op.value) == "+>") {
     // redirect with overwrite into a file
     auto temp = std::get<std::list<Symbol>>(node.value);
@@ -141,6 +134,16 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH) {
   // to get compute the value for each node, including the root.
   std::vector<std::list<Symbol>> leaves;
   current_node = root;
+  // dirty fix for lone literals (strings, numbers etc)
+  // if (current_node.type != Type::List) {
+  //  if (current_node.type == Type::String) {
+  //    auto opt = variable_lookup(current_node);
+  //    if (opt != std::nullopt) {
+  //      return *opt;
+  //    }
+  //  }
+  //  return current_node;
+  //}
   do {
     // for each node, visit each child and backtrack to the last parent node
     // when the last child is null, and continue with the second last node and
@@ -157,27 +160,12 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH) {
         std::erase_if(leaves[leaves.size() - 1], [](Symbol &s) -> bool {
           return (s.type == Type::Defunc) || (s.type == Type::Command);
         });
-        eval_temp_arg = Symbol("", leaves[leaves.size() - 1], Type::List,
-                               current_node.depth);
+        eval_temp_arg = Symbol("", leaves[leaves.size() - 1], Type::List);
         result = eval_primitive_node(eval_temp_arg, PATH);
         leaves.pop_back();
         if (leaves.empty())
           return result;
-        if (intermediate_results.empty())
-          intermediate_results.push_back(std::vector<Symbol>{result});
-        else
-          intermediate_results[intermediate_results.size() - 1].push_back(
-              result);
-        if (!intermediate_results.empty() &&
-            !(intermediate_results[intermediate_results.size() - 1].empty()) &&
-            (intermediate_results[intermediate_results.size() - 1][0].depth >=
-             current_node.depth)) {
-          leaves[leaves.size() - 1].insert(
-              leaves[leaves.size() - 1].end(),
-              intermediate_results[intermediate_results.size() - 1].begin(),
-              intermediate_results[intermediate_results.size() - 1].end());
-          intermediate_results.pop_back();
-        }
+        leaves[leaves.size() - 1].push_back(result);
 
         if (!node_stk.empty()) {
           current_node = node_stk.top();
@@ -190,7 +178,6 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH) {
           }
         } else
           return result;
-
       } else {
         Symbol child = std::get<std::list<Symbol>>(current_node.value).front();
         auto templ = std::get<std::list<Symbol>>(current_node.value);
@@ -215,9 +202,9 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH) {
         } else {
           node_stk.push(current_node);
           current_node = child;
+          if (leaves.empty() || (child.type == Type::List))
+            leaves.push_back(std::list<Symbol>{});
         }
-        if (leaves.empty() || (child.type == Type::List))
-          leaves.push_back(std::list<Symbol>{});
       }
     } else {
       if ((current_node.type == Type::Operator) &&
@@ -254,9 +241,7 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH) {
           else
             leaves.push_back(std::list<Symbol>{current_node});
         }
-      } else if ((current_node.type == Type::Identifier) &&
-                 (std::get<std::string>(
-                      leaves[leaves.size() - 1].front().value) != "let")) {
+      } else if (current_node.type == Type::Identifier) {
         auto opt = variable_lookup(current_node);
         auto popt = procedure_lookup(current_node);
         auto csopt = callstack_variable_lookup(current_node);

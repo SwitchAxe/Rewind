@@ -200,7 +200,7 @@ std::map<std::string, Functor> procedures = {
        auto cur = fs::current_path();
        fs::current_path(std::string{(cur).c_str()} + "/" +
                         std::get<std::string>(args.front().value));
-       return Symbol("", fs::current_path(), Type::Command, args.front().depth);
+       return Symbol("", fs::current_path(), Type::Command);
      }}},
     {"set", {[](std::list<Symbol> args) -> Symbol {
        if (args.size() != 2)
@@ -208,8 +208,7 @@ std::map<std::string, Functor> procedures = {
              "The 'set' builtin command expects precisely two arguments!\n"};
        std::string var = std::get<std::string>(args.front().value);
        std::string val = std::get<std::string>(args.back().value);
-       return Symbol("", setenv(var.c_str(), val.c_str(), 1), Type::Number,
-                     args.front().depth);
+       return Symbol("", setenv(var.c_str(), val.c_str(), 1), Type::Number);
      }}},
     {"get", {[](std::list<Symbol> args) -> Symbol {
        if (args.size() != 1)
@@ -217,9 +216,8 @@ std::map<std::string, Functor> procedures = {
              "The 'get' builtin command expects precisely one argument!"};
        char *s = std::getenv(std::get<std::string>(args.front().value).c_str());
        if (s)
-         return Symbol("", std::string(s), Type::String,
-                       args.front().depth - 1);
-       return Symbol("", "Nil", Type::String, args.front().depth);
+         return Symbol("", std::string(s), Type::String);
+       return Symbol("", "Nil", Type::String);
      }}},
     {"->", {[](std::list<Symbol> args, path PATH) -> Symbol {
        for (auto &e : args) {
@@ -251,7 +249,7 @@ std::map<std::string, Functor> procedures = {
        std::reverse(environment_variables.begin(), environment_variables.end());
        Symbol node = Symbol("", args, Type::List);
        Symbol result = rewind_pipe(node, PATH);
-       return Symbol("", result.value, result.type, args.front().depth);
+       return Symbol("", result.value, result.type);
      }}},
     {">", {[](std::list<Symbol> args, path PATH) -> Symbol {
        if (args.size() != 2) {
@@ -306,7 +304,7 @@ std::map<std::string, Functor> procedures = {
          }
          r += std::get<int>(e.value);
        }
-       Symbol ret("", r, Type::Number, args.front().depth);
+       Symbol ret("", r, Type::Number);
        return ret;
      }}},
     {"-", {[](std::list<Symbol> args) -> Symbol {
@@ -324,7 +322,7 @@ std::map<std::string, Functor> procedures = {
          }
          r -= std::get<int>(e.value);
        }
-       Symbol ret("", r, Type::Number, args.front().depth);
+       Symbol ret("", r, Type::Number);
        return ret;
      }}},
     {"/", {[](std::list<Symbol> args) -> Symbol {
@@ -342,7 +340,7 @@ std::map<std::string, Functor> procedures = {
          }
          r /= std::get<int>(e.value);
        }
-       Symbol ret("", r, Type::Number, args.front().depth);
+       Symbol ret("", r, Type::Number);
        return ret;
      }}},
     {"*", {[](std::list<Symbol> args) -> Symbol {
@@ -360,7 +358,7 @@ std::map<std::string, Functor> procedures = {
          }
          r *= std::get<int>(e.value);
        }
-       Symbol ret("", r, Type::Number, args.front().depth);
+       Symbol ret("", r, Type::Number);
        return ret;
      }}},
     {"<", {[](std::list<Symbol> args) -> Symbol {
@@ -378,9 +376,9 @@ std::map<std::string, Functor> procedures = {
              is_true && (std::get<int>(first.value) < std::get<int>(e.value));
          first = e;
        }
-       return Symbol("", is_true, Type::Boolean, args.front().depth);
+       return Symbol("", is_true, Type::Boolean);
      }}},
-    {"=", {[](std::list<Symbol> args) -> Symbol {
+    {"=", {[](std::list<Symbol> args, path PATH) -> Symbol {
        bool is_true = true;
        Symbol prev = args.front();
        args.pop_front();
@@ -389,10 +387,18 @@ std::map<std::string, Functor> procedures = {
            throw std::logic_error{
                "Types of the arguments to '=' don't match!\n"};
          }
-         is_true = e.value == prev.value;
+         Symbol lhs = eval(e, PATH);
+         std::cout << "lhs = ";
+         rec_print_ast(lhs);
+         std::cout << "\n";
+         std::cout << "rhs = ";
+         Symbol rhs = eval(prev, PATH);
+         rec_print_ast(rhs);
+         std::cout << "\n";
+         is_true = (lhs.value == rhs.value);
          prev = e;
        }
-       return Symbol("", is_true, Type::Boolean, prev.depth);
+       return Symbol("", is_true, Type::Boolean);
      }}},
     {"s+", {[](std::list<Symbol> args) -> Symbol {
        const auto is_strlit = [](const std::string &s) -> bool {
@@ -411,7 +417,7 @@ std::map<std::string, Functor> procedures = {
        }
        ret.insert(0, 1, '\"');
        ret.push_back('\"');
-       return Symbol("", ret, Type::String, args.front().depth);
+       return Symbol("", ret, Type::String);
      }}},
     {"toi", {[](std::list<Symbol> args) -> Symbol {
        if (args.size() != 1) {
@@ -428,7 +434,7 @@ std::map<std::string, Functor> procedures = {
          throw std::logic_error{"Exception in 'toi': Failed to convert the "
                                 "string to an integer!\n"};
        }
-       return Symbol("", n, Type::Number, args.front().depth);
+       return Symbol("", n, Type::Number);
      }}},
     {"let", {[](std::list<Symbol> args) -> Symbol {
        if (args.front().type != Type::Identifier)
@@ -449,7 +455,7 @@ std::map<std::string, Functor> procedures = {
            user_defined_procedures[user_defined_procedures.size() - 1]
                .insert_or_assign(name, std::make_pair(arguments, stmts));
          }
-         return Symbol("", true, Type::Defunc, args.front().depth);
+         return Symbol("", true, Type::Defunc);
        }
        Symbol id = args.front();
        args.pop_front();
@@ -458,26 +464,28 @@ std::map<std::string, Functor> procedures = {
        }
        variables[variables.size() - 1].insert_or_assign(
            std::get<std::string>(id.value), args.front());
-       return Symbol("", args.front().value, args.front().type,
-                     args.front().depth - 1);
+       return Symbol("", args.front().value, args.front().type);
      }}},
-    {"if", {[](std::list<Symbol> args) -> Symbol {
+    {"if", {[](std::list<Symbol> args, path PATH) -> Symbol {
        // (if <clause> (expr1 ... exprn) (else1 ... elsen))
        // if <clause> converts to Cpp's "true" then return
        // (expr1 ... exprn) to the caller, and the other
-       // list otherwisestd::cout << "ciaooo".
+       // list otherwise
        if (args.size() != 3) {
          throw std::logic_error{
              "An if statement must have precisely three arguments!\n"};
        }
-       bool clause = convert_value_to_bool(args.front());
+       Symbol clause_expr = eval(args.front(), PATH);
+       rec_print_ast(clause_expr);
+       std::cout << "\n";
+       bool clause = convert_value_to_bool(clause_expr);
+       std::cout << "clause = " << std::boolalpha << clause << "\n";
        args.pop_front();
        if (clause) {
-         return args.front();
+         return eval(args.front(), PATH);
        }
        args.pop_front();
-       return Symbol("", args.front().value, args.front().type,
-                     args.front().depth);
+       return eval(args.front(), PATH);
      }}},
     {"$", {[](std::list<Symbol> args) -> Symbol {
        if (args.size() != 1) {
@@ -485,11 +493,13 @@ std::map<std::string, Functor> procedures = {
              "the reference '$' operator expects a variable!\n"};
        }
        auto var = variable_lookup(args.front());
-       if (var == std::nullopt) {
-         return Symbol("", "", Type::String, args.front().depth);
+       auto cs = callstack_variable_lookup(args.front());
+       if (var != std::nullopt) {
+         return Symbol((*var).name, (*var).value, (*var).type);
+       } else if (cs != std::nullopt) {
+         return Symbol((*cs).name, (*cs).value, (*cs).type);
        }
-       return (
-           Symbol((*var).name, (*var).value, (*var).type, args.front().depth));
+       return (Symbol("", "", Type::String));
      }}},
     {"print", {[](std::list<Symbol> args, path PATH) -> Symbol {
        for (auto e : args) {
@@ -502,6 +512,9 @@ std::map<std::string, Functor> procedures = {
        return Symbol("", false, Type::Command);
      }}},
     {"strip", {[](std::list<Symbol> args) -> Symbol {
+       const auto is_strlit = [](const std::string &s) -> bool {
+         return (s.size() > 1) && (s[0] == '"') && (s[s.length() - 1] == '"');
+       };
        if (args.size() != 1) {
          throw std::logic_error{"'strip' expects a single string to which "
                                 "remove the trailing newline!\n"};
@@ -510,22 +523,37 @@ std::map<std::string, Functor> procedures = {
          throw std::logic_error{"'strip' expects a string!\n"};
        }
        auto str = std::get<std::string>(args.front().value);
-       if (str[str.size() - 2] != '\n') {
-         return Symbol(args.front().name, str, args.front().type,
-                       args.front().depth);
+       std::cout << "in strip: " << str << "\n";
+       if (str.empty()) {
+         return Symbol("", "", Type::String);
        }
-       str = str.substr(0, str.size() - 2);
-       str.push_back('"');
-       return Symbol(args.front().name, str, args.front().type,
-                     args.front().depth);
+       if (is_strlit(str)) {
+         if (str[str.size() - 2] == '\n') {
+           str = str.substr(0, str.size() - 2);
+           str.push_back('"');
+           std::cout << "after transform: " << str << "\n";
+         }
+         return Symbol("", str, Type::String);
+       }
+
+       if (str.size() == 1) {
+         if (str[0] == '\n') {
+           return Symbol("", "", Type::String);
+         } else
+           return Symbol("", str, Type::String);
+       }
+       if (str[str.size() - 1] != '\n') {
+         return Symbol(args.front().name, str, args.front().type);
+       }
+       str = str.substr(0, str.size() - 1);
+       return Symbol(args.front().name, str, args.front().type);
      }}},
     {"nostr", {[](std::list<Symbol> args) -> Symbol {
        if ((args.size() != 1) ||
            !std::holds_alternative<std::string>(args.front().value)) {
-         throw std::logic_error {
-           "'nostr' expects a single string literal to try and convert to a "
-           "bareword!\n"
-         };
+         throw std::logic_error{
+             "'nostr' expects a single string literal to try and convert to a "
+             "bareword!\n"};
        }
        const auto is_strlit = [](const std::string &s) -> bool {
          return (s.size() > 1) && (s[0] == '"') && (s[s.length() - 1] == '"');

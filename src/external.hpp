@@ -71,7 +71,6 @@ Symbol rewind_call_ext_program(Symbol node,
     return procedures[prog](l);
   }
   int status = 0;
-  std::string result_s = "";
   int pid = fork();
   if (pid == 0) {
     if (must_pipe) {
@@ -113,22 +112,6 @@ Symbol rewind_call_ext_program(Symbol node,
     }
     exit(1);
   } else if (pid > 0) {
-    if ((node.depth > 2) && must_pipe && pipe_fd_in) {
-      char *buf = (char *)malloc(1024);
-      int cnt;
-      close(pipe_fd_out);
-      while ((cnt = read(pipe_fd_in, buf, 1023))) {
-        if (cnt == -1) {
-          throw std::logic_error{"Read failed in rewind_call_ext_program.\n"};
-        }
-        buf[cnt] = '\0';
-        std::string temp{buf};
-        result_s += temp;
-      }
-      result_s.insert(0, 1, '"');
-      result_s.append("\"");
-      free(buf);
-    }
     if (pipe_fd_out) {
       close(pipe_fd_out);
     }
@@ -136,9 +119,6 @@ Symbol rewind_call_ext_program(Symbol node,
       close(pipe_fd_in);
     for (int idx = 1; argv[idx] != nullptr; ++idx) {
       free(argv[idx]);
-    }
-    if ((result_s != "") || (node.depth > 1)) {
-      return Symbol("", result_s, Type::String, node.depth);
     }
     return Symbol("", status, Type::Number);
   } else {
@@ -155,12 +135,21 @@ Symbol rewind_pipe(Symbol node, const std::vector<std::string> &PATH) {
   nodel.pop_back();
   pipe(fd);
   if (nodel.empty()) {
-    close(fd[0]);
+    auto status = rewind_call_ext_program(last, PATH, false, fd[1], 0);
     close(fd[1]);
-    auto status = rewind_call_ext_program(last, PATH, false, 0, 0);
+    char buf[1024];
+    int cnt = 0;
+    std::string result;
+    while ((cnt = read(fd[0], buf, 1023))) {
+      if (cnt == -1)
+        throw std::logic_error{"Read failed in a pipe!\n"};
+      buf[cnt] = '\0';
+      std::string tmp{buf};
+      result += tmp;
+    }
     while (wait(nullptr) != -1)
       ;
-    return status;
+    return Symbol("", result, Type::String);
   }
   auto first = nodel.front();
   nodel.pop_front();
@@ -169,15 +158,31 @@ Symbol rewind_pipe(Symbol node, const std::vector<std::string> &PATH) {
   for (auto cur : nodel) {
     old_read_end = dup(fd[0]);
     pipe(fd);
+
     status = rewind_call_ext_program(cur, PATH, true, fd[1], old_read_end);
   }
-  status = rewind_call_ext_program(last, PATH, true, 0, fd[0]);
+  old_read_end = dup(fd[0]);
+  pipe(fd);
+  status = rewind_call_ext_program(last, PATH, true, fd[1], old_read_end);
+  char buf[1024];
+  std::string result;
+  if (std::get<int>(status.value) == -1) {
+    return Symbol("", "Null", Type::String);
+  }
   close(fd[1]);
   close(old_read_end);
+  int cnt;
+  while ((cnt = read(fd[0], buf, 1023))) {
+    if (cnt == -1)
+      throw std::logic_error{"Read failed in a pipe!\n"};
+    buf[cnt] = '\0';
+    std::string tmp{buf};
+    result += tmp;
+  }
   while (wait(nullptr) != -1)
     ;
   close(fd[0]);
-  return status;
+  return Symbol("", result, Type::String);
 }
 
 Symbol rewind_redirect_append(Symbol node,

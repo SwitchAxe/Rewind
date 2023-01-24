@@ -75,7 +75,7 @@ std::vector<std::string> get_tokens(std::string stream) {
   std::string temp;
   bool maybe_escaped = false;
   for (auto ch : stream) {
-    if ((ch == ' ') || (ch == '\t')) {
+    if ((ch == ' ') || (ch == '\t') || (ch == '\n')) {
       if (in_identifier || in_numlit) {
         in_identifier = false;
         in_numlit = false;
@@ -85,25 +85,12 @@ std::vector<std::string> get_tokens(std::string stream) {
         temp += ch;
       }
     } else if (isgraph(ch)) {
-      if (ch == '\\') {
-        if (in_string) {
-          temp += ch;
-          maybe_escaped = true;
-        } else if (in_numlit) {
-          throw std::logic_error{"Failed to parse the input stream!\nFound a "
-                                 "backslash in a numeric literal!\n"};
-        }
-      }
       if (ch == '"') {
         if (in_string) {
-          if (!maybe_escaped) {
-            in_string = false;
-            tokens.push_back(temp + std::string{ch});
-            temp = "";
-          } else {
-            temp += ch;
-            maybe_escaped = false;
-          }
+          in_string = false;
+          tokens.push_back(temp + std::string{ch});
+          temp = "";
+
         } else if (in_numlit) {
           throw std::logic_error{"Failed to parse the input stream!\n"
                                  "Found double quotes in a numeric literal!\n"};
@@ -141,6 +128,14 @@ std::vector<std::string> get_tokens(std::string stream) {
           temp += ch;
         }
       }
+    }
+  }
+  if (temp != "") {
+    tokens.push_back(temp);
+  }
+  for (auto& tk : tokens) {
+    if (tk[0] == '"') {
+      tk = process_escapes(tk);
     }
   }
   if (in_string) {
