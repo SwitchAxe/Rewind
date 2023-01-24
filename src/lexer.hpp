@@ -18,6 +18,7 @@
 #include "types.hpp"
 #include <cctype>
 #include <exception>
+#include <stdexcept>
 #include <vector>
 
 std::string process_escapes(const std::string &s) {
@@ -73,7 +74,7 @@ std::vector<std::string> get_tokens(std::string stream) {
   std::vector<std::string> tokens;
   std::vector<char> special_tokens = {'[', ']', '(', ')'};
   std::string temp;
-  bool maybe_escaped = false;
+  bool in_singles = false;
   for (auto ch : stream) {
     if ((ch == ' ') || (ch == '\t') || (ch == '\n')) {
       if (in_identifier || in_numlit) {
@@ -85,12 +86,30 @@ std::vector<std::string> get_tokens(std::string stream) {
         temp += ch;
       }
     } else if (isgraph(ch)) {
-      if (ch == '"') {
+      if (ch == '\'') {
         if (in_string) {
+          if (in_singles) {
+            in_string = false;
+            tokens.push_back(temp + std::string{ch});
+            temp = "";
+          } else {
+            temp += ch;
+          }
+        } else if (in_numlit) {
+          throw std::logic_error{"Found single quotes in a numeric literal!\n"};
+        } else if (in_identifier) {
+          throw std::logic_error{"Found single quotes in an identifier!\n"};
+        } else {
+          in_string = true;
+          in_singles = true;
+          temp += ch;
+        }
+      }
+      if (ch == '"') {
+        if (in_string && !in_singles) {
           in_string = false;
           tokens.push_back(temp + std::string{ch});
           temp = "";
-
         } else if (in_numlit) {
           throw std::logic_error{"Failed to parse the input stream!\n"
                                  "Found double quotes in a numeric literal!\n"};

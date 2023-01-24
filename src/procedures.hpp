@@ -407,7 +407,9 @@ std::map<std::string, Functor> procedures = {
            std::string no_strlit = std::get<std::string>(e.value);
            no_strlit = no_strlit.substr(1, no_strlit.length() - 2);
            ret += no_strlit;
+           continue;
          }
+         ret += std::get<std::string>(e.value);
        }
        ret.insert(0, 1, '\"');
        ret.push_back('\"');
@@ -563,8 +565,10 @@ std::map<std::string, Functor> procedures = {
          throw std::logic_error{
              "The command line argument name must be a string!\n"};
        }
-       if (cmdline_args.contains(std::to_string(std::get<int>(args.front().value)))) {
-         return cmdline_args.at(std::to_string(std::get<int>(args.front().value)));
+       if (cmdline_args.contains(
+               std::to_string(std::get<int>(args.front().value)))) {
+         return cmdline_args.at(
+             std::to_string(std::get<int>(args.front().value)));
        }
        return Symbol("", "", Type::String);
      }}}};
