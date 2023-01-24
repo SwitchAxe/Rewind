@@ -113,7 +113,7 @@ std::vector<std::string> get_tokens(std::string stream) {
           } else {
             in_string = false;
             tokens.push_back(temp + std::string{ch});
-            temp = ch;
+            temp = "";
           }
         } else if (in_numlit) {
           throw std::logic_error{"Failed to parse the input stream!\n"
