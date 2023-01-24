@@ -103,8 +103,6 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH) {
     rest.push_front(ext);
     Symbol pipel =
         Symbol("", std::list<Symbol>{Symbol("", rest, Type::List)}, Type::List);
-    rec_print_ast(pipel);
-    std::cout << "\n";
     auto result = rewind_pipe(pipel, PATH);
     return result;
   } else if (std::get<std::string>(op.value) == "+>") {
