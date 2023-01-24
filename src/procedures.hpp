@@ -549,7 +549,7 @@ std::map<std::string, Functor> procedures = {
        };
        auto s = std::get<std::string>(args.front().value);
        if (is_strlit(std::get<std::string>(args.front().value))) {
-         s = s.substr(1, s.length() - 1);
+         s = s.substr(1, s.length() - 2);
        }
        args.front().value = s;
        return args.front();
