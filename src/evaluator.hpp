@@ -128,22 +128,11 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH) {
   std::stack<Symbol> node_stk;
   Symbol current_node;
   // results of intermediate nodes (i.e. nodes below the root)
-  std::vector<std::vector<Symbol>> intermediate_results;
   // this is the data on which the actual computation takes place,
   // as we copy every intermediate result we get into this as a "leaf"
   // to get compute the value for each node, including the root.
   std::vector<std::list<Symbol>> leaves;
   current_node = root;
-  // dirty fix for lone literals (strings, numbers etc)
-  // if (current_node.type != Type::List) {
-  //  if (current_node.type == Type::String) {
-  //    auto opt = variable_lookup(current_node);
-  //    if (opt != std::nullopt) {
-  //      return *opt;
-  //    }
-  //  }
-  //  return current_node;
-  //}
   do {
     // for each node, visit each child and backtrack to the last parent node
     // when the last child is null, and continue with the second last node and
@@ -219,7 +208,6 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH) {
             Symbol(node_stk.top().name, std::list<Symbol>(), Type::List);
         node_stk.pop();
         node_stk.push(dummy);
-        intermediate_results.push_back(std::vector<Symbol>());
       } else if ((leaves.empty() || leaves[leaves.size() - 1].empty()) &&
                  (current_node.type == Type::Identifier)) {
         auto opt = variable_lookup(current_node);
