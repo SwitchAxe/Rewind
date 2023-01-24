@@ -388,14 +388,8 @@ std::map<std::string, Functor> procedures = {
                "Types of the arguments to '=' don't match!\n"};
          }
          Symbol lhs = eval(e, PATH);
-         std::cout << "lhs = ";
-         rec_print_ast(lhs);
-         std::cout << "\n";
-         std::cout << "rhs = ";
          Symbol rhs = eval(prev, PATH);
-         rec_print_ast(rhs);
-         std::cout << "\n";
-         is_true = (lhs.value == rhs.value);
+         is_true = is_true && (lhs.value == rhs.value);
          prev = e;
        }
        return Symbol("", is_true, Type::Boolean);
@@ -476,10 +470,7 @@ std::map<std::string, Functor> procedures = {
              "An if statement must have precisely three arguments!\n"};
        }
        Symbol clause_expr = eval(args.front(), PATH);
-       rec_print_ast(clause_expr);
-       std::cout << "\n";
        bool clause = convert_value_to_bool(clause_expr);
-       std::cout << "clause = " << std::boolalpha << clause << "\n";
        args.pop_front();
        if (clause) {
          return eval(args.front(), PATH);
@@ -523,7 +514,6 @@ std::map<std::string, Functor> procedures = {
          throw std::logic_error{"'strip' expects a string!\n"};
        }
        auto str = std::get<std::string>(args.front().value);
-       std::cout << "in strip: " << str << "\n";
        if (str.empty()) {
          return Symbol("", "", Type::String);
        }
@@ -531,7 +521,6 @@ std::map<std::string, Functor> procedures = {
          if (str[str.size() - 2] == '\n') {
            str = str.substr(0, str.size() - 2);
            str.push_back('"');
-           std::cout << "after transform: " << str << "\n";
          }
          return Symbol("", str, Type::String);
        }
