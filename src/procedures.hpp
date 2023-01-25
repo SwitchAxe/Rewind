@@ -382,18 +382,40 @@ std::map<std::string, Functor> procedures = {
        bool is_true = true;
        Symbol prev = args.front();
        args.pop_front();
+       Symbol lhs;
        for (auto e : args) {
          if (e.type != prev.type) {
            throw std::logic_error{
                "Types of the arguments to '=' don't match!\n"};
          }
-         Symbol lhs = eval(e, PATH);
-         Symbol rhs = eval(prev, PATH);
-         is_true = is_true && (lhs.value == rhs.value);
+         if (e.type == Type::List)
+           lhs = eval(e, PATH);
+         else
+           lhs = e;
+         is_true = is_true && (lhs.value == prev.value);
          prev = e;
        }
        return Symbol("", is_true, Type::Boolean);
      }}},
+    {"!=", {[](std::list<Symbol> args, path PATH) -> Symbol {
+      bool is_true = true;
+      Symbol prev = args.front();
+      args.pop_front();
+      Symbol lhs;
+      for (auto e : args) {
+        if (e.type != prev.type) {
+          throw std::logic_error{
+              "Types of the arguments to '=' don't match!\n"};
+        }
+        if (e.type == Type::List)
+          lhs = eval(e, PATH);
+        else
+          lhs = e;
+        is_true = is_true && (lhs.value != prev.value);
+        prev = e;
+      }
+      return Symbol("", is_true, Type::Boolean);
+    }}},
     {"s+", {[](std::list<Symbol> args) -> Symbol {
        const auto is_strlit = [](const std::string &s) -> bool {
          return (s.size() > 1) && (s[0] == '"') && (s[s.length() - 1] == '"');
