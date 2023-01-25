@@ -16,6 +16,7 @@
 */
 #include "parser.hpp"
 #include "procedures.hpp"
+#include "src/types.hpp"
 #include <algorithm>
 #include <filesystem>
 #include <iostream>
@@ -66,6 +67,9 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH) {
   std::optional<std::string> absolute; // absolute path of an executable, if any
   auto it = PATH.begin();
   Symbol op = std::get<std::list<Symbol>>(node.value).front();
+  if (op.type == Type::Number || op.type == Type::String) {
+    return node;
+  }
   if (op.type == Type::Operator) {
     auto temp = std::get<std::list<Symbol>>(node.value);
     temp.pop_front();

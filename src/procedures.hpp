@@ -571,6 +571,79 @@ std::map<std::string, Functor> procedures = {
              std::to_string(std::get<int>(args.front().value)));
        }
        return Symbol("", "", Type::String);
+     }}},
+    {"hd", {[](std::list<Symbol> args) -> Symbol {
+       if (args.front().type != Type::Number) {
+         throw std::logic_error{
+             "The first argument to 'hd' must be a number!\n"};
+       }
+       auto n = std::get<int>(args.front().value);
+       args.pop_front();
+       if (args.front().type != Type::List) {
+         throw std::logic_error{
+             "The second argument to 'hd' must be a list!\n"};
+       }
+       auto lst = std::get<std::list<Symbol>>(args.front().value);
+       if (n > lst.size()) {
+         return Symbol("", lst, Type::List);
+       }
+       auto ret = std::list<Symbol>();
+       for (int i = 0; i < n; ++i) {
+         ret.push_back(lst.front());
+         lst.pop_front();
+       }
+       return Symbol("", ret, Type::List);
+     }}},
+    {"tl", {[](std::list<Symbol> args) -> Symbol {
+       if (args.front().type != Type::Number) {
+         throw std::logic_error{
+             "The first argument to 'tl' must be a number!\n"};
+       }
+       auto n = std::get<int>(args.front().value);
+       args.pop_front();
+       if (args.front().type != Type::List) {
+         throw std::logic_error{
+             "The second argument to 'tl' must be a list!\n"};
+       }
+       auto lst = std::get<std::list<Symbol>>(args.front().value);
+       std::reverse(lst.begin(), lst.end());
+       if (n > lst.size()) {
+         return Symbol("", lst, Type::List);
+       }
+       auto ret = std::list<Symbol>();
+       for (int i = 0; i < n; ++i) {
+         ret.push_back(lst.front());
+         lst.pop_front();
+       }
+       return Symbol("", ret, Type::List);
+     }}},
+    {"first", {[](std::list<Symbol> args) -> Symbol {
+       if (args.empty()) {
+         return Symbol("", std::list<Symbol>{}, Type::List);
+       }
+       if ((args.front().type != Type::List) || (args.size() > 1)) {
+         throw std::logic_error{
+             "'first' expects a list of which to return the first element!\n"};
+       }
+       auto lst = std::get<std::list<Symbol>>(args.front().value);
+       if (lst.empty()) {
+         return Symbol("", lst, Type::List);
+       }
+       return lst.front();
+     }}},
+    {"length", {[](std::list<Symbol> args) -> Symbol {
+       if (args.empty()) {
+         return Symbol("", 0, Type::Number);
+       }
+       if ((args.front().type != Type::List) || (args.size() > 1)) {
+         throw std::logic_error{
+             "'first' expects a list of which to return the first element!\n"};
+       }
+       auto lst = std::get<std::list<Symbol>>(args.front().value);
+       if (lst.empty()) {
+         return Symbol("", 0, Type::Number);
+       }
+       return Symbol("", static_cast<int>(lst.size()), Type::Number);
      }}}};
 
 std::array<std::string, 5> special_forms = {"->", "let", "if", ">", "$"};
