@@ -8,12 +8,15 @@ OBJ     = build/main.o
 
 .PHONY: clean
 
-main: $(OBJ)
-	$(CXX) $(FLAGS) $^ -o $(OUT)
+$(OUT): $(OBJ)
+	$(CXX) $(FLAGS) $^ -o $@
 
-$(OBJ): $(SRC) $(LIBS) $(SHLIBS)
+$(OBJ): $(SRC) $(LIBS) $(SHLIBS) src/matchit.h
 	mkdir -p build
 	$(CXX) $(FLAGS) -c $< -o $@
+
+src/matchit.h:
+	wget https://raw.githubusercontent.com/BowenFu/matchit.cpp/main/include/matchit.h -O $@
 
 clean:
 	rm -rf build
