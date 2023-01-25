@@ -136,7 +136,7 @@ Symbol rewind_pipe(Symbol node, const std::vector<std::string> &PATH) {
   nodel.pop_back();
   pipe(fd);
   if (nodel.empty()) {
-    auto status = rewind_call_ext_program(last, PATH, false, fd[1], 0);
+    auto status = rewind_call_ext_program(last, PATH, true, fd[1], 0);
     close(fd[1]);
     char buf[1024];
     int cnt = 0;
@@ -148,6 +148,7 @@ Symbol rewind_pipe(Symbol node, const std::vector<std::string> &PATH) {
       std::string tmp{buf};
       result += tmp;
     }
+    close(fd[0]);
     while (wait(nullptr) != -1)
       ;
     return Symbol("", result, Type::String);
