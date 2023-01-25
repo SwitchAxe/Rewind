@@ -27,8 +27,7 @@ int main(int argc, char **argv) {
       Symbol sym = Symbol("", __argvi, Type::String);
       cmdline_args.insert({std::to_string(i - 1), eval(sym, *PATH)});
     }
-  }
-  else if (argc > 2) {
+  } else if (argc > 2) {
     std::string filename{argv[1]};
     std::string expr = rewind_read_file(filename);
     std::vector<std::string> expr_list = rewind_split_file(expr);
@@ -41,17 +40,45 @@ int main(int argc, char **argv) {
       Symbol sym = Symbol("", __argvi, Type::String);
       cmdline_args.insert({std::to_string(i - 2), eval(sym, *PATH)});
     }
-    if (PATH != std::nullopt)
+    if (PATH != std::nullopt) {
       for (auto s : expr_list) {
-        std::cout << s << "\n";
-        rec_print_ast(eval(get_ast(get_tokens(expr)), *PATH));
-        std::cout << "\n";
+        Symbol ast = eval(get_ast(get_tokens(s)), *PATH);
+        if ((ast.type != Type::Command) || (ast.type != Type::Defunc)) {
+          rec_print_ast(ast);
+          std::cout << "\n";
+        }
       }
-    else
-      for (auto s : expr_list)
-        rec_print_ast(eval(get_ast(get_tokens(expr)), {}));
-    std::cout << "\n";
+    } else {
+      for (auto s : expr_list) {
+        Symbol ast = eval(get_ast(get_tokens(s)), {});
+        if ((ast.type != Type::Command) && (ast.type != Type::Defunc)) {
+          rec_print_ast(ast);
+          std::cout << "\n";
+        }
+      }
+    }
     return 0;
+  } else if (argc > 1) {
+    std::string filename{argv[1]};
+    std::string expr = rewind_read_file(filename);
+    std::vector<std::string> expr_list = rewind_split_file(expr);
+    if (PATH != std::nullopt) {
+      for (auto s : expr_list) {
+        Symbol ast = eval(get_ast(get_tokens(s)), *PATH);
+        if ((ast.type != Type::Command) && (ast.type != Type::Defunc)) {
+          rec_print_ast(ast);
+          std::cout << "\n";
+        }
+      }
+    } else {
+      for (auto s : expr_list) {
+        Symbol ast = eval(get_ast(get_tokens(s)), {});
+        if ((ast.type != Type::Command) && (ast.type != Type::Defunc)) {
+          rec_print_ast(ast);
+          std::cout << "\n";
+        }
+      }
+    }
   }
   rewind_sh_loop();
   return 0;
