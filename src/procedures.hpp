@@ -454,6 +454,24 @@ std::map<std::string, Functor> procedures = {
        }
        return Symbol("", n, Type::Number);
      }}},
+  {"stol", { [](std::list<Symbol> args) -> Symbol {
+    const auto is_strlit = [](const std::string& s) -> bool {
+      return (s.size() > 1) && (s[0] == '"') && (s[s.size() - 1] == '"');
+    };
+
+    if ((args.size() > 1) || (args.front().type != Type::String)) {
+      throw std::logic_error {"'stol' expects a single string to turn into a list!\n"};
+    }
+    std::string s = std::get<std::string>(args.front().value);
+    if (is_strlit(s)) {
+      s = s.substr(1, s.size() - 2);
+    }
+    std::list<Symbol> l;
+    for (auto ch : s) {
+      l.push_back(Symbol("", std::string{ch}, Type::String));
+    }
+    return Symbol("", l, Type::List);
+  }}},
     {"let", {[](std::list<Symbol> args) -> Symbol {
        if (args.front().type != Type::Identifier)
          throw std::logic_error{
@@ -666,6 +684,19 @@ std::map<std::string, Functor> procedures = {
          return Symbol("", 0, Type::Number);
        }
        return Symbol("", static_cast<int>(lst.size()), Type::Number);
-     }}}};
+     }}},
+  {"++", {[](std::list<Symbol> args) -> Symbol {
+    std::list<Symbol> l;
+    for (auto e: args) {
+      if (e.type == Type::List) {
+        for (auto x: std::get<std::list<Symbol>>(e.value)) {
+          l.push_back(x);
+        }
+      } else {
+        l.push_back(e);
+      }
+    }
+    return Symbol("", l, Type::List);
+  }}}};
 
 std::array<std::string, 5> special_forms = {"->", "let", "if", ">", "$"};

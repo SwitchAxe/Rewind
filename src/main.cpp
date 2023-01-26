@@ -79,6 +79,7 @@ int main(int argc, char **argv) {
         }
       }
     }
+    return 0;
   }
   rewind_sh_loop();
   return 0;

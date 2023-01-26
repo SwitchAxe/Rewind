@@ -22,6 +22,27 @@
 #include <iostream>
 #include <sys/wait.h>
 #include <unistd.h>
+
+std::string to_str(Symbol sym) {
+  const auto is_strlit = [](std::string s) -> bool {
+    return (s.size() > 1) && (s[0] == '"') && (s[s.size() - 1] == '"');
+  };
+  using namespace matchit;
+  Id<std::string> s;
+  Id<int> in;
+  Id<bool> b;
+#define p pattern
+  std::string arg = match(sym.value)(
+      p | as<std::string>(s) = [&] { return *s; },
+      p | as<int>(in) = [&] { return std::to_string(*in); },
+      p | as<bool>(b) = [&] { return (*b == true) ? "true" : "false"; });
+  if (is_strlit(arg)) {
+    arg = arg.substr(1, arg.size() - 2);
+  }
+
+#undef p
+  return arg;
+}
 Symbol rewind_call_ext_program(Symbol node,
                                const std::vector<std::string> &PATH,
                                bool must_pipe, int pipe_fd_out,
@@ -30,47 +51,38 @@ Symbol rewind_call_ext_program(Symbol node,
     return (s.size() > 1) && (s[0] == '"') && (s[s.size() - 1] == '"');
   };
   std::list<Symbol> nodel = std::get<std::list<Symbol>>(node.value);
+  int total_size = 1;
+  for (auto &e : nodel) {
+    e = eval(e, PATH);
+    total_size += (e.type == Type::List)
+                      ? std::get<std::list<Symbol>>(e.value).size()
+                      : 1;
+  }
   std::string prog = std::get<std::string>(nodel.front().value);
-  char *argv[nodel.size() + 1];
+  char *argv[total_size];
   argv[0] = const_cast<char *>(prog.c_str());
   nodel.pop_front();
   Symbol cur_arg;
   int i = 1;
   for (auto cur : nodel) {
     if (cur.type == Type::List) {
-      cur_arg = eval(cur, PATH);
-      if (cur_arg.type == Type::List) {
-        throw std::logic_error{"Can't have lists as arguments to programs!\n"};
+      for (auto e : std::get<std::list<Symbol>>(cur.value)) {
+        std::string arg = to_str(e);
+        argv[i] = (char *)malloc(arg.length() + 1);
+        std::strcpy(argv[i], arg.c_str());
+        i++;
+#undef p
       }
-    } else
+    } else {
       cur_arg = cur;
-    using namespace matchit;
-    Id<std::string> s;
-    Id<int> in;
-    Id<bool> b;
-#define p pattern
-    std::string arg = match(cur_arg.value)(
-        p | as<std::string>(s) = [&] { return *s; },
-        p | as<int>(in) = [&] { return std::to_string(*in); },
-        p | as<bool>(b) = [&] { return (*b == true) ? "true" : "false"; });
-    if (is_strlit(arg)) {
-      arg = arg.substr(1, arg.size() - 2);
+      std::string arg = to_str(cur_arg);
+      argv[i] = (char *)malloc(arg.length() + 1);
+      std::strcpy(argv[i], arg.c_str());
+      i++;
     }
-    argv[i] = (char *)malloc(arg.length() + 1);
-    std::strcpy(argv[i], arg.c_str());
-    i++;
 #undef p
   }
   argv[i] = nullptr;
-  if (procedures.contains(prog)) {
-    auto l = std::list<Symbol>();
-    for (int idx = 1; idx < i; ++idx) {
-      l.push_back(eval(nodel.front(), PATH));
-      nodel.pop_front();
-      free(argv[idx]);
-    }
-    return procedures[prog](l);
-  }
   int status = 0;
   int pid = fork();
   if (pid == 0) {
