@@ -66,14 +66,16 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH) {
   Symbol result;
   std::optional<std::string> absolute; // absolute path of an executable, if any
   auto it = PATH.begin();
-  Symbol op = std::get<std::list<Symbol>>(node.value).front();
+  auto l = std::get<std::list<Symbol>>(node.value);
+  if (l.empty())
+    return node;
+  Symbol op = l.front();
   if (op.type == Type::Number || op.type == Type::String) {
     return node;
   }
   if (op.type == Type::Operator) {
-    auto temp = std::get<std::list<Symbol>>(node.value);
-    temp.pop_front();
-    node.value = temp;
+    l.pop_front();
+    node.value = l;
     if (procedures.contains(std::get<std::string>(op.value))) {
       Functor fun = procedures[std::get<std::string>(op.value)];
       result = fun(std::get<std::list<Symbol>>(node.value), PATH);
@@ -89,18 +91,15 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH) {
     result = eval_function(node, PATH);
     return result;
   } else if (auto lit = std::find_if(
-                 std::get<std::list<Symbol>>(node.value).begin(),
-                 std::get<std::list<Symbol>>(node.value).end(),
+                 l.begin(), l.end(),
                  [&](Symbol &s) -> bool {
                    return std::holds_alternative<std::string>(s.value) &&
                           get_absolute_path(std::get<std::string>(s.value),
                                             PATH) != std::nullopt;
                  });
-             lit != std::get<std::list<Symbol>>(node.value).end()) {
-    auto nodel = std::get<std::list<Symbol>>(node.value);
+             lit != l.end()) {
     get_env_vars(node, PATH);
-    auto rest =
-        std::list<Symbol>(lit, std::get<std::list<Symbol>>(node.value).end());
+    auto rest = std::list<Symbol>(lit, l.end());
     rest.pop_front();
     auto ext = *lit;
     ext.value = *get_absolute_path(std::get<std::string>((*lit).value), PATH);
@@ -143,8 +142,13 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH) {
       if (std::get<std::list<Symbol>>(current_node.value).empty()) {
         // if we're back to the root node, and we don't have any
         // children left, we're done.
-        if (leaves.empty() && (current_node.name == "root"))
+        if (leaves.empty()) {
+          if ((current_node.type == Type::List) &&
+              (std::get<std::list<Symbol>>(current_node.value).empty())) {
+            return current_node;
+          }
           break;
+        }
         Symbol eval_temp_arg;
         // clean up for any function definition...
 
@@ -193,8 +197,20 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH) {
         } else {
           node_stk.push(current_node);
           current_node = child;
-          if (leaves.empty() || (child.type == Type::List))
+          if (leaves.empty() ||
+              ((child.type == Type::List) &&
+               !(std::get<std::list<Symbol>>(child.value).empty())))
             leaves.push_back(std::list<Symbol>{});
+          else if ((child.type == Type::List) &&
+                   (std::get<std::list<Symbol>>(child.value).empty())) {
+            if (leaves.empty()) {
+              leaves.push_back(std::list<Symbol>{child});
+            } else {
+              leaves[leaves.size() - 1].push_back(child);
+            }
+            current_node = node_stk.top();
+            node_stk.pop();
+          }
         }
       }
     } else {

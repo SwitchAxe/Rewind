@@ -388,34 +388,30 @@ std::map<std::string, Functor> procedures = {
            throw std::logic_error{
                "Types of the arguments to '=' don't match!\n"};
          }
-         if (e.type == Type::List)
-           lhs = eval(e, PATH);
-         else
-           lhs = e;
-         is_true = is_true && (lhs.value == prev.value);
+         is_true = is_true && (e.value == prev.value);
          prev = e;
        }
        return Symbol("", is_true, Type::Boolean);
      }}},
     {"!=", {[](std::list<Symbol> args, path PATH) -> Symbol {
-      bool is_true = true;
-      Symbol prev = args.front();
-      args.pop_front();
-      Symbol lhs;
-      for (auto e : args) {
-        if (e.type != prev.type) {
-          throw std::logic_error{
-              "Types of the arguments to '=' don't match!\n"};
-        }
-        if (e.type == Type::List)
-          lhs = eval(e, PATH);
-        else
-          lhs = e;
-        is_true = is_true && (lhs.value != prev.value);
-        prev = e;
-      }
-      return Symbol("", is_true, Type::Boolean);
-    }}},
+       bool is_true = true;
+       Symbol prev = args.front();
+       args.pop_front();
+       Symbol lhs;
+       for (auto e : args) {
+         if (e.type != prev.type) {
+           throw std::logic_error{
+               "Types of the arguments to '=' don't match!\n"};
+         }
+         if (e.type == Type::List)
+           lhs = eval(e, PATH);
+         else
+           lhs = e;
+         is_true = is_true && (lhs.value != prev.value);
+         prev = e;
+       }
+       return Symbol("", is_true, Type::Boolean);
+     }}},
     {"s+", {[](std::list<Symbol> args) -> Symbol {
        const auto is_strlit = [](const std::string &s) -> bool {
          return (s.size() > 1) && (s[0] == '"') && (s[s.length() - 1] == '"');
@@ -454,24 +450,25 @@ std::map<std::string, Functor> procedures = {
        }
        return Symbol("", n, Type::Number);
      }}},
-  {"stol", { [](std::list<Symbol> args) -> Symbol {
-    const auto is_strlit = [](const std::string& s) -> bool {
-      return (s.size() > 1) && (s[0] == '"') && (s[s.size() - 1] == '"');
-    };
+    {"stol", {[](std::list<Symbol> args) -> Symbol {
+       const auto is_strlit = [](const std::string &s) -> bool {
+         return (s.size() > 1) && (s[0] == '"') && (s[s.size() - 1] == '"');
+       };
 
-    if ((args.size() > 1) || (args.front().type != Type::String)) {
-      throw std::logic_error {"'stol' expects a single string to turn into a list!\n"};
-    }
-    std::string s = std::get<std::string>(args.front().value);
-    if (is_strlit(s)) {
-      s = s.substr(1, s.size() - 2);
-    }
-    std::list<Symbol> l;
-    for (auto ch : s) {
-      l.push_back(Symbol("", std::string{ch}, Type::String));
-    }
-    return Symbol("", l, Type::List);
-  }}},
+       if ((args.size() > 1) || (args.front().type != Type::String)) {
+         throw std::logic_error{
+             "'stol' expects a single string to turn into a list!\n"};
+       }
+       std::string s = std::get<std::string>(args.front().value);
+       if (is_strlit(s)) {
+         s = s.substr(1, s.size() - 2);
+       }
+       std::list<Symbol> l;
+       for (auto ch : s) {
+         l.push_back(Symbol("", std::string{ch}, Type::String));
+       }
+       return Symbol("", l, Type::List);
+     }}},
     {"let", {[](std::list<Symbol> args) -> Symbol {
        if (args.front().type != Type::Identifier)
          throw std::logic_error{
@@ -650,12 +647,13 @@ std::map<std::string, Functor> procedures = {
        if (n > lst.size()) {
          return Symbol("", lst, Type::List);
        }
-       auto ret = std::list<Symbol>();
+       auto ret = std::list<Symbol>{};
        for (int i = 0; i < n; ++i) {
          ret.push_back(lst.front());
          lst.pop_front();
        }
-       return Symbol("", ret, Type::List);
+       Symbol rets = Symbol("", ret, Type::List);
+       return rets;
      }}},
     {"first", {[](std::list<Symbol> args) -> Symbol {
        if (args.empty()) {
@@ -685,18 +683,18 @@ std::map<std::string, Functor> procedures = {
        }
        return Symbol("", static_cast<int>(lst.size()), Type::Number);
      }}},
-  {"++", {[](std::list<Symbol> args) -> Symbol {
-    std::list<Symbol> l;
-    for (auto e: args) {
-      if (e.type == Type::List) {
-        for (auto x: std::get<std::list<Symbol>>(e.value)) {
-          l.push_back(x);
-        }
-      } else {
-        l.push_back(e);
-      }
-    }
-    return Symbol("", l, Type::List);
-  }}}};
+    {"++", {[](std::list<Symbol> args) -> Symbol {
+       std::list<Symbol> l;
+       for (auto e : args) {
+         if (e.type == Type::List) {
+           for (auto x : std::get<std::list<Symbol>>(e.value)) {
+             l.push_back(x);
+           }
+         } else {
+           l.push_back(e);
+         }
+       }
+       return Symbol("", l, Type::List);
+     }}}};
 
 std::array<std::string, 5> special_forms = {"->", "let", "if", ">", "$"};
