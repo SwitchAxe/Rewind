@@ -18,8 +18,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <readline/history.h>
 #include <readline/readline.h>
+
 
 std::string rewind_readline() {
   auto cur = fs::current_path();
@@ -67,6 +69,38 @@ std::optional<std::string> rewind_get_env_var(const std::string &query) {
   if (r)
     return std::optional<std::string>{std::string(r)};
   return std::nullopt;
+}
+
+std::optional<std::string> rewind_config_file() {
+  std::optional<std::string> home = rewind_get_env_var("HOME");
+  if (home == std::nullopt) {
+    std::optional<std::string> user = rewind_get_env_var("USER");
+    if (user == std::nullopt) {
+      throw std::logic_error {"Failed to locate the config file! Using none..."};
+      return std::nullopt;
+    }
+    home = "/home/" + *user + "/.config/rewind/config.re";
+  }
+  home = *home + "/.config/rewind/config.re";
+  return home;
+};
+
+std::optional<Symbol> rewind_read_config(const path& PATH) {
+  auto conf = rewind_config_file();
+  if (conf == std::nullopt) {
+    return std::nullopt;
+  }
+  std::string content = rewind_read_file(*conf);
+  auto expr_vec = rewind_split_file(content);
+  Symbol last_evaluated;
+  for (auto expr : expr_vec) {
+    try {
+      last_evaluated = eval(get_ast(get_tokens(expr)), PATH);
+    } catch (std::exception e) {
+      std::cout << "error in the Rewind config file!\n" << e.what() << "\n";
+    }
+  }
+  return last_evaluated;
 }
 
 std::optional<std::vector<std::string>> rewind_get_system_PATH() {

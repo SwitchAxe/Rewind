@@ -469,7 +469,7 @@ std::map<std::string, Functor> procedures = {
        }
        return Symbol("", l, Type::List);
      }}},
-    {"let", {[](std::list<Symbol> args) -> Symbol {
+    {"let", {[](std::list<Symbol> args, path PATH) -> Symbol {
        if (args.front().type != Type::Identifier)
          throw std::logic_error{
              "First argument to 'let' must be an identifier!\n"};
@@ -495,9 +495,10 @@ std::map<std::string, Functor> procedures = {
        if (variables.empty()) {
          variables.push_back(std::map<std::string, Symbol>());
        }
+       Symbol result = eval(args.front(), PATH);
        variables[variables.size() - 1].insert_or_assign(
-           std::get<std::string>(id.value), args.front());
-       return Symbol("", args.front().value, args.front().type);
+           std::get<std::string>(id.value), result);
+       return result;
      }}},
     {"if", {[](std::list<Symbol> args, path PATH) -> Symbol {
        // (if <clause> (expr1 ... exprn) (else1 ... elsen))

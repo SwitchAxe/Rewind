@@ -21,6 +21,12 @@
 #include <string>
 int main(int argc, char **argv) {
   auto PATH = rewind_get_system_PATH();
+  std::optional<Symbol> conf;
+  if (PATH != std::nullopt)
+    conf = rewind_read_config(*PATH);
+  else {
+    conf = rewind_read_config({});
+  }
   if ((argc > 1) && (std::string{argv[1]} == "--")) {
     for (int i = 1; i < argc; ++i) {
       std::string __argvi{argv[i]};
