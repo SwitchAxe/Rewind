@@ -18,6 +18,7 @@
 #include "src/lexer.hpp"
 #include "src/parser.hpp"
 #include "src/procedures.hpp"
+#include <exception>
 #include <string>
 int main(int argc, char **argv) {
   auto PATH = rewind_get_system_PATH();
@@ -27,6 +28,24 @@ int main(int argc, char **argv) {
   else {
     conf = rewind_read_config({});
   }
+  if ((argc > 2) && (std::string{argv[1]} == "--silent")) {
+    // Rewind will execute the single expression taken as input, and then exit.
+    if (PATH != std::nullopt) {
+      try {
+        rec_print_ast(eval(get_ast(get_tokens(std::string{argv[2]})), *PATH));
+      } catch (std::exception e) {
+        std::cout << "Exception: " << e.what() << "\n";
+      }
+      return 0;
+    }
+    try {
+      rec_print_ast(eval(get_ast(get_tokens(std::string{argv[2]})), {}));
+    } catch (std::exception e) {
+      std::cout << "Exception: " << e.what() << "\n";
+    }
+    return 0;
+  }
+
   if ((argc > 1) && (std::string{argv[1]} == "--")) {
     for (int i = 1; i < argc; ++i) {
       std::string __argvi{argv[i]};

@@ -167,7 +167,7 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH) {
           node_stk.pop();
           if (std::holds_alternative<std::list<Symbol>>(current_node.value) &&
               std::get<std::list<Symbol>>(current_node.value).empty()) {
-            if (!variables.empty()) {
+            if (variables.size() > 1) {
               variables.pop_back();
             }
           }

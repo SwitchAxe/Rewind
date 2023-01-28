@@ -492,10 +492,11 @@ std::map<std::string, Functor> procedures = {
        }
        Symbol id = args.front();
        args.pop_front();
+
+       Symbol result = eval(args.front(), PATH);
        if (variables.empty()) {
          variables.push_back(std::map<std::string, Symbol>());
        }
-       Symbol result = eval(args.front(), PATH);
        variables[variables.size() - 1].insert_or_assign(
            std::get<std::string>(id.value), result);
        return result;
