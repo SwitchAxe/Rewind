@@ -159,6 +159,7 @@ void rewind_sh_loop() {
     line = rewind_readline(maybe_prompt, PATH);
     if ((line == "exit") || (line == "(exit)"))
       break;
+    if (line.empty()) continue;
     try {
       Symbol ast = eval(get_ast(get_tokens(line)), *PATH);
       if (ast.type != Type::Command)
