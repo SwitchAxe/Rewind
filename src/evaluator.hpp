@@ -85,7 +85,8 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH) {
       return result;
     } else
       throw std::logic_error{"Unbound procedure!\n"};
-  } else if (!user_defined_procedures.empty() &&
+  } else if ((op.type == Type::Identifier) &&
+             !user_defined_procedures.empty() &&
              user_defined_procedures[user_defined_procedures.size() - 1]
                  .contains(std::get<std::string>(op.value))) {
     result = eval_function(node, PATH);
@@ -104,9 +105,10 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH) {
     auto ext = *lit;
     ext.value = *get_absolute_path(std::get<std::string>((*lit).value), PATH);
     rest.push_front(ext);
-    Symbol pipel =
-        Symbol("", std::list<Symbol>{Symbol("", rest, Type::List)}, Type::List);
-    auto result = rewind_pipe(pipel, PATH);
+    Symbol pipel = Symbol("", rest, Type::List);
+    auto result = rewind_call_ext_program(pipel, PATH, false);
+    while (wait(nullptr) != -1)
+      ;
     return result;
   } else if (std::get<std::string>(op.value) == "+>") {
     // redirect with overwrite into a file
@@ -151,7 +153,6 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH) {
         }
         Symbol eval_temp_arg;
         // clean up for any function definition...
-
         std::erase_if(leaves[leaves.size() - 1], [](Symbol &s) -> bool {
           return (s.type == Type::Defunc) || (s.type == Type::Command);
         });
@@ -191,8 +192,7 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH) {
             dummy =
                 Symbol(node_stk.top().name, std::list<Symbol>(), Type::List);
           else
-            dummy =
-                Symbol(node_stk.top().name, std::list<Symbol>(), Type::List);
+            dummy = Symbol("", std::list<Symbol>(), Type::List);
           current_node = dummy;
         } else {
           node_stk.push(current_node);

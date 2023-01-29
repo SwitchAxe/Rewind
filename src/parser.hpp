@@ -14,7 +14,7 @@
   You should have received a copy of the GNU General Public License along with
   Rewind. If not, see <https://www.gnu.org/licenses/>.
 */
-
+#include "types.hpp"
 #include "lexer.hpp"
 #include "procedures.hpp"
 #include <charconv>

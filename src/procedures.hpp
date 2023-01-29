@@ -15,6 +15,7 @@
   Rewind. If not, see <https://www.gnu.org/licenses/>.
 */
 #include "matchit.h"
+#include "src/shell/shell.hpp"
 #include "types.hpp"
 #include <algorithm>
 #include <charconv>
@@ -29,6 +30,10 @@
 #include <stdexcept>
 #include <unistd.h>
 #include <utility>
+Symbol get_ast(std::vector<std::string> tokens);
+std::vector<std::string> get_tokens(std::string stream);
+std::string rewind_read_file(std::string filename);
+std::vector<std::string> rewind_split_file(std::string content);
 std::vector<std::map<std::string, Symbol>> variables;
 // this is used to pass single-use environment variables to external programs.
 // if this vector contains more than *number of elements in a pipe* or more than
@@ -698,6 +703,28 @@ std::map<std::string, Functor> procedures = {
          }
        }
        return Symbol("", l, Type::List);
+     }}},
+    {"load", {[](std::list<Symbol> args, path PATH) -> Symbol {
+       Symbol last_evaluated;
+       for (auto e : args) {
+         if ((e.type != Type::Identifier) && (e.type != Type::String)) {
+           throw std::logic_error{"Arguments to 'load' must be either string "
+                                  "literals or barewords!"};
+         }
+         std::string filename = std::get<std::string>(e.value);
+         std::vector<std::string> expr_list =
+             rewind_split_file(rewind_read_file(filename));
+         for (auto expr : expr_list) {
+           try {
+             Symbol ast = get_ast(get_tokens(expr));
+             last_evaluated = eval(ast, PATH);
+           } catch (std::logic_error e) {
+             std::cout << "Rewind: Exception in included file " << filename
+                       << ": " << e.what() << "\n";
+           }
+         }
+       }
+       return last_evaluated;
      }}}};
 
 std::array<std::string, 5> special_forms = {"->", "let", "if", ">", "$"};

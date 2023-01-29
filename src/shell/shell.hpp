@@ -20,12 +20,12 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <readline/history.h>
 #include <readline/readline.h>
 #include <stdexcept>
 #include <string>
 #include <variant>
-
 std::string rewind_read_file(std::string filename) {
   std::string expr;
   std::string temp;
@@ -151,7 +151,8 @@ void rewind_sh_loop() {
   std::optional<Symbol> maybe_prompt;
   if (PATH != std::nullopt)
     maybe_prompt = rewind_read_config(*PATH);
-  else maybe_prompt = rewind_read_config({});
+  else
+    maybe_prompt = rewind_read_config({});
   if (PATH == std::nullopt)
     throw std::logic_error{
         "The system PATH is empty! I can't proceed. Aborting... \n"};
@@ -159,7 +160,8 @@ void rewind_sh_loop() {
     line = rewind_readline(maybe_prompt, PATH);
     if ((line == "exit") || (line == "(exit)"))
       break;
-    if (line.empty()) continue;
+    if (line.empty())
+      continue;
     try {
       Symbol ast = eval(get_ast(get_tokens(line)), *PATH);
       if (ast.type != Type::Command)
