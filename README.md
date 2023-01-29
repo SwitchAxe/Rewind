@@ -86,5 +86,5 @@ an example of a valid prompt snippet: (in your ~/.config/config.re)
 Unsurprisingly, the resulting Rewind prompt will be like this (if you're in the root directory of Rewind):
 
 `/home/<user>/path/to/Rewind λ `
-with your username instead of <user>, and the full path to Rewind before the lambda, with no shortenings whatsoever.
+with your username instead of `<user>`, and the full path to Rewind before the lambda, with no shortenings whatsoever.
 
