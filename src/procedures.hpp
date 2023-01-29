@@ -200,6 +200,7 @@ std::map<std::string, Functor> procedures = {
        auto cur = fs::current_path();
        fs::current_path(std::string{(cur).c_str()} + "/" +
                         std::get<std::string>(args.front().value));
+       setenv("PWD", std::string{fs::current_path()}.c_str(), 1);
        return Symbol("", fs::current_path(), Type::Command);
      }}},
     {"set", {[](std::list<Symbol> args) -> Symbol {

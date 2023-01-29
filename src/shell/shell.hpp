@@ -87,14 +87,16 @@ std::optional<Symbol> rewind_read_config(const path &PATH) {
   std::string content = rewind_read_file(*conf);
   auto expr_vec = rewind_split_file(content);
   Symbol last_evaluated;
+  Symbol last_expr;
   for (auto expr : expr_vec) {
     try {
-      last_evaluated = eval(get_ast(get_tokens(expr)), PATH);
+      last_expr = get_ast(get_tokens(expr));
+      last_evaluated = eval(last_expr, PATH);
     } catch (std::logic_error e) {
       std::cout << "error in the Rewind config file!\n" << e.what() << "\n";
     }
   }
-  return last_evaluated;
+  return last_expr;
 }
 
 std::optional<std::vector<std::string>> rewind_get_system_PATH() {
