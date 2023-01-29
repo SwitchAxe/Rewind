@@ -6,7 +6,7 @@ LIBS    = src/*.hpp
 SHLIBS  = src/shell/*.hpp
 OBJ     = build/main.o
 
-.PHONY: clean
+.PHONY: clean install
 
 $(OUT): $(OBJ)
 	$(CXX) $(FLAGS) $^ -o $@
@@ -21,3 +21,10 @@ src/matchit.h:
 clean:
 	rm -rf build
 	rm -rf rewind
+
+install:
+ifneq ($(shell id -u),0)
+	install rewind ~/.local/bin/rewind
+else
+	install rewind /usr/bin/rewind
+endif
