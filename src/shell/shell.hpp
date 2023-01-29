@@ -15,22 +15,16 @@
   Rewind. If not, see <https://www.gnu.org/licenses/>.
 */
 #include "src/external.hpp"
+#include "src/procedures.hpp"
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <readline/history.h>
 #include <readline/readline.h>
-
-
-std::string rewind_readline() {
-  auto cur = fs::current_path();
-  std::string prompt = cur.string() + "> ";
-  char *read_line = readline(prompt.c_str());
-  std::string line{read_line};
-  free(read_line);
-  return line;
-}
+#include <stdexcept>
+#include <string>
+#include <variant>
 
 std::string rewind_read_file(std::string filename) {
   std::string expr;
@@ -76,7 +70,7 @@ std::optional<std::string> rewind_config_file() {
   if (home == std::nullopt) {
     std::optional<std::string> user = rewind_get_env_var("USER");
     if (user == std::nullopt) {
-      throw std::logic_error {"Failed to locate the config file! Using none..."};
+      throw std::logic_error{"Failed to locate the config file! Using none..."};
       return std::nullopt;
     }
     home = "/home/" + *user + "/.config/rewind/config.re";
@@ -85,7 +79,7 @@ std::optional<std::string> rewind_config_file() {
   return home;
 };
 
-std::optional<Symbol> rewind_read_config(const path& PATH) {
+std::optional<Symbol> rewind_read_config(const path &PATH) {
   auto conf = rewind_config_file();
   if (conf == std::nullopt) {
     return std::nullopt;
@@ -96,7 +90,7 @@ std::optional<Symbol> rewind_read_config(const path& PATH) {
   for (auto expr : expr_vec) {
     try {
       last_evaluated = eval(get_ast(get_tokens(expr)), PATH);
-    } catch (std::exception e) {
+    } catch (std::logic_error e) {
       std::cout << "error in the Rewind config file!\n" << e.what() << "\n";
     }
   }
@@ -120,16 +114,47 @@ std::optional<std::vector<std::string>> rewind_get_system_PATH() {
   return std::optional<std::vector<std::string>>{path_v};
 }
 
-// returns the full path of an executable on success,
-// or std::nullopt on failure.
+std::string
+rewind_readline(std::optional<Symbol> maybe_prompt,
+                const std::optional<std::vector<std::string>> &PATH) {
+  std::string prompt;
+  if (maybe_prompt != std::nullopt) {
+    Symbol sym = *maybe_prompt;
+    if (sym.type == Type::String) {
+      prompt = std::get<std::string>(sym.value);
+    } else if (sym.type == Type::List) {
+      Symbol evaluated;
+      if (PATH != std::nullopt) {
+        evaluated = eval(sym, *PATH);
+      } else {
+        evaluated = eval(sym, {});
+      }
+      if (evaluated.type == Type::String) {
+        prompt = std::get<std::string>(evaluated.value);
+      }
+    }
+  } else {
+    auto cur = fs::current_path();
+    prompt = cur.string() + "> ";
+  }
+  char *read_line = readline(prompt.c_str());
+  std::string line{read_line};
+  free(read_line);
+  return line;
+}
+
 void rewind_sh_loop() {
   std::string line;
   auto PATH = rewind_get_system_PATH();
+  std::optional<Symbol> maybe_prompt;
+  if (PATH != std::nullopt)
+    maybe_prompt = rewind_read_config(*PATH);
+  else maybe_prompt = rewind_read_config({});
   if (PATH == std::nullopt)
     throw std::logic_error{
         "The system PATH is empty! I can't proceed. Aborting... \n"};
   do {
-    line = rewind_readline();
+    line = rewind_readline(maybe_prompt, PATH);
     if ((line == "exit") || (line == "(exit)"))
       break;
     try {

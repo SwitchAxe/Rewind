@@ -142,8 +142,9 @@ void rec_print_ast(Symbol root) {
           if constexpr (std::is_same_v<std::decay_t<T>, std::monostate>) {
           } else if constexpr (std::is_same_v<std::decay_t<T>,
                                               std::list<Symbol>>) {
-          } else
+          } else {
             std::cout << v << " ";
+          }
         },
         root.value);
   }
