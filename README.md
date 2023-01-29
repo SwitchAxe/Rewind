@@ -67,3 +67,24 @@ Below is an up-to-date list of examples for all the (not many!) things that Rewi
   * `(+ (let x 4) (+ 1 (toi (let y (echo ($ x)))))) => 9`.  
     - While it _can_ be used for referencing variables even outside of external commands, it is not strictly
       necessary in that scenario.
+
+# Custom prompts and the Rewind config file
+
+Rewind supports a config file for easy storing of common variables and functions you might want to preserve in 
+between interactive sessions. Optionally, if the very last expression in the config file is a function call that
+returns a string, or it's a string literal, that will be chosen as the interactive prompt for Rewind. The following is
+an example of a valid prompt snippet: (in your ~/.config/config.re)
+
+```
+(let prompt ()
+        (nostr (s+ (get PWD)
+                           (nostr " λ")
+                           (nostr " "))))
+
+(prompt)
+```
+Unsurprisingly, the resulting Rewind prompt will be like this (if you're in the root directory of Rewind):
+
+`/home/<user>/path/to/Rewind λ `
+with your username instead of <user>, and the full path to Rewind before the lambda, with no shortenings whatsoever.
+
