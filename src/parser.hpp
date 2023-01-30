@@ -14,9 +14,9 @@
   You should have received a copy of the GNU General Public License along with
   Rewind. If not, see <https://www.gnu.org/licenses/>.
 */
-#include "types.hpp"
 #include "lexer.hpp"
 #include "procedures.hpp"
+#include "types.hpp"
 #include <charconv>
 #include <iostream>
 #include <stack>
@@ -26,6 +26,7 @@ Symbol get_ast(std::vector<std::string> tokens) {
   int round_balance = 0;  // for paren balancing
   int square_balance = 0; // see above
   bool list_entered = false;
+  bool is_root = true;
   Symbol node;
   std::stack<Symbol> node_stk;
   for (auto tok : tokens) {
@@ -36,7 +37,10 @@ Symbol get_ast(std::vector<std::string> tokens) {
         square_balance++;
       if (std::holds_alternative<std::monostate>(node.value)) {
         node.type = Type::List;
-        node.name = "root";
+        if (is_root) {
+          node.name = "root";
+          is_root = false;
+        }
         node.value = std::list<Symbol>();
       } else {
         if (!std::holds_alternative<std::list<Symbol>>(node.value)) {
@@ -57,6 +61,7 @@ Symbol get_ast(std::vector<std::string> tokens) {
       // we finished parsing the subexpression/sublist, so we can
       // append the resulting tree to the previous one.
       Symbol child = node;
+      child.name = "";
       if (!node_stk.empty()) {
         node = node_stk.top();
         node_stk.pop();

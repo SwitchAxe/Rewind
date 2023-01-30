@@ -161,10 +161,9 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH) {
         std::erase_if(leaves[leaves.size() - 1], [](Symbol &s) -> bool {
           return (s.type == Type::Defunc) || (s.type == Type::Command);
         });
-        if (!node_stk.empty())
-          eval_temp_arg = Symbol(node_stk.top().name, leaves[leaves.size() - 1], Type::List);
-        else
-          eval_temp_arg = Symbol(current_node.name, leaves[leaves.size() - 1], Type::List);
+
+        eval_temp_arg =
+            Symbol(current_node.name, leaves[leaves.size() - 1], Type::List);
         result = eval_primitive_node(eval_temp_arg, PATH);
         leaves.pop_back();
         if (leaves.empty())
@@ -202,6 +201,7 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH) {
           else
             dummy = Symbol("", std::list<Symbol>(), Type::List);
           current_node = dummy;
+          node_stk.push(current_node);
         } else {
           node_stk.push(current_node);
           current_node = child;
