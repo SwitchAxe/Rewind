@@ -449,7 +449,7 @@ std::map<std::string, Functor> procedures = {
          throw std::logic_error{"'toi' expects a string!\n"};
        }
        std::string s = std::get<std::string>(args.front().value);
-       int n;
+       long long unsigned int n = 0;
        auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.length(), n);
        if (ec != std::errc()) {
          throw std::logic_error{"Exception in 'toi': Failed to convert the "

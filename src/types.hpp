@@ -32,8 +32,9 @@ enum Type {
 };
 struct Symbol;
 
-using _Type = std::variant<std::monostate, int, std::string,
-                           std::list<Symbol>, bool>;
+using _Type =
+    std::variant<std::monostate, int, long long int, long long unsigned int,
+                 std::string, std::list<Symbol>, bool>;
 
 struct Symbol {
   Symbol() = default;
