@@ -16,6 +16,7 @@
 */
 #include "parser.hpp"
 #include "procedures.hpp"
+#include "src/external.hpp"
 #include "src/types.hpp"
 #include <algorithm>
 #include <filesystem>
@@ -109,11 +110,13 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH) {
     if (node.name != "root") {
       pipel = Symbol("", std::list<Symbol>{pipel}, Type::List);
       auto result = rewind_pipe(pipel, PATH);
+      active_pids = {};
       return result;
     }
     auto result = rewind_call_ext_program(pipel, PATH, false);
     while (wait(nullptr) != -1)
       ;
+    active_pids = {};
     return result;
   } else if (std::get<std::string>(op.value) == "+>") {
     // redirect with overwrite into a file

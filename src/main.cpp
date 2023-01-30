@@ -15,11 +15,21 @@
 */
 #include "shell/shell.hpp"
 #include "src/evaluator.hpp"
+#include "src/external.hpp"
 #include "src/lexer.hpp"
 #include "src/parser.hpp"
 #include "src/procedures.hpp"
 #include <exception>
+#include <signal.h>
 #include <string>
+#include <sys/types.h>
+static void catch_SIGINT(int sig) {
+  for (auto p : active_pids) {
+    kill(p, SIGINT);
+  }
+  active_pids = {};
+}
+
 int main(int argc, char **argv) {
   auto PATH = rewind_get_system_PATH();
   std::optional<Symbol> conf;
@@ -106,6 +116,7 @@ int main(int argc, char **argv) {
     }
     return 0;
   }
+  signal(SIGINT, catch_SIGINT);
   rewind_sh_loop();
   return 0;
 }

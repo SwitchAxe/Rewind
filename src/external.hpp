@@ -85,6 +85,7 @@ Symbol rewind_call_ext_program(Symbol node,
   argv[i] = nullptr;
   int status = 0;
   int pid = fork();
+  active_pids.push_back(pid);
   if (pid == 0) {
     if (must_pipe) {
       if (pipe_fd_out) {

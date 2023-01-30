@@ -35,6 +35,7 @@ std::vector<std::string> get_tokens(std::string stream);
 std::string rewind_read_file(std::string filename);
 std::vector<std::string> rewind_split_file(std::string content);
 std::vector<std::map<std::string, Symbol>> variables;
+std::vector<int> active_pids;
 // this is used to pass single-use environment variables to external programs.
 // if this vector contains more than *number of elements in a pipe* or more than
 // 1 for a single program call, it's most likely an error.
