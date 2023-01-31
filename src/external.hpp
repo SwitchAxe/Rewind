@@ -20,6 +20,7 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <string>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -29,12 +30,14 @@ std::string to_str(Symbol sym) {
   };
   using namespace matchit;
   Id<std::string> s;
-  Id<int> in;
+  Id<long long int> in;
+  Id<long long unsigned int> un;
   Id<bool> b;
 #define p pattern
   std::string arg = match(sym.value)(
       p | as<std::string>(s) = [&] { return *s; },
-      p | as<int>(in) = [&] { return std::to_string(*in); },
+      p | as<long long int>(in) = [&] { return std::to_string(*in); },
+      p | as<long long unsigned int>(un) = [&] { return std::to_string(*un); },
       p | as<bool>(b) = [&] { return (*b == true) ? "true" : "false"; });
   if (is_strlit(arg)) {
     arg = arg.substr(1, arg.size() - 2);
@@ -180,7 +183,7 @@ Symbol rewind_pipe(Symbol node, const std::vector<std::string> &PATH) {
   status = rewind_call_ext_program(last, PATH, true, fd[1], old_read_end);
   char buf[1024];
   std::string result;
-  if (std::get<int>(status.value) == -1) {
+  if (std::get<long long int>(status.value) == -1) {
     return Symbol("", "Null", Type::String);
   }
   close(fd[1]);
@@ -210,7 +213,8 @@ Symbol rewind_redirect_append(Symbol node,
   out << std::boolalpha;
   using namespace matchit;
   Id<std::string> s;
-  Id<int> i;
+  Id<long long int> i;
+  Id<long long unsigned int> u;
   Id<std::list<Symbol>> l;
   Id<bool> b;
   auto is_strlit = [](const std::string &s) -> bool {
@@ -224,7 +228,8 @@ Symbol rewind_redirect_append(Symbol node,
     return s;
   };
   match(content.value)(
-      pattern | as<int>(i) = [&] { out << *i; },
+      pattern | as<long long int>(i) = [&] { out << *i; },
+      pattern | as<long long unsigned int>(u) = [&] { out << *u; },
       pattern | as<std::string>(s) =
           [&] { out << strlit_to_bare(process_escapes(*s)); },
       pattern | as<bool>(b) = [&] { out << *b; },
@@ -250,7 +255,8 @@ Symbol rewind_redirect_overwrite(Symbol node,
   out << std::boolalpha;
   using namespace matchit;
   Id<std::string> s;
-  Id<int> i;
+  Id<long long int> i;
+  Id<long long unsigned int> u;
   Id<std::list<Symbol>> l;
   Id<bool> b;
   auto is_strlit = [](const std::string &s) -> bool {
@@ -264,7 +270,8 @@ Symbol rewind_redirect_overwrite(Symbol node,
     return s;
   };
   match(content.value)(
-      pattern | as<int>(i) = [&] { out << *i; },
+      pattern | as<long long int>(i) = [&] { out << *i; },
+      pattern | as<long long unsigned int>(u) = [&] { out << *u; },
       pattern | as<std::string>(s) =
           [&] { out << strlit_to_bare(process_escapes(*s)); },
       pattern | as<bool>(b) = [&] { out << *b; },
