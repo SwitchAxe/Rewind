@@ -44,6 +44,16 @@ std::vector<int> active_pids;
 // 1 for a single program call, it's most likely an error.
 std::vector<std::map<std::string, std::string>> environment_variables;
 
+// These two functions are used to get an integer, or 0, from a variant,
+// depending on if the variant contains an integer (see the concept in
+// types.hpp) or another type. The return value of the second function is not a
+// problem, since we're only gonna call them when we are certain we're gonna get
+// an integer anyway.
+using ints = std::variant<long long int, long long unsigned int>;
+
+ints get_int(is_integer auto n) { return n; }
+ints get_int(auto n) { return 0; }
+
 // forward declaration so i can use it in the next function definition
 std::optional<std::string>
 get_absolute_path(std::string progn, const std::vector<std::string> &PATH);
@@ -54,9 +64,13 @@ void get_env_vars(Symbol node, path PATH) {
   auto _it = nodel.begin();
   auto lit = nodel.begin();
   lit = std::find_if(nodel.begin(), nodel.end(), [&](Symbol &s) -> bool {
-    return std::holds_alternative<std::string>(s.value) &&
-           get_absolute_path(std::get<std::string>(s.value), PATH) !=
-               std::nullopt;
+    bool is_local_executable =
+        std::holds_alternative<std::string>(s.value) &&
+        (std::get<std::string>(s.value).substr(0, 2) == "./");
+    bool is_in_path =
+        std::holds_alternative<std::string>(s.value) &&
+        get_absolute_path(std::get<std::string>(s.value), PATH) != std::nullopt;
+    return is_local_executable || is_in_path;
   });
   while (_it != lit) {
     if (_it->type == Type::List) {
@@ -409,26 +423,7 @@ std::map<std::string, Functor> procedures = {
            throw std::logic_error{"The '<' operator only accepts integers!\n"};
          }
          // uses (in)equality operator overloads for integer variants
-         is_true =
-             is_true &&
-             std::visit(
-                 []<class T, class U>(T &&t, U &&u) -> bool {
-                   using dT = std::decay_t<T>;
-                   using dU = std::decay_t<U>;
-                   using ints =
-                       std::variant<long long int, long long unsigned int>;
-                   int v, w;
-                   if constexpr (std::is_integral<dT>::value &&
-                                 std::is_integral<dU>::value &&
-                                 (!std::is_same_v<dT, bool>)&&(
-                                     !std::is_same_v<dU, bool>)) {
-                     v = t;
-                     w = u;
-                     return v < w;
-                   }
-                   throw std::logic_error{"dummy\n"};
-                 },
-                 first.value, e.value);
+         is_true = is_true && (get_int(first.value) < get_int(e.value));
          first = e;
        }
        return Symbol("", is_true, Type::Boolean);

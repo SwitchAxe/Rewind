@@ -95,16 +95,22 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH) {
   } else if (auto lit = std::find_if(
                  l.begin(), l.end(),
                  [&](Symbol &s) -> bool {
-                   return std::holds_alternative<std::string>(s.value) &&
-                          get_absolute_path(std::get<std::string>(s.value),
-                                            PATH) != std::nullopt;
+                   bool is_local_executable =
+                       std::holds_alternative<std::string>(s.value) &&
+                       (std::get<std::string>(s.value).substr(0, 2) == "./");
+                   bool is_in_path =
+                       std::holds_alternative<std::string>(s.value) &&
+                       get_absolute_path(std::get<std::string>(s.value),
+                                         PATH) != std::nullopt;
+                   return is_local_executable || is_in_path;
                  });
              lit != l.end()) {
     get_env_vars(node, PATH);
     auto rest = std::list<Symbol>(lit, l.end());
     rest.pop_front();
     auto ext = *lit;
-    ext.value = *get_absolute_path(std::get<std::string>((*lit).value), PATH);
+    if (std::get<std::string>((*lit).value).substr(0, 2) != "./")
+      ext.value = *get_absolute_path(std::get<std::string>((*lit).value), PATH);
     rest.push_front(ext);
     Symbol pipel = Symbol("", rest, Type::List);
     if (node.name != "root") {

@@ -74,3 +74,8 @@ private:
   sig _fn;
   psig _Pfn;
 };
+
+template <class T> concept not_bool = !std::same_as<std::decay_t<T>, bool>;
+
+template <class T>
+concept is_integer = std::integral<T> && not_bool<T>;
