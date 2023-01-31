@@ -327,8 +327,6 @@ std::map<std::string, Functor> procedures = {
      }}},
     {"-", {[](std::list<Symbol> args) -> Symbol {
        long long int r;
-       std::cout << "in '-': ";
-       rec_print_ast(Symbol("", args, Type::List));
        if (args.front().type != Type::Number) {
          throw std::logic_error{"Unexpected operand to the '-' procedure!\n"};
        }
