@@ -77,7 +77,7 @@ Symbol get_ast(std::vector<std::string> tokens) {
     } else {
       // identifiers, operators, literals and so on
       Symbol child;
-      int v;
+      long long int v;
       if (auto [ptr, ec] =
               std::from_chars(tok.data(), tok.data() + tok.size(), v);
           ptr == tok.data() + tok.size()) {

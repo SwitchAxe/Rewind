@@ -326,7 +326,9 @@ std::map<std::string, Functor> procedures = {
        return ret;
      }}},
     {"-", {[](std::list<Symbol> args) -> Symbol {
-       int r;
+       long long int r;
+       std::cout << "in '-': ";
+       rec_print_ast(Symbol("", args, Type::List));
        if (args.front().type != Type::Number) {
          throw std::logic_error{"Unexpected operand to the '-' procedure!\n"};
        }
@@ -657,12 +659,20 @@ std::map<std::string, Functor> procedures = {
        }
        if (args.front().type != Type::Number) {
          throw std::logic_error{
-             "The command line argument name must be a string!\n"};
+             "The command line argument name must be an integer!\n"};
        }
-       if (cmdline_args.contains(std::to_string(
-               std::get<unsigned long long int>(args.front().value)))) {
-         return cmdline_args.at(std::to_string(
-             std::get<unsigned long long int>(args.front().value)));
+       if (std::holds_alternative<unsigned long long int>(args.front().value)) {
+         if (cmdline_args.contains(std::to_string(
+                 std::get<unsigned long long int>(args.front().value)))) {
+           return cmdline_args.at(std::to_string(
+               std::get<unsigned long long int>(args.front().value)));
+         }
+       } else {
+         if (cmdline_args.contains(
+                 std::to_string(std::get<long long int>(args.front().value)))) {
+           return cmdline_args.at(
+               std::to_string(std::get<long long int>(args.front().value)));
+         }
        }
        return Symbol("", "", Type::String);
      }}},
@@ -671,7 +681,11 @@ std::map<std::string, Functor> procedures = {
          throw std::logic_error{
              "The first argument to 'hd' must be a number!\n"};
        }
-       auto n = std::get<unsigned long long int>(args.front().value);
+       long long int n;
+       if (std::holds_alternative<long long unsigned int>(args.front().value))
+         n = std::get<long long unsigned int>(args.front().value);
+       else
+         n = std::get<long long int>(args.front().value);
        args.pop_front();
        if (args.front().type != Type::List) {
          throw std::logic_error{
@@ -693,7 +707,11 @@ std::map<std::string, Functor> procedures = {
          throw std::logic_error{
              "The first argument to 'tl' must be a number!\n"};
        }
-       auto n = std::get<unsigned long long int>(args.front().value);
+       long long int n;
+       if (std::holds_alternative<long long unsigned int>(args.front().value))
+         n = std::get<long long unsigned int>(args.front().value);
+       else
+         n = std::get<long long int>(args.front().value);
        args.pop_front();
        if (args.front().type != Type::List) {
          throw std::logic_error{
@@ -738,7 +756,8 @@ std::map<std::string, Functor> procedures = {
        if (lst.empty()) {
          return Symbol("", 0, Type::Number);
        }
-       return Symbol("", static_cast<int>(lst.size()), Type::Number);
+       return Symbol("", static_cast<long long unsigned int>(lst.size()),
+                     Type::Number);
      }}},
     {"++", {[](std::list<Symbol> args) -> Symbol {
        std::list<Symbol> l;
