@@ -85,9 +85,7 @@ an example of a valid prompt snippet: (in your ~/.config/config.re)
 
 ```
 (let prompt ()
-        (nostr (s+ (get PWD)
-                   (nostr " λ")
-                   (nostr " "))))
+  (s+ (get PWD) " λ" " "))
 
 (prompt)
 ```
