@@ -167,6 +167,9 @@ Symbol rewind_pipe(Symbol node, const std::vector<std::string> &PATH) {
     close(fd[0]);
     while (wait(nullptr) != -1)
       ;
+    if (result.back() == '\n') {
+      result.pop_back();
+    }
     return Symbol("", result, Type::String);
   }
   auto first = nodel.front();
