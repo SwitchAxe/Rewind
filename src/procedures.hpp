@@ -635,14 +635,6 @@ std::map<std::string, Functor> procedures = {
        if (str.empty()) {
          return Symbol("", "", Type::String);
        }
-       if (is_strlit(str)) {
-         if (str[str.size() - 2] == '\n') {
-           str = str.substr(0, str.size() - 2);
-           str.push_back('"');
-         }
-         return Symbol("", str, Type::String);
-       }
-
        if (str.size() == 1) {
          if (str[0] == '\n') {
            return Symbol("", "", Type::String);

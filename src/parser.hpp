@@ -90,10 +90,10 @@ Symbol get_ast(std::vector<std::string> tokens) {
       } else if (tok[0] == '"') {
         child.type = Type::String;
         std::string tmp = tok.substr(1, tok.length() - 2);
-        tmp = process_escapes(tmp);
-        if (tmp[tmp.length() - 1] == '\n') {
+        if (tmp.back() == '\n') {
           tmp.pop_back();
         }
+        std::cout << "tmp = " << tmp << "\n";
         child.value = tmp;
       } else if ((tok == "false") || (tok == "true")) {
         child.type = Type::Boolean;

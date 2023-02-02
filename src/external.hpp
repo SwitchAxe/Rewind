@@ -199,6 +199,9 @@ Symbol rewind_pipe(Symbol node, const std::vector<std::string> &PATH) {
   while (wait(nullptr) != -1)
     ;
   close(fd[0]);
+  if (result.back() == '\n') {
+    result.pop_back();
+  }
   return Symbol("", result, Type::String);
 }
 
