@@ -569,6 +569,35 @@ std::map<std::string, Functor> procedures = {
        args.pop_front();
        return eval(args.front(), PATH);
      }}},
+    {"cond", {[](std::list<Symbol> args, path PATH) -> Symbol {
+       // the arguments are a sequence of lists of the form:
+       // (<clause> <consequent>). Only no <clause>s can match, or
+       // one does, and if this happens, the corresponding <consequent>
+       // gets executed. The 'else' clause is a catch-all, and its <consequent>
+       // is always executed.
+       Symbol result;
+       for (auto e : args) {
+         if (e.type != Type::List) {
+           throw std::logic_error{"Wrong expression in 'cond'! Expected "
+                                  "[<clause> <consequent>].\n"};
+         }
+         if (std::get<std::list<Symbol>>(e.value).size() < 2) {
+           throw std::logic_error{"Wrong expression in 'cond'! Expected "
+                                  "[<clause> <consequent>].\n"};
+         }
+         std::list<Symbol> branch = std::get<std::list<Symbol>>(e.value);
+         Symbol clause = branch.front();
+         branch.pop_front();
+         Symbol clause_bool = eval(clause, PATH);
+         if (convert_value_to_bool(clause_bool)) {
+           for (auto e : branch) {
+             result = eval(e, PATH);
+           }
+           return result;
+         }
+       }
+       return Symbol("", std::list<Symbol>(), Type::List);
+     }}},
     {"$", {[](std::list<Symbol> args) -> Symbol {
        if (args.size() != 1) {
          throw std::logic_error{
@@ -788,4 +817,5 @@ std::map<std::string, Functor> procedures = {
        return last_evaluated;
      }}}};
 
-std::array<std::string, 5> special_forms = {"->", "let", "if", ">", "$"};
+std::array<std::string, 6> special_forms = {"->", "let", "if",
+                                            ">",  "$",   "cond"};
