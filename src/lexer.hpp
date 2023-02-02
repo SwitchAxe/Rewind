@@ -100,7 +100,6 @@ std::vector<std::string> get_tokens(std::string stream) {
           in_singles = true;
         }
       } else if (stream[i] == '"') {
-
         if (in_singles) {
           temp += stream[i];
         } else if (in_numlit) {
@@ -154,11 +153,6 @@ std::vector<std::string> get_tokens(std::string stream) {
   }
   if (temp != "") {
     tokens.push_back(temp);
-  }
-  for (auto &tk : tokens) {
-    if (tk[0] == '"') {
-      tk = process_escapes(tk);
-    }
   }
   if (in_singles) {
     throw std::logic_error{"Unclosed string!\n"};

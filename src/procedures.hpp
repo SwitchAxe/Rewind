@@ -479,8 +479,6 @@ std::map<std::string, Functor> procedures = {
          }
          ret += std::get<std::string>(e.value);
        }
-       ret.insert(0, 1, '\"');
-       ret.push_back('\"');
        return Symbol("", ret, Type::String);
      }}},
     {"toi", {[](std::list<Symbol> args) -> Symbol {
