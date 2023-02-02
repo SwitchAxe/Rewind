@@ -93,7 +93,6 @@ Symbol get_ast(std::vector<std::string> tokens) {
         if (tmp.back() == '\n') {
           tmp.pop_back();
         }
-        std::cout << "tmp = " << tmp << "\n";
         child.value = tmp;
       } else if ((tok == "false") || (tok == "true")) {
         child.type = Type::Boolean;
