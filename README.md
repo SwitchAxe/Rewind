@@ -69,6 +69,12 @@ Below is an up-to-date list of examples for all the (not many!) things that Rewi
   * `(+ (let x 4) (+ 1 (toi (let y (echo ($ x)))))) => 9`.  
     - While it _can_ be used for referencing variables even outside of external commands, it is not strictly
       necessary in that scenario.
+- Rewind has a conditional operator, to be preferred instead of the naive `if`:
+  * ```
+      (cond [(= 1 2) (print "this will not get executed")]
+            [(= 2 1) (print "this will not get executed either")]
+            [(= 1 1) (print "this, however, will be printed")])
+    ```
 
 # Custom prompts and the Rewind config file
 
