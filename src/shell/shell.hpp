@@ -31,7 +31,8 @@ std::string rewind_read_file(std::string filename) {
   std::string temp;
   std::ifstream in(filename);
   while (std::getline(in, temp)) {
-    expr += temp;
+    if (temp[0] != '#') // comments are skipped
+      expr += temp;
   }
   in.close();
   return expr;
