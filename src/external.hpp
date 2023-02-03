@@ -137,7 +137,7 @@ Symbol rewind_call_ext_program(Symbol node,
     for (int idx = 1; argv[idx] != nullptr; ++idx) {
       free(argv[idx]);
     }
-    return Symbol("", status, Type::Number);
+    return Symbol("", status, Type::Command);
   } else {
     throw std::logic_error{"Error while executing child process " + prog +
                            "!\n"};
