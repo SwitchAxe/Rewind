@@ -245,7 +245,8 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH) {
             Symbol(node_stk.top().name, std::list<Symbol>(), Type::List);
         node_stk.pop();
         node_stk.push(dummy);
-      } else if ((current_node.type == Type::Identifier) &&
+      } else if ((leaves.empty() || leaves[leaves.size() - 1].empty()) &&
+                 (current_node.type == Type::Identifier) &&
                  (get_absolute_path(std::get<std::string>(current_node.value),
                                     PATH) != std::nullopt) &&
                  (!node_stk.empty())) {

@@ -222,12 +222,22 @@ bool convert_value_to_bool(Symbol sym) {
 
 std::map<std::string, Functor> procedures = {
     {"cd", {[](std::list<Symbol> args) -> Symbol {
-       if (args.size() != 1)
+       if ((args.size() != 1) || ((args.front().type != Type::Identifier) &&
+                                  (args.front().type != Type::String)))
          throw std::logic_error{
-             "The 'cd' builtin command expects precisely one argument!"};
+             "The 'cd' builtin command expects precisely one path!"};
        auto cur = fs::current_path();
-       fs::current_path(std::string{(cur).c_str()} + "/" +
-                        std::get<std::string>(args.front().value));
+       if (cur.is_absolute()) {
+         fs::current_path(
+             std::string{std::get<std::string>(args.front().value).c_str()});
+       } else if (fs::directory_entry(std::string{cur.c_str()} + "/" +
+                                      std::get<std::string>(args.front().value))
+                      .exists()) {
+         fs::current_path(std::string{cur.c_str()} + "/" +
+                          std::get<std::string>(args.front().value));
+       } else {
+         throw std::logic_error{"Unknown path!\n"};
+       }
        setenv("PWD", std::string{fs::current_path()}.c_str(), 1);
        return Symbol("", fs::current_path(), Type::Command);
      }}},
