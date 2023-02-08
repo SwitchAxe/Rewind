@@ -247,6 +247,8 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH) {
         node_stk.push(dummy);
       } else if ((leaves.empty() || leaves[leaves.size() - 1].empty()) &&
                  (current_node.type == Type::Identifier) &&
+                 (!user_defined_procedures[user_defined_procedures.size() - 1]
+                       .contains(std::get<std::string>(current_node.value))) &&
                  (get_absolute_path(std::get<std::string>(current_node.value),
                                     PATH) != std::nullopt) &&
                  (!node_stk.empty())) {

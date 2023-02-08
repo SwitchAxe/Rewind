@@ -528,9 +528,32 @@ std::map<std::string, Functor> procedures = {
        return Symbol("", l, Type::List);
      }}},
     {"let", {[](std::list<Symbol> args, path PATH) -> Symbol {
-       if (args.front().type != Type::Identifier)
-         throw std::logic_error{
-             "First argument to 'let' must be an identifier!\n"};
+       if (args.front().type != Type::Identifier) {
+         if (args.front().type != Type::List) {
+           throw std::logic_error{
+               "First argument to 'let' must be an identifier!\n"};
+         }
+         static int lambda_id = 0;
+         std::string name = "__re_lambda_" + std::to_string(lambda_id);
+         lambda_id++;
+         Symbol arguments = args.front();
+         args.pop_front();
+         Symbol stmts = Symbol("", args, Type::List);
+         if (user_defined_procedures.empty()) {
+           user_defined_procedures.push_back(
+               std::map<std::string, std::pair<Symbol, Symbol>>{
+                   {name, std::make_pair(arguments, stmts)}});
+         } else {
+           user_defined_procedures[user_defined_procedures.size() - 1]
+               .insert_or_assign(name, std::make_pair(arguments, stmts));
+         }
+         // return the name of the lambda. this is used to assign the name of
+         // the
+         // "anonymous" (user-side) function to something that can be called by
+         // the interpreter when the user calls a parameter that represents a
+         // lambda. i really hope this makes sense to you as it does to me
+         return Symbol("", name, Type::Identifier);
+       }
        if (args.size() > 2) {
          // function definition
          std::string name = std::get<std::string>(args.front().value);
