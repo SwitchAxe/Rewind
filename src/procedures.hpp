@@ -295,28 +295,12 @@ std::map<std::string, Functor> procedures = {
          throw std::logic_error{
              "Expected exactly two arguments to the '>' operator!\n"};
        }
-       if (args.front().type != Type::List) {
+       if (args.front().type != Type::String) {
          throw std::logic_error{"Invalid first argument to the '>' operator!\n"
-                                "Expected a command or an executable.\n"};
+                                "Expected a string!.\n"};
        }
-       auto pipe_args = std::get<std::list<Symbol>>(args.front().value);
-       pipe_args.pop_front();
-       for (auto &e : pipe_args) {
-         auto progl = std::get<std::list<Symbol>>(e.value);
-         auto prog = std::get<std::string>(progl.front().value);
-         progl.pop_front();
-         auto abs = get_absolute_path(prog, PATH);
-         if (abs == std::nullopt) {
-           throw std::logic_error{"Unknown executable " + prog + "!\n"};
-         }
-         std::string full_path;
-         if (procedures.contains(prog))
-           full_path = prog;
-         else
-           full_path = *abs;
-         progl.push_front(Symbol("", full_path, Type::Identifier));
-         e.value = progl;
-       }
+       auto contents = std::get<std::string>(args.front().value);
+
        args.pop_front();
        if (args.front().type != Type::Identifier) {
          throw std::logic_error{"Invalid second argument to the '>' operator!\n"
@@ -324,13 +308,50 @@ std::map<std::string, Functor> procedures = {
        }
        int out = open(std::get<std::string>(args.front().value).c_str(),
                       O_WRONLY | O_APPEND | O_CREAT, 0666);
+       Symbol status = Symbol("", 0, Type::Number);
        int stdoutcpy = dup(STDOUT_FILENO);
-       dup2(out, STDOUT_FILENO);
-       auto node = Symbol("", pipe_args, Type::List);
-       Symbol status = rewind_pipe(node, PATH);
+       status.value = dup2(out, STDOUT_FILENO);
+       if (std::get<long long signed int>(status.value) != STDOUT_FILENO)
+         return status;
+       std::cout << contents;
        close(out);
-       dup2(stdoutcpy, STDOUT_FILENO);
+       status.value = dup2(stdoutcpy, STDOUT_FILENO);
+       if (std::get<long long signed int>(status.value) != STDOUT_FILENO)
+         return status;
        close(stdoutcpy);
+       status.type = Type::Command;
+       return status;
+     }}},
+    {">>", {[](std::list<Symbol> args) -> Symbol {
+       if (args.size() != 2) {
+         throw std::logic_error{
+             "Expected exactly two arguments to the '>>' operator!\n"};
+       }
+       if (args.front().type != Type::String) {
+         throw std::logic_error{"Invalid first argument to the '>>' operator!\n"
+                                "Expected a string!.\n"};
+       }
+       auto contents = std::get<std::string>(args.front().value);
+
+       args.pop_front();
+       if (args.front().type != Type::Identifier) {
+         throw std::logic_error{"Invalid second argument to the '>' operator!\n"
+                                "Expected a file name.\n"};
+       }
+       int out = open(std::get<std::string>(args.front().value).c_str(),
+                      O_WRONLY | O_CREAT, 0666);
+       Symbol status = Symbol("", 0, Type::Number);
+       int stdoutcpy = dup(STDOUT_FILENO);
+       status.value = dup2(out, STDOUT_FILENO);
+       if (std::get<long long signed int>(status.value) != STDOUT_FILENO)
+         return status;
+       std::cout << contents;
+       close(out);
+       status.value = dup2(stdoutcpy, STDOUT_FILENO);
+       if (std::get<long long signed int>(status.value) != STDOUT_FILENO)
+         return status;
+       close(stdoutcpy);
+       status.type = Type::Command;
        return status;
      }}},
     {"+", {[](std::list<Symbol> args) -> Symbol {
@@ -840,5 +861,4 @@ std::map<std::string, Functor> procedures = {
        return last_evaluated;
      }}}};
 
-std::array<std::string, 6> special_forms = {"->", "let", "if",
-                                            ">",  "$",   "cond"};
+std::array<std::string, 6> special_forms = {"->", "let", "if", "$", "cond"};
