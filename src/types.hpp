@@ -29,6 +29,7 @@ enum Type {
   Defunc,
   Identifier,
   Command,
+  CommandResult,
 };
 struct Symbol;
 

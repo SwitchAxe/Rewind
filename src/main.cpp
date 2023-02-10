@@ -80,7 +80,10 @@ int main(int argc, char **argv) {
         Symbol ast = eval(get_ast(get_tokens(s)), *PATH);
         if ((ast.type != Type::Command) && (ast.type != Type::Defunc)) {
           rec_print_ast(ast);
-          std::cout << "\n";
+          if (ast.type == Type::CommandResult)
+            std::flush(std::cout);
+          else
+            std::cout << "\n";
         }
       }
     } else {
@@ -88,6 +91,10 @@ int main(int argc, char **argv) {
         Symbol ast = eval(get_ast(get_tokens(s)), {});
         if ((ast.type != Type::Command) && (ast.type != Type::Defunc)) {
           rec_print_ast(ast);
+          if (ast.type == Type::CommandResult)
+            std::flush(std::cout);
+          else
+            std::cout << "\n";
           std::cout << "\n";
         }
       }

@@ -128,7 +128,8 @@ bool weak_compare(Symbol fst, Symbol other) {
       bool is_same_pattern = true;
       auto ll = std::get<std::list<Symbol>>(fst.value);
       auto otherl = std::get<std::list<Symbol>>(other.value);
-      if (ll.size() != otherl.size()) return false;
+      if (ll.size() != otherl.size())
+        return false;
       std::list<std::pair<Symbol, Symbol>> zipped;
       std::transform(
           ll.begin(), ll.end(), otherl.begin(), std::back_inserter(zipped),
@@ -399,21 +400,12 @@ std::map<std::string, Functor> procedures = {
          throw std::logic_error{"Invalid second argument to the '>' operator!\n"
                                 "Expected a file name.\n"};
        }
-       int out = open(std::get<std::string>(args.front().value).c_str(),
-                      O_WRONLY | O_APPEND | O_CREAT, 0666);
-       Symbol status = Symbol("", 0, Type::Number);
-       int stdoutcpy = dup(STDOUT_FILENO);
-       status.value = dup2(out, STDOUT_FILENO);
-       if (std::get<long long signed int>(status.value) != STDOUT_FILENO)
-         return status;
+       std::ofstream out(std::get<std::string>(args.front().value));
+       auto backup = std::cout.rdbuf();
+       std::cout.rdbuf(out.rdbuf());
        std::cout << contents;
-       close(out);
-       status.value = dup2(stdoutcpy, STDOUT_FILENO);
-       if (std::get<long long signed int>(status.value) != STDOUT_FILENO)
-         return status;
-       close(stdoutcpy);
-       status.type = Type::Command;
-       return status;
+       std::cout.rdbuf(backup);
+       return Symbol("", true, Type::Command);
      }}},
     {">>", {[](std::list<Symbol> args) -> Symbol {
        if (args.size() != 2) {
@@ -431,21 +423,13 @@ std::map<std::string, Functor> procedures = {
          throw std::logic_error{"Invalid second argument to the '>' operator!\n"
                                 "Expected a file name.\n"};
        }
-       int out = open(std::get<std::string>(args.front().value).c_str(),
-                      O_WRONLY | O_CREAT, 0666);
-       Symbol status = Symbol("", 0, Type::Number);
-       int stdoutcpy = dup(STDOUT_FILENO);
-       status.value = dup2(out, STDOUT_FILENO);
-       if (std::get<long long signed int>(status.value) != STDOUT_FILENO)
-         return status;
+       std::ofstream out(std::get<std::string>(args.front().value),
+                         std::ios::app);
+       auto backup = std::cout.rdbuf();
+       std::cout.rdbuf(out.rdbuf());
        std::cout << contents;
-       close(out);
-       status.value = dup2(stdoutcpy, STDOUT_FILENO);
-       if (std::get<long long signed int>(status.value) != STDOUT_FILENO)
-         return status;
-       close(stdoutcpy);
-       status.type = Type::Command;
-       return status;
+       std::cout.rdbuf(backup);
+       return Symbol("", true, Type::Command);
      }}},
     {"+", {[](std::list<Symbol> args) -> Symbol {
        int r = 0;

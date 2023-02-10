@@ -168,7 +168,9 @@ void rewind_sh_loop() {
       Symbol ast = eval(get_ast(get_tokens(line)), *PATH);
       if ((ast.type != Type::Command) && (ast.type != Type::Defunc)) {
         rec_print_ast(ast);
-        std::flush(std::cout);
+        if (ast.type == Type::CommandResult)
+          std::flush(std::cout);
+        else std::cout << "\n";
       }
     } catch (std::logic_error ex) {
       std::cout << ex.what() << "\n";
