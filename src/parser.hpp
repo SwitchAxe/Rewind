@@ -149,7 +149,7 @@ void rec_print_ast(Symbol root) {
           } else if constexpr (std::is_same_v<std::decay_t<T>,
                                               std::list<Symbol>>) {
           } else {
-            std::cout << v << " ";
+            std::cout << v;
           }
         },
         root.value);

@@ -21,6 +21,7 @@
 #include <filesystem>
 #include <fstream>
 #include <optional>
+#include <ostream>
 #include <readline/history.h>
 #include <readline/readline.h>
 #include <stdexcept>
@@ -165,9 +166,10 @@ void rewind_sh_loop() {
       continue;
     try {
       Symbol ast = eval(get_ast(get_tokens(line)), *PATH);
-      if (ast.type != Type::Command)
+      if ((ast.type != Type::Command) && (ast.type != Type::Defunc)) {
         rec_print_ast(ast);
-      std::cout << "\n";
+        std::flush(std::cout);
+      }
     } catch (std::logic_error ex) {
       std::cout << ex.what() << "\n";
       continue;

@@ -25,6 +25,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <map>
 #include <optional>
 #include <stdexcept>
@@ -33,6 +34,7 @@
 #include <unistd.h>
 #include <utility>
 #include <variant>
+void rec_print_ast(Symbol root);
 Symbol get_ast(std::vector<std::string> tokens);
 std::vector<std::string> get_tokens(std::string stream);
 std::string rewind_read_file(std::string filename);
@@ -51,8 +53,99 @@ std::vector<std::map<std::string, std::string>> environment_variables;
 // an integer anyway.
 using ints = std::variant<long long int, long long unsigned int>;
 
-ints get_int(is_integer auto n) { return n; }
-ints get_int(auto n) { return 0; }
+ints get_int(_Type n) {
+  return std::visit(
+      []<class T>(T t) -> ints {
+        if constexpr (std::is_same_v<T, long long unsigned int> ||
+                      std::is_same_v<T, long long signed int>)
+          return t;
+        return 0;
+      },
+      n);
+}
+
+static const Symbol match_any = Symbol("", "_", Type::Identifier);
+static const Symbol match_eq = Symbol("", "=", Type::Operator);
+static const Symbol match_neq = Symbol("", "!=", Type::Operator);
+static const Symbol match_in_list = Symbol("", "in", Type::Operator);
+
+static Symbol match_less_than =
+    Symbol("",
+           std::list<Symbol>{Symbol("", "<", Type::Operator),
+                             Symbol("", "x", Type::Identifier)},
+           Type::List);
+static const Symbol match_less_than_capture =
+    Symbol("",
+           std::list<Symbol>{Symbol("", "a", Type::Identifier),
+                             Symbol("", "<", Type::Operator),
+                             Symbol("", "b", Type::Identifier)},
+           Type::List);
+bool compare_list_structure(Symbol l, Symbol r) {
+  if (l.type != Type::List)
+    throw std::logic_error{"First operand to 'compare_list_structure' "
+                           "(internal function) is not a list!\n"};
+  if (r.type != Type::List)
+    throw std::logic_error{"Second operand to 'compare_list_structure' "
+                           "(internal function) is not a list!\n"};
+  auto ll = std::get<std::list<Symbol>>(l.value);
+  auto rl = std::get<std::list<Symbol>>(r.value);
+  if (ll.size() != rl.size())
+    return false;
+  if (ll.empty())
+    return true;
+  // Zip the two lists together and then iterate on the result
+  std::list<std::pair<Symbol, Symbol>> zipped;
+  std::transform(
+      ll.begin(), ll.end(), rl.begin(), std::back_inserter(zipped),
+      [](const Symbol &lle, const Symbol &rle) -> std::pair<Symbol, Symbol> {
+        return std::make_pair(lle, rle);
+      });
+  bool is_structure_equal = true;
+  for (auto p : zipped) {
+    if (p.first.type == Type::List) {
+      if (p.second.type == Type::List) {
+        is_structure_equal =
+            is_structure_equal && compare_list_structure(p.first, p.second);
+      } else
+        return false;
+    }
+    if (p.second.type == Type::List) {
+      return false;
+    }
+  }
+  return is_structure_equal;
+}
+
+bool weak_compare(Symbol fst, Symbol other) {
+  if (fst == other)
+    return true;
+  if (fst.type == Type::Identifier)
+    return true;
+  if (other.type == Type::Identifier)
+    return true;
+  if (fst.type == other.type) {
+    if (fst.type == Type::List) {
+      bool is_same_pattern = true;
+      auto ll = std::get<std::list<Symbol>>(fst.value);
+      auto otherl = std::get<std::list<Symbol>>(other.value);
+      if (ll.size() != otherl.size()) return false;
+      std::list<std::pair<Symbol, Symbol>> zipped;
+      std::transform(
+          ll.begin(), ll.end(), otherl.begin(), std::back_inserter(zipped),
+          [](const Symbol &l, const Symbol &r) -> std::pair<Symbol, Symbol> {
+            return std::make_pair(l, r);
+          });
+      for (auto [l, r] : zipped) {
+        is_same_pattern = is_same_pattern &&
+                          ((l.type == r.type) || (l.type == Type::Identifier) ||
+                           (r.type == Type::Identifier));
+      }
+      return is_same_pattern;
+    } else
+      return true;
+  }
+  return false;
+}
 
 // forward declaration so i can use it in the next function definition
 std::optional<std::string>
@@ -243,8 +336,8 @@ std::map<std::string, Functor> procedures = {
      }}},
     {"set", {[](std::list<Symbol> args) -> Symbol {
        if (args.size() != 2)
-         throw std::logic_error{
-             "The 'set' builtin command expects precisely two arguments!\n"};
+         throw std::logic_error{"The 'set' builtin command expects "
+                                "precisely two arguments!\n"};
        std::string var = std::get<std::string>(args.front().value);
        std::string val = std::get<std::string>(args.back().value);
        return Symbol("", setenv(var.c_str(), val.c_str(), 1), Type::Number);
@@ -568,11 +661,11 @@ std::map<std::string, Functor> procedures = {
            user_defined_procedures[user_defined_procedures.size() - 1]
                .insert_or_assign(name, std::make_pair(arguments, stmts));
          }
-         // return the name of the lambda. this is used to assign the name of
-         // the
-         // "anonymous" (user-side) function to something that can be called by
-         // the interpreter when the user calls a parameter that represents a
-         // lambda. i really hope this makes sense to you as it does to me
+         // return the name of the lambda. this is used to assign the name
+         // of the "anonymous" (user-side) function to something that can
+         // be called by the interpreter when the user calls a parameter
+         // that represents a lambda. i really hope this makes sense to you
+         // as it does to me
          return Symbol("", name, Type::Identifier);
        }
        if (args.size() > 2) {
@@ -625,8 +718,8 @@ std::map<std::string, Functor> procedures = {
        // the arguments are a sequence of lists of the form:
        // (<clause> <consequent>). Only no <clause>s can match, or
        // one does, and if this happens, the corresponding <consequent>
-       // gets executed. The 'else' clause is a catch-all, and its <consequent>
-       // is always executed.
+       // gets executed. The 'else' clause is a catch-all, and its
+       // <consequent> is always executed.
        Symbol result;
        for (auto e : args) {
          if (e.type != Type::List) {
@@ -649,6 +742,88 @@ std::map<std::string, Functor> procedures = {
          }
        }
        return Symbol("", std::list<Symbol>(), Type::List);
+     }}},
+    {"match", {[](std::list<Symbol> args, path PATH) -> Symbol {
+       if (args.size() < 2) {
+         throw std::logic_error{
+             "The 'match' procedure expects at least two arguments!\n"};
+       }
+       Symbol element = eval(args.front(), PATH);
+       args.pop_front();
+       static std::array<Symbol, 5> valid_patterns;
+       if (element.type == Type::Number) {
+         valid_patterns = {
+             match_any,
+             Symbol("",
+                    std::list<Symbol>{match_less_than,
+                                      Symbol("", "x", Type::Identifier)},
+                    Type::List),
+             Symbol(
+                 "",
+                 std::list<Symbol>{match_in_list,
+                                   Symbol("", std::list<Symbol>{}, Type::List)},
+                 Type::List),
+             Symbol(
+                 "",
+                 std::list<Symbol>{match_eq, Symbol("", "x", Type::Identifier)},
+                 Type::List),
+             Symbol("",
+                    std::list<Symbol>{match_neq,
+                                      Symbol("", "x", Type::Identifier)},
+                    Type::List)};
+       }
+       for (auto branch : args) {
+         if (branch.type != Type::List) {
+           throw std::logic_error{"Invalid argument to 'match' after the "
+                                  "first value. Expected a list!\n"};
+         }
+         auto branchl = std::get<std::list<Symbol>>(branch.value);
+         if (branchl.empty()) {
+           throw std::logic_error{"Invalid empty branch in 'match'!\n"};
+         }
+         Symbol pattern = branchl.front();
+         branchl.pop_front();
+         if (match_any == pattern) {
+           Symbol result;
+           for (auto expr : branchl) {
+             result = eval(expr, PATH);
+           }
+           return result;
+         } else if (weak_compare(match_less_than, pattern)) {
+           Symbol value = std::get<std::list<Symbol>>(pattern.value).back();
+           if (element.type != Type::Number) {
+             throw std::logic_error{"Type mismatch in a 'match' block! "
+                                    "Expected an integer in a condition!\n"};
+           }
+           if (value.type != Type::Number) {
+             throw std::logic_error{"Type mismatch in a 'match' block! "
+                                    "Expected an integer in a pattern!\n"};
+           }
+           if (get_int(element.value) < get_int(value.value)) {
+             Symbol result;
+             for (auto expr : branchl) {
+               result = eval(expr, PATH);
+             }
+             return result;
+           }
+         } else if (weak_compare(match_less_than_capture, pattern)) {
+           std::list<Symbol> expr = std::get<std::list<Symbol>>(pattern.value);
+           Symbol value = expr.back();
+           expr.pop_back();
+           Symbol id = expr.back();
+           variables.push_back(std::map<std::string, Symbol>{});
+           variables[variables.size() - 1].insert_or_assign(
+               std::get<std::string>(id.value), element);
+           if (get_int(element.value) < get_int(value.value)) {
+             Symbol result;
+             for (auto expr : branchl) {
+               result = eval(expr, PATH);
+             }
+             return result;
+           }
+         }
+       }
+       return Symbol("", false, Type::Boolean);
      }}},
     {"$", {[](std::list<Symbol> args) -> Symbol {
        if (args.size() != 1) {
@@ -700,23 +875,6 @@ std::map<std::string, Functor> procedures = {
        }
        str = str.substr(0, str.size() - 1);
        return Symbol(args.front().name, str, args.front().type);
-     }}},
-    {"nostr", {[](std::list<Symbol> args) -> Symbol {
-       if ((args.size() != 1) ||
-           !std::holds_alternative<std::string>(args.front().value)) {
-         throw std::logic_error{
-             "'nostr' expects a single string literal to try and convert to a "
-             "bareword!\n"};
-       }
-       const auto is_strlit = [](const std::string &s) -> bool {
-         return (s.size() > 1) && (s[0] == '"') && (s[s.length() - 1] == '"');
-       };
-       auto s = std::get<std::string>(args.front().value);
-       if (is_strlit(std::get<std::string>(args.front().value))) {
-         s = s.substr(1, s.length() - 2);
-       }
-       args.front().value = s;
-       return args.front();
      }}},
     {"cmd", {[](std::list<Symbol> args) -> Symbol {
        if (args.size() != 1) {
@@ -861,4 +1019,5 @@ std::map<std::string, Functor> procedures = {
        return last_evaluated;
      }}}};
 
-std::array<std::string, 6> special_forms = {"->", "let", "if", "$", "cond"};
+std::array<std::string, 6> special_forms = {"->", "let",  "if",
+                                            "$",  "cond", "match"};
