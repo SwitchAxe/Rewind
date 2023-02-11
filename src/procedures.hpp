@@ -30,6 +30,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <sys/wait.h>
 #include <type_traits>
 #include <unistd.h>
 #include <utility>
@@ -430,6 +431,162 @@ std::map<std::string, Functor> procedures = {
        std::cout << contents;
        std::cout.rdbuf(backup);
        return Symbol("", true, Type::Command);
+     }}},
+    {"<<<", {[](std::list<Symbol> args, path PATH) -> Symbol {
+       // manually pipe, write the string (args[1]) and execute
+       // the program/pipe (args[0]):
+       int fd[2];     // parent write() -> child read()
+       int readfd[2]; // child write () -> parent read()
+       auto ext = std::get<std::list<Symbol>>(args.front().value);
+       args.pop_front();
+       Symbol s;
+       if (args.front().type != Type::String) {
+         s = eval(args.front(), PATH);
+       } else
+         s = args.front();
+       std::string str = std::get<std::string>(s.value);
+       // parse the program call stored in 'ext'
+       if (ext.front() == Symbol("", "->", Type::Operator)) {
+         // pipe
+         ext.pop_front();
+         for (auto &e : ext) {
+           auto progl = std::get<std::list<Symbol>>(e.value);
+           auto lit =
+               std::find_if(progl.begin(), progl.end(), [&](Symbol &s) -> bool {
+                 return std::holds_alternative<std::string>(s.value) &&
+                        get_absolute_path(std::get<std::string>(s.value),
+                                          PATH) != std::nullopt;
+               });
+           std::string prog = std::get<std::string>(lit->value);
+           auto rest = std::list<Symbol>(lit, progl.end());
+           rest.pop_front();
+           auto ext = *lit;
+           get_env_vars(e, PATH);
+           auto abs = get_absolute_path(prog, PATH);
+           if (abs == std::nullopt) {
+             throw std::logic_error{"Unknown executable " + prog + "!\n"};
+           }
+           std::string full_path;
+           if (procedures.contains(prog))
+             full_path = prog;
+           else
+             full_path = *abs;
+           ext.value = full_path;
+           rest.push_front(ext);
+           e.value = rest;
+         }
+         std::reverse(environment_variables.begin(),
+                      environment_variables.end());
+         pipe(fd);
+         pipe(readfd);
+         write(fd[1], str.c_str(), str.size());
+         if (ext.empty()) {
+           throw std::logic_error{
+               "Exception in '<<<' (here-string): Invalid pipe!\n"};
+         }
+         Symbol first = ext.front();
+         ext.pop_front();
+         if (ext.empty()) {
+           close(fd[1]);
+           Symbol status =
+               rewind_call_ext_program(first, PATH, true, readfd[1], fd[0]);
+           while (wait(nullptr) != -1)
+             ;
+           close(readfd[1]);
+           char buf[1024];
+           std::string result;
+           int cnt = 0;
+
+           while ((cnt = read(readfd[0], buf, 1023))) {
+             if (cnt == -1) {
+               throw std::logic_error{"failed read in '<<<'!\n"};
+             }
+             buf[cnt] = '\0';
+             std::string tmp{buf};
+             result += tmp;
+           }
+           close(readfd[0]);
+           close(fd[0]);
+           while (wait(nullptr) != -1)
+             ;
+           return Symbol("", result, Type::String);
+         }
+         close(fd[1]);
+         Symbol status =
+             rewind_call_ext_program(first, PATH, true, readfd[1], fd[0]);
+         Symbol last = ext.back();
+         ext.pop_back();
+         int old_read_end;
+         for (Symbol cmd : ext) {
+           old_read_end = dup(readfd[0]);
+           pipe(readfd);
+           status = rewind_call_ext_program(cmd, PATH, true, readfd[1],
+                                            old_read_end);
+         }
+         old_read_end = dup(readfd[0]);
+         pipe(readfd);
+         status =
+             rewind_call_ext_program(last, PATH, true, readfd[1], old_read_end);
+         close(readfd[1]);
+         close(old_read_end);
+         std::string result;
+         int cnt;
+         char buf[1024];
+         while ((cnt = read(readfd[0], buf, 1023))) {
+           buf[cnt] = '\0';
+           std::string tmp{buf};
+           result += tmp;
+         }
+         while (wait(nullptr) != -1)
+           ;
+         close(fd[0]);
+         return Symbol("", result, Type::String);
+       }
+       // not a pipe
+       pipe(fd);
+       pipe(readfd);
+       write(fd[1], str.c_str(), str.size());
+       auto lit = std::find_if(ext.begin(), ext.end(), [&](Symbol &s) -> bool {
+         bool is_local_executable =
+             std::holds_alternative<std::string>(s.value) &&
+             (std::get<std::string>(s.value).substr(0, 2) == "./");
+         bool is_in_path = std::holds_alternative<std::string>(s.value) &&
+                           get_absolute_path(std::get<std::string>(s.value),
+                                             PATH) != std::nullopt;
+         return is_local_executable || is_in_path;
+       });
+       if (lit == ext.end()) {
+         throw std::logic_error{"Unknown executable!\n"};
+       }
+       get_env_vars(Symbol("", ext, Type::List), PATH);
+       auto rest = std::list<Symbol>(lit, ext.end());
+       close(fd[1]);
+       rest.pop_front();
+       Symbol prog = Symbol(
+           "", *get_absolute_path(std::get<std::string>(lit->value), PATH),
+           Type::Identifier);
+       rest.push_front(prog);
+       Symbol status = rewind_call_ext_program(Symbol("", rest, Type::List),
+                                               PATH, true, readfd[1], fd[0]);
+       while (wait(nullptr) != -1)
+         ;
+       close(readfd[1]);
+       std::string result;
+       int cnt;
+       char buf[1024];
+       while ((cnt = read(readfd[0], buf, 1023))) {
+         if (cnt == -1) {
+           throw std::logic_error{"Read failed in '<<<' (here-string!)\n"};
+         }
+         buf[cnt] = '\0';
+         std::string tmp{buf};
+         result += tmp;
+       }
+       close(readfd[0]);
+       close(fd[0]);
+       while (wait(nullptr) != -1)
+         ;
+       return Symbol("", result, Type::String);
      }}},
     {"+", {[](std::list<Symbol> args) -> Symbol {
        int r = 0;
@@ -1003,5 +1160,5 @@ std::map<std::string, Functor> procedures = {
        return last_evaluated;
      }}}};
 
-std::array<std::string, 6> special_forms = {"->", "let",  "if",
-                                            "$",  "cond", "match"};
+std::array<std::string, 7> special_forms = {"->",   "let",   "if", "$",
+                                            "cond", "match", "<<<"};
