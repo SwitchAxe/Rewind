@@ -58,17 +58,32 @@ ints get_int(_Type n) {
   return std::visit(
       []<class T>(T t) -> ints {
         if constexpr (std::is_same_v<T, long long unsigned int> ||
-                      std::is_same_v<T, long long signed int>)
+                      std::is_same_v<T, long long signed int>) {
           return t;
+        }
         return 0;
       },
       n);
 }
 
 static const Symbol match_any = Symbol("", "_", Type::Identifier);
-static const Symbol match_eq = Symbol("", "=", Type::Operator);
-static const Symbol match_neq = Symbol("", "!=", Type::Operator);
-static const Symbol match_in_list = Symbol("", "in", Type::Operator);
+static const Symbol match_eq =
+    Symbol("",
+           std::list<Symbol>{Symbol("", "=", Type::Operator),
+                             Symbol("", "x", Type::Identifier)},
+           Type::List);
+
+static const Symbol match_neq =
+    Symbol("",
+           std::list<Symbol>{Symbol("", "!=", Type::Operator),
+                             Symbol("", "x", Type::Identifier)},
+           Type::List);
+
+static const Symbol match_in_list =
+    Symbol("",
+           std::list<Symbol>{Symbol("", "in", Type::Operator),
+                             Symbol("", "l", Type::Identifier)},
+           Type::List);
 
 static Symbol match_less_than =
     Symbol("",
@@ -77,10 +92,32 @@ static Symbol match_less_than =
            Type::List);
 static const Symbol match_less_than_capture =
     Symbol("",
-           std::list<Symbol>{Symbol("", "a", Type::Identifier),
-                             Symbol("", "<", Type::Operator),
+           std::list<Symbol>{Symbol("", "<", Type::Operator),
+                             Symbol("", "a", Type::Identifier),
                              Symbol("", "b", Type::Identifier)},
            Type::List);
+
+static const Symbol match_eq_capture =
+    Symbol("",
+           std::list<Symbol>{Symbol("", "=", Type::Operator),
+                             Symbol("", "a", Type::Identifier),
+                             Symbol("", "x", Type::Identifier)},
+           Type::List);
+
+static const Symbol match_neq_capture =
+    Symbol("",
+           std::list<Symbol>{Symbol("", "!=", Type::Identifier),
+                             Symbol("", "a", Type::Operator),
+                             Symbol("", "x", Type::Identifier)},
+           Type::List);
+
+static const Symbol match_in_list_capture =
+    Symbol("",
+           std::list<Symbol>{Symbol("", "a", Type::Identifier),
+                             Symbol("", "in", Type::Operator),
+                             Symbol("", "x", Type::Identifier)},
+           Type::List);
+
 bool compare_list_structure(Symbol l, Symbol r) {
   if (l.type != Type::List)
     throw std::logic_error{"First operand to 'compare_list_structure' "
@@ -138,9 +175,12 @@ bool weak_compare(Symbol fst, Symbol other) {
             return std::make_pair(l, r);
           });
       for (auto [l, r] : zipped) {
-        is_same_pattern = is_same_pattern &&
-                          ((l.type == r.type) || (l.type == Type::Identifier) ||
-                           (r.type == Type::Identifier));
+        if (l.type == Type::Operator)
+          is_same_pattern = is_same_pattern && (l.value == r.value);
+        else
+          is_same_pattern = is_same_pattern && ((l.type == r.type) ||
+                                                (l.type == Type::Identifier) ||
+                                                (r.type == Type::Identifier));
       }
       return is_same_pattern;
     } else
@@ -891,27 +931,9 @@ std::map<std::string, Functor> procedures = {
        }
        Symbol element = eval(args.front(), PATH);
        args.pop_front();
-       static std::array<Symbol, 5> valid_patterns;
        if (element.type == Type::Number) {
-         valid_patterns = {
-             match_any,
-             Symbol("",
-                    std::list<Symbol>{match_less_than,
-                                      Symbol("", "x", Type::Identifier)},
-                    Type::List),
-             Symbol(
-                 "",
-                 std::list<Symbol>{match_in_list,
-                                   Symbol("", std::list<Symbol>{}, Type::List)},
-                 Type::List),
-             Symbol(
-                 "",
-                 std::list<Symbol>{match_eq, Symbol("", "x", Type::Identifier)},
-                 Type::List),
-             Symbol("",
-                    std::list<Symbol>{match_neq,
-                                      Symbol("", "x", Type::Identifier)},
-                    Type::List)};
+       }
+       if (element.type == Type::List) {
        }
        for (auto branch : args) {
          if (branch.type != Type::List) {
@@ -937,8 +959,11 @@ std::map<std::string, Functor> procedures = {
                                     "Expected an integer in a condition!\n"};
            }
            if (value.type != Type::Number) {
-             throw std::logic_error{"Type mismatch in a 'match' block! "
-                                    "Expected an integer in a pattern!\n"};
+             if (value.type == Type::List) {
+               value = eval(value, PATH);
+             } else
+               throw std::logic_error{"Type mismatch in a 'match' block! "
+                                      "Expected an integer in a pattern!\n"};
            }
            if (get_int(element.value) < get_int(value.value)) {
              Symbol result;
@@ -950,12 +975,69 @@ std::map<std::string, Functor> procedures = {
          } else if (weak_compare(match_less_than_capture, pattern)) {
            std::list<Symbol> expr = std::get<std::list<Symbol>>(pattern.value);
            Symbol value = expr.back();
+           if (element.type != Type::Number) {
+             throw std::logic_error{"Type mismatch in a 'match' block! "
+                                    "Expected an integer in a condition!\n"};
+           }
+           if (value.type != Type::Number) {
+             if (value.type == Type::List) {
+               value = eval(value, PATH);
+             } else
+               throw std::logic_error{"Type mismatch in a 'match' block! "
+                                      "Expected an integer in a pattern!\n"};
+           }
            expr.pop_back();
            Symbol id = expr.back();
            variables.push_back(std::map<std::string, Symbol>{});
            variables[variables.size() - 1].insert_or_assign(
                std::get<std::string>(id.value), element);
            if (get_int(element.value) < get_int(value.value)) {
+             Symbol result;
+             for (auto expr : branchl) {
+               result = eval(expr, PATH);
+             }
+             return result;
+           }
+         } else if (weak_compare(match_eq, pattern)) {
+           Symbol value = std::get<std::list<Symbol>>(pattern.value).back();
+           if (element.type != Type::Number) {
+             throw std::logic_error{"Type mismatch in a 'match' block! "
+                                    "Expected an integer in a condition!\n"};
+           }
+           if (value.type != Type::Number) {
+             if (value.type == Type::List) {
+               value = eval(value, PATH);
+             } else
+               throw std::logic_error{"Type mismatch in a 'match' block! "
+                                      "Expected an integer in a pattern!\n"};
+           }
+           if (get_int(element.value) == get_int(value.value)) {
+             Symbol result;
+             for (auto expr : branchl) {
+               result = eval(expr, PATH);
+             }
+             return result;
+           }
+         } else if (weak_compare(match_eq_capture, pattern)) {
+           auto expr = std::get<std::list<Symbol>>(pattern.value);
+           auto value = expr.back();
+           if (element.type != Type::Number) {
+             throw std::logic_error{"Type mismatch in a 'match' block! "
+                                    "Expected an integer in a condition!\n"};
+           }
+           if (value.type != Type::Number) {
+             if (value.type == Type::List) {
+               value = eval(value, PATH);
+             } else
+               throw std::logic_error{"Type mismatch in a 'match' block! "
+                                      "Expected an integer in a pattern!\n"};
+           }
+           expr.pop_back();
+           auto id = expr.back();
+           variables.push_back(std::map<std::string, Symbol>{});
+           variables[variables.size() - 1].insert_or_assign(
+               std::get<std::string>(id.value), element);
+           if (get_int(element.value) == get_int(value.value)) {
              Symbol result;
              for (auto expr : branchl) {
                result = eval(expr, PATH);
