@@ -113,9 +113,9 @@ static const Symbol match_neq_capture =
 
 static const Symbol match_in_list_capture =
     Symbol("",
-           std::list<Symbol>{Symbol("", "a", Type::Identifier),
-                             Symbol("", "in", Type::Operator),
-                             Symbol("", "x", Type::Identifier)},
+           std::list<Symbol>{Symbol("", "in", Type::Identifier),
+                             Symbol("", "a", Type::Operator),
+                             Symbol("", "l", Type::Identifier)},
            Type::List);
 
 bool compare_list_structure(Symbol l, Symbol r) {
@@ -171,16 +171,24 @@ bool weak_compare(Symbol fst, Symbol other) {
       std::list<std::pair<Symbol, Symbol>> zipped;
       std::transform(
           ll.begin(), ll.end(), otherl.begin(), std::back_inserter(zipped),
-          [](const Symbol &l, const Symbol &r) -> std::pair<Symbol, Symbol> {
+          [](const Symbol l, const Symbol r) -> std::pair<Symbol, Symbol> {
             return std::make_pair(l, r);
           });
       for (auto [l, r] : zipped) {
-        if (l.type == Type::Operator)
-          is_same_pattern = is_same_pattern && (l.value == r.value);
-        else
-          is_same_pattern = is_same_pattern && ((l.type == r.type) ||
-                                                (l.type == Type::Identifier) ||
-                                                (r.type == Type::Identifier));
+        // special case for the 'in' token, which the parser understands as an
+        // identifier, but we want to consider it as an operator.
+        if (std::holds_alternative<std::string>(l.value) &&
+            std::holds_alternative<std::string>(r.value))
+          is_same_pattern =
+              is_same_pattern && (std::get<std::string>(l.value) ==
+                                  std::get<std::string>(r.value));
+        else {
+          is_same_pattern =
+              is_same_pattern &&
+              ((l.type == r.type) || (l.type == Type::Identifier) ||
+               (r.type == Type::Identifier) ||
+               ((l.type == Type::List) && (r.type == Type::List)));
+        }
       }
       return is_same_pattern;
     } else
@@ -1038,6 +1046,30 @@ std::map<std::string, Functor> procedures = {
            variables[variables.size() - 1].insert_or_assign(
                std::get<std::string>(id.value), element);
            if (get_int(element.value) == get_int(value.value)) {
+             Symbol result;
+             for (auto expr : branchl) {
+               result = eval(expr, PATH);
+             }
+             return result;
+           }
+         } else if (weak_compare(match_in_list, pattern)) {
+           if (element.type == Type::List) {
+             throw std::logic_error{
+                 "The pattern matching 'in' operator doesn't accept lists as "
+                 "a matched value!\n"};
+           }
+           auto expr = std::get<std::list<Symbol>>(pattern.value);
+           auto value = expr.back();
+           if (value.type != Type::List) {
+             value = eval(value, PATH);
+             throw std::logic_error{"The second operand to the match 'in' "
+                                    "operator must be a list!\n"};
+           }
+           auto l = std::get<std::list<Symbol>>(value.value);
+           if (std::find_if(l.begin(), l.end(), [&](Symbol s) -> bool {
+                 return (s.type == Type::Number) &&
+                        (get_int(s.value) == get_int(element.value));
+               }) != l.end()) {
              Symbol result;
              for (auto expr : branchl) {
                result = eval(expr, PATH);
