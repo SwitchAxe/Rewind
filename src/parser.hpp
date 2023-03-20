@@ -119,13 +119,14 @@ Symbol get_ast(std::vector<std::string> tokens) {
 // DEBUG PURPOSES ONLY and for printing the final result until i
 // make an iterative version of this thing
 
-void rec_print_ast(Symbol root) {
+std::string rec_print_ast(Symbol root) {
   std::cout << std::boolalpha;
+  std::string res;
   if (root.type == Type::List) {
-    std::cout << "[ ";
+    res += "[ ";
     for (auto s : std::get<std::list<Symbol>>(root.value)) {
       if (s.type == Type::List) {
-        rec_print_ast(s);
+        res += rec_print_ast(s);
       } else {
         std::visit(
             [&]<class T>(T &&v) -> void {
@@ -134,9 +135,9 @@ void rec_print_ast(Symbol root) {
                                                   std::list<Symbol>>) {
               } else if constexpr (std::is_same_v<std::decay_t<T>,
                                                   std::string>) {
-                std::cout << process_escapes(v) << " ";
+                res += process_escapes(v) + " ";
               } else
-                std::cout << v << " ";
+                res += std::to_string(v) + " ";
             },
             s.value);
       }
@@ -148,10 +149,12 @@ void rec_print_ast(Symbol root) {
           if constexpr (std::is_same_v<std::decay_t<T>, std::monostate>) {
           } else if constexpr (std::is_same_v<std::decay_t<T>,
                                               std::list<Symbol>>) {
-          } else {
-            std::cout << v;
-          }
+          } else if constexpr (std::is_same_v<std::decay_t<T>, std::string>) {
+            res += process_escapes(v);
+          } else
+            res += std::to_string(v);
         },
         root.value);
   }
+  return res;
 }

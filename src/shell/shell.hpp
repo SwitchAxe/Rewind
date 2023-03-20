@@ -141,9 +141,9 @@ rewind_readline(std::optional<Symbol> maybe_prompt,
     auto cur = fs::current_path();
     prompt = cur.string() + "> ";
   }
-  char *read_line = readline(prompt.c_str());
-  std::string line{read_line};
-  free(read_line);
+  char *lptr = readline(prompt.c_str());
+  std::string line{lptr};
+  free(lptr);
   return line;
 }
 
@@ -167,10 +167,7 @@ void rewind_sh_loop() {
     try {
       Symbol ast = eval(get_ast(get_tokens(line)), *PATH);
       if ((ast.type != Type::Command) && (ast.type != Type::Defunc)) {
-        rec_print_ast(ast);
-        if (ast.type == Type::CommandResult)
-          std::flush(std::cout);
-        else std::cout << "\n";
+        std::cout << rec_print_ast(ast);
       }
     } catch (std::logic_error ex) {
       std::cout << ex.what() << "\n";

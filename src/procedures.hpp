@@ -35,7 +35,7 @@
 #include <unistd.h>
 #include <utility>
 #include <variant>
-void rec_print_ast(Symbol root);
+std::string rec_print_ast(Symbol root);
 Symbol get_ast(std::vector<std::string> tokens);
 std::vector<std::string> get_tokens(std::string stream);
 std::string rewind_read_file(std::string filename);
@@ -274,12 +274,11 @@ Symbol rewind_redirect_append(Symbol node,
                               const std::vector<std::string> &PATH);
 Symbol rewind_redirect_overwrite(Symbol node,
                                  const std::vector<std::string> &PATH);
-Symbol eval(Symbol root, path PATH);
-void rec_print_ast(Symbol root);
 namespace fs = std::filesystem;
 // just so the compiler doesn't complain about nonexistent PATH
 // later in the 'procedures' map.
-
+Symbol eval(Symbol root, const std::vector<std::string> &PATH);
+;
 std::optional<std::string> get_absolute_path(std::string progn, path &PATH) {
   std::string full_path;
   auto it = PATH.begin();
@@ -1127,7 +1126,7 @@ std::map<std::string, Functor> procedures = {
            continue;
          if (e.type == Type::List)
            e = eval(e, PATH);
-         rec_print_ast(e);
+         std::cout << rec_print_ast(e);
        }
        return Symbol("", false, Type::Command);
      }}},
