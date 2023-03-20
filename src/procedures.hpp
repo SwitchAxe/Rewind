@@ -771,6 +771,42 @@ std::map<std::string, Functor> procedures = {
        }
        return Symbol("", is_true, Type::Boolean);
      }}},
+    {"and", {[](std::list<Symbol> args) -> Symbol {
+       bool is_true = true;
+       for (auto e : args) {
+         if (e.type != Type::Boolean) {
+           throw std::logic_error{"Type mismatch in the 'and' operator: Only "
+                                  "booleans are allowed!\n"};
+         }
+         is_true = is_true && std::get<bool>(e.value);
+       }
+       return Symbol("", is_true, Type::Boolean);
+     }}},
+    {"or", {[](std::list<Symbol> args) -> Symbol {
+       bool is_true = false;
+       for (auto e : args) {
+         if (e.type != Type::Boolean) {
+           throw std::logic_error{"Type mismatch in the 'and' operator: Only "
+                                  "booleans are allowed!\n"};
+         }
+         is_true = is_true || std::get<bool>(e.value);
+       }
+       return Symbol("", is_true, Type::Boolean);
+     }}},
+    {"not", {[](std::list<Symbol> args) -> Symbol {
+       if (args.size() > 1) {
+         throw std::logic_error{
+             "Exception: the 'not' operator only accepts 0 or 1 arguments!\n"};
+       }
+       if (args.empty()) {
+         return Symbol("", false, Type::Boolean);
+       }
+       if (args.front().type != Type::Boolean) {
+         throw std::logic_error{
+             "Exception: the 'not' operator must accept 0 or 1 booleans!\n"};
+       }
+       return Symbol("", !std::get<bool>(args.front().value), Type::Boolean);
+     }}},
     {"s+", {[](std::list<Symbol> args) -> Symbol {
        const auto is_strlit = [](const std::string &s) -> bool {
          return (s.size() > 1) && (s[0] == '"') && (s[s.length() - 1] == '"');
@@ -1240,8 +1276,8 @@ std::map<std::string, Functor> procedures = {
          return Symbol("", std::list<Symbol>{}, Type::List);
        }
        if ((args.front().type != Type::List) || (args.size() > 1)) {
-         throw std::logic_error{
-             "'first' expects a list of which to return the first element!\n"};
+         throw std::logic_error{"'first' expects a list of which to return "
+                                "the first element!\n"};
        }
        auto lst = std::get<std::list<Symbol>>(args.front().value);
        if (lst.empty()) {
@@ -1254,8 +1290,8 @@ std::map<std::string, Functor> procedures = {
          return Symbol("", 0, Type::Number);
        }
        if ((args.front().type != Type::List) || (args.size() > 1)) {
-         throw std::logic_error{
-             "'first' expects a list of which to return the first element!\n"};
+         throw std::logic_error{"'first' expects a list of which to return "
+                                "the first element!\n"};
        }
        auto lst = std::get<std::list<Symbol>>(args.front().value);
        if (lst.empty()) {
