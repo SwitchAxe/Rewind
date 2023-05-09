@@ -19,6 +19,7 @@
 #include "types.hpp"
 #include <algorithm>
 #include <charconv>
+#include <cstdio>
 #include <cstdlib>
 #include <exception>
 #include <fcntl.h>
@@ -27,7 +28,9 @@
 #include <iostream>
 #include <iterator>
 #include <map>
+#include <ncurses/curses.h>
 #include <optional>
+#include <ostream>
 #include <stdexcept>
 #include <string>
 #include <sys/wait.h>
@@ -35,6 +38,9 @@
 #include <unistd.h>
 #include <utility>
 #include <variant>
+#include <stdio.h>
+#include <termios.h>
+#include <string.h>
 std::string rec_print_ast(Symbol root);
 Symbol get_ast(std::vector<std::string> tokens);
 std::vector<std::string> get_tokens(std::string stream);
@@ -332,7 +338,7 @@ bool convert_value_to_bool(Symbol sym) {
   using namespace matchit;
 #define p pattern
   auto is_strlit = [](const std::string &s) -> bool {
-    return !s.empty() && s[0] == '"' && s[s.length() - 1] == '"';
+    return (s.size() > 1) && s[0] == '"' && s[s.length() - 1] == '"';
   };
   using str = std::string;
   using lst = std::list<Symbol>;
@@ -352,7 +358,7 @@ bool convert_value_to_bool(Symbol sym) {
     clause = match(sym.value)(
         p | as<long long int>(i) = [&] { return *i != 0; },
         p | as<long long unsigned int>(u) = [&] { return *i != 0; },
-        p | as<str>(s) = [&] { return (is_strlit(*s) && ((*s).length() > 2)); },
+        p | as<str>(s) = [&] { return !(*s).empty(); },
         p | as<bool>(b) = [&] { return *b; },
         p | as<lst>(l) = [&] { return (!(*l).empty()); });
 #undef p
@@ -732,7 +738,12 @@ std::map<std::string, Functor> procedures = {
            throw std::logic_error{"The '<' operator only accepts integers!\n"};
          }
          // uses (in)equality operator overloads for integer variants
-         is_true = is_true && (get_int(first.value) < get_int(e.value));
+         if ((e.type == first.type) && (e.type == Type::Number)) {
+	   is_true = is_true && std::visit([]<class T, class U> (T t, U u) -> bool {
+	       return std::cmp_equal(t, u);
+	     }, get_int(e.value), get_int(first.value));
+	   continue;
+	 }
          first = e;
        }
        return Symbol("", is_true, Type::Boolean);
@@ -743,9 +754,14 @@ std::map<std::string, Functor> procedures = {
        args.pop_front();
        Symbol lhs;
        for (auto e : args) {
-         if (e.type != prev.type) {
-           throw std::logic_error{
-               "Types of the arguments to '=' don't match!\n"};
+	 if ((e.type == prev.type) && (e.type == Type::Number)) {
+	   is_true = is_true && std::visit([]<class T, class U> (T t, U u) -> bool {
+	       return std::cmp_equal(t, u);
+	     }, get_int(e.value), get_int(prev.value));
+	   continue;
+	 }
+	 if (e.type != prev.type) {
+           return Symbol("", false, Type::Boolean);
          }
          is_true = is_true && (e.value == prev.value);
          prev = e;
@@ -758,9 +774,14 @@ std::map<std::string, Functor> procedures = {
        args.pop_front();
        Symbol lhs;
        for (auto e : args) {
-         if (e.type != prev.type) {
-           throw std::logic_error{
-               "Types of the arguments to '=' don't match!\n"};
+	 if ((e.type == prev.type) && (e.type == Type::Number)) {
+	   is_true = is_true && std::visit([]<class T, class U> (T t, U u) -> bool {
+	       return std::cmp_equal(t, u);
+	     }, get_int(e.value), get_int(prev.value));
+	   continue;
+	 }
+	 if (e.type != prev.type) {
+           return Symbol("", true, Type::Boolean);
          }
          if (e.type == Type::List)
            lhs = eval(e, PATH);
@@ -843,6 +864,19 @@ std::map<std::string, Functor> procedures = {
        }
        return Symbol("", n, Type::Number);
      }}},
+    {"chtoi", {[](std::list<Symbol> args) -> Symbol {
+      if (args.size() != 1) {
+	throw std::logic_error {"Exception in 'chtoi': The function expects a single character!"};
+      }
+      if ((args.front().type != Type::Identifier) && (args.front().type != Type::String)) {
+	throw std::logic_error {"Exception in 'chtoi': The function expects a single character!"};
+      }
+      std::string s = std::get<std::string>(args.front().value);
+      if (s.size() != 1) {
+	throw std::logic_error {"Exception in 'chtoi': The function expects a single character!"};
+      }
+      return Symbol("", static_cast<long long signed int>(s[0]), Type::Number);
+    }}},
     {"stol", {[](std::list<Symbol> args) -> Symbol {
        const auto is_strlit = [](const std::string &s) -> bool {
          return (s.size() > 1) && (s[0] == '"') && (s[s.size() - 1] == '"');
@@ -1156,6 +1190,27 @@ std::map<std::string, Functor> procedures = {
        }
        return (Symbol("", "", Type::String));
      }}},
+    {"defined", {[](std::list<Symbol> args) -> Symbol {
+       if (args.size() != 1) {
+         throw std::logic_error{"the 'defined' boolean procedure expects "
+                                "exactly one name to look up!\n"};
+       }
+       if (args.front().type != Type::Identifier) {
+         throw std::logic_error{
+             "the 'defined' boolean procedure expects an identifier!\n"};
+       }
+       std::string name = std::get<std::string>(args.front().value);
+       if (!user_defined_procedures.empty() &&
+           user_defined_procedures[user_defined_procedures.size() - 1].contains(
+               name)) {
+         return Symbol("", true, Type::Boolean);
+       }
+       if (!variables.empty() &&
+           variables[variables.size() - 1].contains(name)) {
+         return Symbol("", true, Type::Boolean);
+       }
+       return Symbol("", false, Type::Boolean);
+     }}},
     {"print", {[](std::list<Symbol> args, path PATH) -> Symbol {
        for (auto e : args) {
          if (e.type == Type::Defunc)
@@ -1165,6 +1220,77 @@ std::map<std::string, Functor> procedures = {
          std::cout << rec_print_ast(e);
        }
        return Symbol("", false, Type::Command);
+     }}},
+    {"flush", {[](std::list<Symbol> args) -> Symbol {
+      std::flush(std::cout);
+      return Symbol("", false, Type::Command);
+    }}},
+    {"read", {[](std::list<Symbol> args) -> Symbol {
+       if (args.size() > 1) {
+         throw std::logic_error{
+             "The 'read' utility expects zero or more identifiers!\n"};
+       }
+       signed long long int s = 0;
+       unsigned long long int us = 0;
+       Symbol ret;
+       std::string in;
+       std::getline(std::cin, in);
+       if ((in == "true") || (in == "false")) {
+         ret.type = Type::Boolean;
+         ret.value = (in == "true") ? true : false;
+         ret.name = "";
+       } else if (auto [ptr, ec] =
+                      std::from_chars(in.data(), in.data() + in.size(), s);
+                  ec == std::errc()) {
+         ret.value = s;
+         ret.type = Type::Number;
+         ret.name = "";
+       } else if (auto [ptr, ec] =
+                      std::from_chars(in.data(), in.data() + in.size(), us);
+                  ec == std::errc()) {
+         ret.value = us;
+         ret.type = Type::Number;
+         ret.name = "";
+       } else {
+         ret.type = Type::String;
+         ret.value = in;
+         ret.name = "";
+       }
+       if (args.empty()) {
+         return ret;
+       }
+       if (variables.empty()) {
+         throw std::logic_error{"Exception in 'read'! I tried to read into a "
+                                "variable while having no defined names.\n"};
+       }
+       if (!variables[variables.size() - 1].contains(in)) {
+         throw std::logic_error{"Exception in 'read'! I tried to read into a "
+                                "variable that doesn't exist.\n"};
+       }
+       variables[variables.size() - 1].insert_or_assign(in, ret);
+       return ret;
+     }}},
+    {"readch", {[](std::list<Symbol> args) -> Symbol {
+      // save the terminal settings for restoring them later on
+      termios original;
+      tcgetattr(STDIN_FILENO, &original);
+      // enable some sort of "pseudo raw" mode where characters are
+      // available immediately, without modifying anything else
+      termios mycfg;
+      memcpy(&mycfg, &original, sizeof(termios));
+      mycfg.c_lflag &= ~ICANON;
+      mycfg.c_lflag &= ~ECHO;
+      mycfg.c_cc[VMIN] = 1;
+      tcsetattr(STDIN_FILENO, TCSANOW, &mycfg);
+      // read the character
+      int ch;
+      int tmp[1];
+      read(STDIN_FILENO, tmp, 1);
+      ch = tmp[0];
+      // restore the normal terminal mode
+      tcsetattr(STDIN_FILENO, TCSANOW, &original);
+      auto ret = Symbol("", std::string{static_cast<char>(ch)}, Type::String);
+      return ret;
      }}},
     {"strip", {[](std::list<Symbol> args) -> Symbol {
        const auto is_strlit = [](const std::string &s) -> bool {
@@ -1333,6 +1459,30 @@ std::map<std::string, Functor> procedures = {
            }
          }
        }
+       return last_evaluated;
+     }}},
+    {"eval", {[](std::list<Symbol> args, path PATH) -> Symbol {
+       if ((args.size() != 1) || (args.front().type != Type::String)) {
+         throw std::logic_error{
+             "'eval' expects exactly one string to evaluate!\n"};
+       }
+       std::vector<std::string> expr_list =
+           rewind_split_file(std::get<std::string>(args.front().value));
+       Symbol last_evaluated;
+       std::string line = std::get<std::string>(args.front().value);
+         if ((line == "exit") || (line == "(exit)")) {
+	   exit(EXIT_SUCCESS);
+	   return Symbol("", false, Type::Command);
+         }
+         try {
+           Symbol ast = get_ast(get_tokens(line));
+           last_evaluated = eval(ast, PATH);
+           if ((last_evaluated.type != Type::Command) &&
+               (last_evaluated.type != Type::CommandResult))
+             rec_print_ast(last_evaluated);
+         } catch (std::logic_error ex) {
+           std::cout << "Rewind: Exception in 'eval', " << ex.what() << "\n";
+         }
        return last_evaluated;
      }}}};
 

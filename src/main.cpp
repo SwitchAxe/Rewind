@@ -42,14 +42,14 @@ int main(int argc, char **argv) {
     // Rewind will execute the single expression taken as input, and then exit.
     if (PATH != std::nullopt) {
       try {
-        rec_print_ast(eval(get_ast(get_tokens(std::string{argv[2]})), *PATH));
+	std::cout << rec_print_ast(eval(get_ast(get_tokens(std::string{argv[2]})), *PATH));
       } catch (std::exception e) {
         std::cout << "Exception: " << e.what() << "\n";
       }
       return 0;
     }
     try {
-      rec_print_ast(eval(get_ast(get_tokens(std::string{argv[2]})), {}));
+      std::cout << rec_print_ast(eval(get_ast(get_tokens(std::string{argv[2]})), {}));
     } catch (std::exception e) {
       std::cout << "Exception: " << e.what() << "\n";
     }
@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
       for (auto s : expr_list) {
         Symbol ast = eval(get_ast(get_tokens(s)), *PATH);
         if ((ast.type != Type::Command) && (ast.type != Type::Defunc)) {
-          rec_print_ast(ast);
+	  std::cout << rec_print_ast(ast);
           if (ast.type == Type::CommandResult)
             std::flush(std::cout);
           else
@@ -90,7 +90,7 @@ int main(int argc, char **argv) {
       for (auto s : expr_list) {
         Symbol ast = eval(get_ast(get_tokens(s)), {});
         if ((ast.type != Type::Command) && (ast.type != Type::Defunc)) {
-          rec_print_ast(ast);
+	  std::cout << rec_print_ast(ast);
           if (ast.type == Type::CommandResult)
             std::flush(std::cout);
           else
@@ -105,18 +105,20 @@ int main(int argc, char **argv) {
     std::string expr = rewind_read_file(filename);
     std::vector<std::string> expr_list = rewind_split_file(expr);
     if (PATH != std::nullopt) {
+      rewind_read_config(*PATH);
       for (auto s : expr_list) {
         Symbol ast = eval(get_ast(get_tokens(s)), *PATH);
         if ((ast.type != Type::Command) && (ast.type != Type::Defunc)) {
-          rec_print_ast(ast);
+	  std::cout << rec_print_ast(ast);
           std::cout << "\n";
         }
       }
     } else {
+      rewind_read_config({});
       for (auto s : expr_list) {
         Symbol ast = eval(get_ast(get_tokens(s)), {});
         if ((ast.type != Type::Command) && (ast.type != Type::Defunc)) {
-          rec_print_ast(ast);
+	  std::cout << rec_print_ast(ast);
           std::cout << "\n";
         }
       }

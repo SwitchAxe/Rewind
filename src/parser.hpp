@@ -144,7 +144,7 @@ std::string rec_print_ast(Symbol root) {
             s.value);
       }
     }
-    std::cout << "]";
+    res += "]";
   } else {
     std::visit(
         [&]<class T>(T &&v) -> void {
