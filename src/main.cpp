@@ -107,7 +107,7 @@ int main(int argc, char **argv) {
     if (PATH != std::nullopt) {
       rewind_read_config(*PATH);
       for (auto s : expr_list) {
-        Symbol ast = eval(get_ast(get_tokens(s)), *PATH);
+	Symbol ast = eval(get_ast(get_tokens(s)), *PATH);
         if ((ast.type != Type::Command) && (ast.type != Type::Defunc)) {
 	  std::cout << rec_print_ast(ast);
           std::cout << "\n";

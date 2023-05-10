@@ -50,7 +50,7 @@ Symbol eval_function(Symbol node, const std::vector<std::string> &PATH) {
   size_t paramls = paraml.size();
   for (int i = 0; i < paramls; ++i) {
     frame.insert_or_assign(std::get<std::string>(paraml.front().value),
-                           argl.front());
+                           eval(argl.front(), PATH));
     paraml.pop_front();
     argl.pop_front();
   }

@@ -1,0 +1,29 @@
+#pragma once
+#include "types.hpp"
+#include <map>
+struct TrampolineResult {
+  Symbol result;
+};
+
+struct Bounce {
+  
+};
+
+struct Trampoline {
+  Trampoline(Symbol s, std::map<std::string, Symbol> fr) : expr(s), frame(fr) {}
+
+  void bounce() {
+    while (true) {
+      
+    }
+  }
+
+  void bounce_expr() {
+    // repeatedly executes statements in expr until the final result
+    // is provided
+    
+  }
+  // piece of code to be recursively evaluated, like functions
+  Symbol expr;
+  std::map<std::string, Symbol> frame;
+};

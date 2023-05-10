@@ -15,5 +15,6 @@
 (let re_color_lcyan "\e[1;36m")
 (let re_color_white "\e[1;37m")
 (let re_color_blank "\e[0m")
+(let re_color_attr_bold "\e[1m")
 
 

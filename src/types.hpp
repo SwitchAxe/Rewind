@@ -30,6 +30,7 @@ enum Type {
   Identifier,
   Command,
   CommandResult,
+  Error,
 };
 struct Symbol;
 

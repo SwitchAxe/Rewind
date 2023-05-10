@@ -43,7 +43,17 @@ std::vector<std::string> rewind_split_file(std::string content) {
   int bracket_balance = 0;
   std::vector<std::string> ret;
   std::string temp;
+  bool in_string = false;
   for (int i = 0; i < content.size(); ++i) {
+    if (content[i] == '"') {
+      temp += '"';
+      in_string = !in_string;
+      continue;
+    }
+    if (in_string) {
+      temp += content[i];
+      continue;
+    }
     if ((content[i] == '(') || (content[i] == '[')) {
       bracket_balance++;
       temp += content[i];
