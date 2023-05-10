@@ -48,18 +48,103 @@ Symbol eval_function(Symbol node, const std::vector<std::string> &PATH) {
   }
   std::map<std::string, Symbol> frame = {};
   size_t paramls = paraml.size();
-  for (int i = 0; i < paramls; ++i) {
-    frame.insert_or_assign(std::get<std::string>(paraml.front().value),
-                           eval(argl.front(), PATH));
-    paraml.pop_front();
-    argl.pop_front();
+  std::list<std::pair<Symbol, Symbol>> zipped;
+  std::transform(
+      paraml.begin(), paraml.end(), argl.begin(), std::back_inserter(zipped),
+      [](const Symbol &lhs, const Symbol &rhs) -> std::pair<Symbol, Symbol> {
+        return std::make_pair(lhs, rhs);
+      });
+  for (auto p : zipped) {
+    frame.insert_or_assign(std::get<std::string>(p.first.value),
+                           eval(p.second, PATH));
   }
-  call_stack.push_back(std::make_pair(op, frame));
-  for (auto e : std::get<std::list<Symbol>>(body.value)) {
+  if (!call_stack.empty() && (call_stack[call_stack.size() - 1].first == op))
+    ;
+  else
+    call_stack.push_back(std::make_pair(op, frame));
+  std::list<Symbol> body_list = std::get<std::list<Symbol>>(body.value);
+  Symbol last = body_list.back();
+  body_list.pop_back();
+  for (auto e : body_list) {
     result = eval(e, PATH);
   }
+  if (std::holds_alternative<std::list<Symbol>>(last.value)) {
+    std::list<Symbol> last_expr = std::get<std::list<Symbol>>(last.value);
+    if (!last_expr.empty()) {
+      Symbol fst_elem = last_expr.front();
+      if (std::holds_alternative<std::string>(fst_elem.value)) {
+        std::string name = std::get<std::string>(fst_elem.value);
+        if (name == op) {
+          last.type = Type::Funcall;
+          last_expr.pop_front();
+          zipped = {};
+	  if (paraml.size() != last_expr.size()) {
+	    throw std::logic_error{"Wrong amount of arguments to procedure " + op +
+				   "!\n"};
+	  }
+          std::transform(paraml.begin(), paraml.end(), last_expr.begin(),
+                         std::back_inserter(zipped),
+                         [](const Symbol &lhs,
+                            const Symbol &rhs) -> std::pair<Symbol, Symbol> {
+                           return std::make_pair(lhs, rhs);
+                         });
+          frame = {};
+          for (auto p : zipped) {
+            frame.insert_or_assign(std::get<std::string>(p.first.value),
+                                   eval(p.second, PATH));
+          }
+          call_stack.pop_back();
+          call_stack.push_back(std::make_pair(op, frame));
+          return last;
+        } else if ((name == "cond") || (name == "if")) {
+          last_expr.pop_front();
+          Symbol branch;
+	  if (name == "if")
+	    branch = procedures["if"](last_expr, PATH);
+	  else branch = procedures["cond"](last_expr, PATH);
+	  if (branch.type != Type::List) {
+            return eval(branch, PATH);
+          }
+          std::list<Symbol> lst = std::get<std::list<Symbol>>(branch.value);
+          Symbol fst = lst.front();
+          if (fst.type != Type::Identifier) {
+            return eval(branch, PATH);
+          }
+          std::string opname = std::get<std::string>(fst.value);
+          if (opname == op) {
+	    last = branch;
+	    last_expr = lst;
+	    last.type = Type::Funcall;
+            last_expr.pop_front();
+            zipped = {};
+	    if (last_expr.size() != paraml.size()) {
+	      throw std::logic_error{"Wrong amount of arguments to procedure " + op +
+				     "!\n"};
+	    }
+            std::transform(paraml.begin(), paraml.end(), last_expr.begin(),
+                           std::back_inserter(zipped),
+                           [](const Symbol &lhs,
+                              const Symbol &rhs) -> std::pair<Symbol, Symbol> {
+                             return std::make_pair(lhs, rhs);
+                           });
+            frame = {};
+            for (auto p : zipped) {
+              frame.insert_or_assign(std::get<std::string>(p.first.value),
+                                     eval(p.second, PATH));
+            }
+            call_stack.pop_back();
+            call_stack.push_back(std::make_pair(op, frame));
+            return last;
+          } else result = eval(last, PATH);
+        } else result = eval(last, PATH);
+      } else
+        result = last;
+    } else
+      result = last;
+  } else
+    result = last;
   call_stack.pop_back();
-  return Symbol("", result.value, result.type);
+  return result;
 }
 
 // to use with nodes with only leaf children.
@@ -163,6 +248,16 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH) {
             Symbol(current_node.name, leaves[leaves.size() - 1], Type::List);
         result = eval_primitive_node(eval_temp_arg, PATH);
         leaves.pop_back();
+        // main trampoline
+
+        if (result.type == Type::Funcall) {
+          while (result.type == Type::Funcall) {
+            result = eval_function(result, PATH);
+          }
+          if (!call_stack.empty()) {
+            call_stack.pop_back();
+          }
+        }
         if (leaves.empty())
           return result;
         leaves[leaves.size() - 1].push_back(result);

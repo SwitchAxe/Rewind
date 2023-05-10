@@ -743,7 +743,7 @@ std::map<std::string, Functor> procedures = {
          // uses (in)equality operator overloads for integer variants
          if ((e.type == first.type) && (e.type == Type::Number)) {
 	   is_true = is_true && std::visit([]<class T, class U> (T t, U u) -> bool {
-	       return std::cmp_equal(t, u);
+	       return std::cmp_greater(t, u);
 	     }, get_int(e.value), get_int(first.value));
 	   continue;
 	 }
@@ -779,7 +779,7 @@ std::map<std::string, Functor> procedures = {
        for (auto e : args) {
 	 if ((e.type == prev.type) && (e.type == Type::Number)) {
 	   is_true = is_true && std::visit([]<class T, class U> (T t, U u) -> bool {
-	       return std::cmp_equal(t, u);
+	       return !std::cmp_equal(t, u);
 	     }, get_int(e.value), get_int(prev.value));
 	   continue;
 	 }
@@ -971,10 +971,10 @@ std::map<std::string, Functor> procedures = {
        bool clause = convert_value_to_bool(clause_expr);
        args.pop_front();
        if (clause) {
-         return eval(args.front(), PATH);
+         return args.front();
        }
        args.pop_front();
-       return eval(args.front(), PATH);
+       return args.front();
      }}},
     {"cond", {[](std::list<Symbol> args, path PATH) -> Symbol {
        // the arguments are a sequence of lists of the form:
@@ -995,12 +995,14 @@ std::map<std::string, Functor> procedures = {
          std::list<Symbol> branch = std::get<std::list<Symbol>>(e.value);
          Symbol clause = branch.front();
          branch.pop_front();
+	 Symbol last = branch.back();
+	 branch.pop_back();
          Symbol clause_bool = eval(clause, PATH);
          if (convert_value_to_bool(clause_bool)) {
            for (auto e : branch) {
              result = eval(e, PATH);
            }
-           return result;
+           return last;
          }
        }
        return Symbol("", std::list<Symbol>(), Type::List);

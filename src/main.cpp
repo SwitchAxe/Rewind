@@ -23,6 +23,7 @@
 #include <signal.h>
 #include <string>
 #include <sys/types.h>
+#include <sanitizer/lsan_interface.h>
 static void catch_SIGINT(int sig) {
   for (auto p : active_pids) {
     kill(p, SIGINT);
@@ -31,6 +32,7 @@ static void catch_SIGINT(int sig) {
 }
 
 int main(int argc, char **argv) {
+  signal(SIGINT, catch_SIGINT);
   auto PATH = rewind_get_system_PATH();
   std::optional<Symbol> conf;
   if (PATH != std::nullopt)
@@ -125,7 +127,6 @@ int main(int argc, char **argv) {
     }
     return 0;
   }
-  signal(SIGINT, catch_SIGINT);
   rewind_sh_loop();
   return 0;
 }

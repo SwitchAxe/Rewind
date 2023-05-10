@@ -27,6 +27,7 @@ enum Type {
   List,
   Operator,
   Defunc,
+  Funcall,
   Identifier,
   Command,
   CommandResult,

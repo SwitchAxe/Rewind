@@ -39,10 +39,10 @@
 # for overwriting a word with a colored variant depending
 # on what kind of semantic element it represents.
 
-(let map (f l)
-     if (= l [])
+(let map-aux (f l acc)
+     (if (= l [])
      	[]
-	(++ (f (first l)) (map f (rest l))))
+	(++ (f (first l)) (map f (rest l)))))
 
 (let range (inf sup)
      (if (= inf sup)
@@ -66,6 +66,7 @@
 	    (cond [(!= app "")
 	    	   (print "\b \b")
 		   (flush)])
+	    (print "app = " app ", lastw = " lastw ".\n")
 	    (gus_aux (ltos (hd (- (length (stol app)) 1) (stol app)))
 	    	     (ltos (hd (- (length (stol lastw)) 1) (stol lastw))))]
 	   [else (print cur)
@@ -79,9 +80,11 @@
 		       [(= (typeof (eval (s+ lastw cur))) "string")
 		        (overwrite (s+ lastw cur) re_color_cyan)])
 	   	 (flush)
-		 (if (or (= (chtoi cur) 32) (= (chtoi cur) 9))
-		     (gus_aux (s+ app cur) "")
-		     (gus_aux (s+ app cur) (s+ lastw cur)))]))
+		 (cond [(or (= (chtoi cur) 32) (= (chtoi cur) 9))
+		       	(gus_aux (s+ app cur) "")]
+		       [else
+			(print "cur = " cur ".\n")
+			(gus_aux (s+ app cur) (s+ lastw cur))])]))
 
 (let get_user_string ()
      (gus_aux "" ""))
