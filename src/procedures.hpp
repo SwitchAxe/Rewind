@@ -755,7 +755,6 @@ std::map<std::string, Functor> procedures = {
        bool is_true = true;
        Symbol prev = args.front();
        args.pop_front();
-       Symbol lhs;
        for (auto e : args) {
 	 if ((e.type == prev.type) && (e.type == Type::Number)) {
 	   is_true = is_true && std::visit([]<class T, class U> (T t, U u) -> bool {
@@ -971,7 +970,7 @@ std::map<std::string, Functor> procedures = {
        bool clause = convert_value_to_bool(clause_expr);
        args.pop_front();
        if (clause) {
-         return args.front();
+	 return args.front();
        }
        args.pop_front();
        return args.front();

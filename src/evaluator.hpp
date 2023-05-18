@@ -26,7 +26,7 @@
 #include <unistd.h>
 #include <variant>
 Symbol eval(Symbol root, const std::vector<std::string> &PATH);
-
+Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH);
 Symbol eval_function(Symbol node, const std::vector<std::string> &PATH) {
   Symbol result;
   auto argl = std::get<std::list<Symbol>>(node.value);
@@ -58,10 +58,12 @@ Symbol eval_function(Symbol node, const std::vector<std::string> &PATH) {
     frame.insert_or_assign(std::get<std::string>(p.first.value),
                            eval(p.second, PATH));
   }
-  if (!call_stack.empty() && (call_stack[call_stack.size() - 1].first == op))
-    ;
-  else
+  if (node.type != Type::Funcall)
     call_stack.push_back(std::make_pair(op, frame));
+  else {
+    call_stack.pop_back();
+    call_stack.push_back(std::make_pair(op, frame));
+  }
   std::list<Symbol> body_list = std::get<std::list<Symbol>>(body.value);
   Symbol last = body_list.back();
   body_list.pop_back();
@@ -78,10 +80,10 @@ Symbol eval_function(Symbol node, const std::vector<std::string> &PATH) {
           last.type = Type::Funcall;
           last_expr.pop_front();
           zipped = {};
-	  if (paraml.size() != last_expr.size()) {
-	    throw std::logic_error{"Wrong amount of arguments to procedure " + op +
-				   "!\n"};
-	  }
+          if (paraml.size() != last_expr.size()) {
+            throw std::logic_error{"Wrong amount of arguments to procedure " +
+                                   op + "!\n"};
+          }
           std::transform(paraml.begin(), paraml.end(), last_expr.begin(),
                          std::back_inserter(zipped),
                          [](const Symbol &lhs,
@@ -97,30 +99,34 @@ Symbol eval_function(Symbol node, const std::vector<std::string> &PATH) {
           call_stack.push_back(std::make_pair(op, frame));
           return last;
         } else if ((name == "cond") || (name == "if")) {
-          last_expr.pop_front();
-          Symbol branch;
-	  if (name == "if")
-	    branch = procedures["if"](last_expr, PATH);
-	  else branch = procedures["cond"](last_expr, PATH);
-	  if (branch.type != Type::List) {
-            return eval(branch, PATH);
+          Symbol branch = eval_primitive_node(last, PATH);
+          if (branch.type != Type::List) {
+            result = eval(branch, PATH);
+            call_stack.pop_back();
+            return result;
           }
           std::list<Symbol> lst = std::get<std::list<Symbol>>(branch.value);
+          if (lst.empty()) {
+            call_stack.pop_back();
+            return branch;
+          }
           Symbol fst = lst.front();
-          if (fst.type != Type::Identifier) {
-            return eval(branch, PATH);
+          if ((fst.type != Type::Operator) && (fst.type != Type::Identifier)) {
+            result = eval(branch, PATH);
+            call_stack.pop_back();
+            return result;
           }
           std::string opname = std::get<std::string>(fst.value);
           if (opname == op) {
-	    last = branch;
-	    last_expr = lst;
-	    last.type = Type::Funcall;
+            last = branch;
+            last_expr = lst;
+            last.type = Type::Funcall;
             last_expr.pop_front();
             zipped = {};
-	    if (last_expr.size() != paraml.size()) {
-	      throw std::logic_error{"Wrong amount of arguments to procedure " + op +
-				     "!\n"};
-	    }
+            if (last_expr.size() != paraml.size()) {
+              throw std::logic_error{"Wrong amount of arguments to procedure " +
+                                     op + "!\n"};
+            }
             std::transform(paraml.begin(), paraml.end(), last_expr.begin(),
                            std::back_inserter(zipped),
                            [](const Symbol &lhs,
@@ -135,8 +141,12 @@ Symbol eval_function(Symbol node, const std::vector<std::string> &PATH) {
             call_stack.pop_back();
             call_stack.push_back(std::make_pair(op, frame));
             return last;
-          } else result = eval(last, PATH);
-        } else result = eval(last, PATH);
+          } else {
+            result = eval(branch, PATH);
+          }
+        } else {
+          result = eval(last, PATH);
+        }
       } else
         result = last;
     } else
@@ -165,9 +175,6 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH) {
     if (procedures.contains(std::get<std::string>(op.value))) {
       Functor fun = procedures[std::get<std::string>(op.value)];
       result = fun(std::get<std::list<Symbol>>(node.value), PATH);
-      if (std::holds_alternative<std::list<Symbol>>(result.value)) {
-        return eval(result, PATH);
-      }
       return result;
     } else
       throw std::logic_error{"Unbound procedure!\n"};
@@ -253,9 +260,6 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH) {
         if (result.type == Type::Funcall) {
           while (result.type == Type::Funcall) {
             result = eval_function(result, PATH);
-          }
-          if (!call_stack.empty()) {
-            call_stack.pop_back();
           }
         }
         if (leaves.empty())

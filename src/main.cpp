@@ -97,7 +97,6 @@ int main(int argc, char **argv) {
             std::flush(std::cout);
           else
             std::cout << "\n";
-          std::cout << "\n";
         }
       }
     }
@@ -107,7 +106,6 @@ int main(int argc, char **argv) {
     std::string expr = rewind_read_file(filename);
     std::vector<std::string> expr_list = rewind_split_file(expr);
     if (PATH != std::nullopt) {
-      rewind_read_config(*PATH);
       for (auto s : expr_list) {
 	Symbol ast = eval(get_ast(get_tokens(s)), *PATH);
         if ((ast.type != Type::Command) && (ast.type != Type::Defunc)) {
@@ -116,7 +114,6 @@ int main(int argc, char **argv) {
         }
       }
     } else {
-      rewind_read_config({});
       for (auto s : expr_list) {
         Symbol ast = eval(get_ast(get_tokens(s)), {});
         if ((ast.type != Type::Command) && (ast.type != Type::Defunc)) {
