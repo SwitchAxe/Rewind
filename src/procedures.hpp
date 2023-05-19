@@ -955,7 +955,7 @@ std::map<std::string, Functor> procedures = {
        }
        variables[variables.size() - 1].insert_or_assign(
            std::get<std::string>(id.value), result);
-       return Symbol("", true, Type::CommandResult);
+       return Symbol("", true, Type::Command);
      }}},
     {"if", {[](std::list<Symbol> args, path PATH) -> Symbol {
        // (if <clause> (expr1 ... exprn) (else1 ... elsen))
