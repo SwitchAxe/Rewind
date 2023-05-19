@@ -124,7 +124,7 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH) {
     if (procedures.contains(std::get<std::string>(op.value))) {
       Functor fun = procedures[std::get<std::string>(op.value)];
       result = fun(std::get<std::list<Symbol>>(node.value), PATH);
-      return result;
+      return eval(result, PATH);
     } else
       throw std::logic_error{"Unbound procedure!\n"};
   } else if ((op.type == Type::Identifier) &&
