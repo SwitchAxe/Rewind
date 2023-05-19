@@ -32,6 +32,7 @@ enum Type {
   Command,
   CommandResult,
   Error,
+  RawAst, // for the 'ast' builtin. don't eval this type!
 };
 struct Symbol;
 

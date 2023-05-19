@@ -115,7 +115,11 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH) {
   if (l.empty())
     return node;
   Symbol op = l.front();
-  if (op.type == Type::Number || op.type == Type::String) {
+  if ((op.type == Type::Number) || (op.type == Type::String)) {
+    return node;
+  }
+  if (node.type == Type::RawAst) {
+    result.type = Type::List;
     return node;
   }
   if (op.type == Type::Operator) {
@@ -124,6 +128,10 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH) {
     if (procedures.contains(std::get<std::string>(op.value))) {
       Functor fun = procedures[std::get<std::string>(op.value)];
       result = fun(std::get<std::list<Symbol>>(node.value), PATH);
+      if (result.type == Type::RawAst) {
+	result.type = Type::List;
+	return result;
+      }
       return eval(result, PATH);
     } else
       throw std::logic_error{"Unbound procedure!\n"};

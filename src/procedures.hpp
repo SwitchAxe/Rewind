@@ -32,15 +32,15 @@
 #include <optional>
 #include <ostream>
 #include <stdexcept>
+#include <stdio.h>
+#include <string.h>
 #include <string>
 #include <sys/wait.h>
+#include <termios.h>
 #include <type_traits>
 #include <unistd.h>
 #include <utility>
 #include <variant>
-#include <stdio.h>
-#include <termios.h>
-#include <string.h>
 std::string rec_print_ast(Symbol root);
 Symbol get_ast(std::vector<std::string> tokens);
 std::vector<std::string> get_tokens(std::string stream);
@@ -305,7 +305,8 @@ std::optional<Symbol> variable_lookup(Symbol id) {
   if (variables.empty()) {
     return std::nullopt;
   }
-  for (auto stk : std::vector<std::map<std::string, Symbol>>(variables.rbegin(), variables.rend())) {
+  for (auto stk : std::vector<std::map<std::string, Symbol>>(
+           variables.rbegin(), variables.rend())) {
     if (stk.contains(std::get<std::string>(id.value))) {
       return std::optional<Symbol>(stk[std::get<std::string>(id.value)]);
     }
@@ -742,11 +743,13 @@ std::map<std::string, Functor> procedures = {
          }
          // uses (in)equality operator overloads for integer variants
          if ((e.type == first.type) && (e.type == Type::Number)) {
-	   is_true = is_true && std::visit([]<class T, class U> (T t, U u) -> bool {
-	       return std::cmp_greater(t, u);
-	     }, get_int(e.value), get_int(first.value));
-	   continue;
-	 }
+           is_true = is_true && std::visit(
+                                    []<class T, class U>(T t, U u) -> bool {
+                                      return std::cmp_greater(t, u);
+                                    },
+                                    get_int(e.value), get_int(first.value));
+           continue;
+         }
          first = e;
        }
        return Symbol("", is_true, Type::Boolean);
@@ -756,13 +759,15 @@ std::map<std::string, Functor> procedures = {
        Symbol prev = args.front();
        args.pop_front();
        for (auto e : args) {
-	 if ((e.type == prev.type) && (e.type == Type::Number)) {
-	   is_true = is_true && std::visit([]<class T, class U> (T t, U u) -> bool {
-	       return std::cmp_equal(t, u);
-	     }, get_int(e.value), get_int(prev.value));
-	   continue;
-	 }
-	 if (e.type != prev.type) {
+         if ((e.type == prev.type) && (e.type == Type::Number)) {
+           is_true = is_true && std::visit(
+                                    []<class T, class U>(T t, U u) -> bool {
+                                      return std::cmp_equal(t, u);
+                                    },
+                                    get_int(e.value), get_int(prev.value));
+           continue;
+         }
+         if (e.type != prev.type) {
            return Symbol("", false, Type::Boolean);
          }
          is_true = is_true && (e.value == prev.value);
@@ -776,13 +781,15 @@ std::map<std::string, Functor> procedures = {
        args.pop_front();
        Symbol lhs;
        for (auto e : args) {
-	 if ((e.type == prev.type) && (e.type == Type::Number)) {
-	   is_true = is_true && std::visit([]<class T, class U> (T t, U u) -> bool {
-	       return !std::cmp_equal(t, u);
-	     }, get_int(e.value), get_int(prev.value));
-	   continue;
-	 }
-	 if (e.type != prev.type) {
+         if ((e.type == prev.type) && (e.type == Type::Number)) {
+           is_true = is_true && std::visit(
+                                    []<class T, class U>(T t, U u) -> bool {
+                                      return !std::cmp_equal(t, u);
+                                    },
+                                    get_int(e.value), get_int(prev.value));
+           continue;
+         }
+         if (e.type != prev.type) {
            return Symbol("", true, Type::Boolean);
          }
          if (e.type == Type::List)
@@ -798,15 +805,15 @@ std::map<std::string, Functor> procedures = {
        bool is_true = true;
        Symbol clause;
        for (auto e : args) {
-	 clause = eval(e, PATH);
-	 if (clause.type != Type::Boolean) {
+         clause = eval(e, PATH);
+         if (clause.type != Type::Boolean) {
            throw std::logic_error{"Type mismatch in the 'and' operator: Only "
                                   "booleans are allowed!\n"};
          }
          is_true = is_true && std::get<bool>(clause.value);
-	 if (!is_true) {
-	   return Symbol("", false, Type::Boolean);
-	 }
+         if (!is_true) {
+           return Symbol("", false, Type::Boolean);
+         }
        }
        return Symbol("", is_true, Type::Boolean);
      }}},
@@ -814,15 +821,15 @@ std::map<std::string, Functor> procedures = {
        bool is_true = false;
        Symbol clause;
        for (auto e : args) {
-	 clause = eval(e, PATH);
+         clause = eval(e, PATH);
          if (clause.type != Type::Boolean) {
            throw std::logic_error{"Type mismatch in the 'and' operator: Only "
                                   "booleans are allowed!\n"};
          }
          is_true = is_true || std::get<bool>(clause.value);
-	 if (is_true) {
-	   return Symbol("", true, Type::Boolean);
-	 }
+         if (is_true) {
+           return Symbol("", true, Type::Boolean);
+         }
        }
        return Symbol("", is_true, Type::Boolean);
      }}},
@@ -980,7 +987,7 @@ std::map<std::string, Functor> procedures = {
        bool clause = convert_value_to_bool(clause_expr);
        args.pop_front();
        if (clause) {
-	 return args.front();
+         return args.front();
        }
        args.pop_front();
        return args.front();
@@ -1004,8 +1011,8 @@ std::map<std::string, Functor> procedures = {
          std::list<Symbol> branch = std::get<std::list<Symbol>>(e.value);
          Symbol clause = branch.front();
          branch.pop_front();
-	 Symbol last = branch.back();
-	 branch.pop_back();
+         Symbol last = branch.back();
+         branch.pop_back();
          Symbol clause_bool = eval(clause, PATH);
          if (convert_value_to_bool(clause_bool)) {
            for (auto e : branch) {
@@ -1214,24 +1221,26 @@ std::map<std::string, Functor> procedures = {
                                 "exactly one name to look up!\n"};
        }
        Symbol maybe_eval;
-       if ( (args.front().type != Type::String) && (args.front().type != Type::Identifier)) {
-	 if (args.front().type == Type::List) {
-	   maybe_eval = eval(args.front(), PATH);
-	 } else
-	   throw std::logic_error{
-             "the 'defined' boolean procedure expects an identifier or a string literal!\n"};
+       if ((args.front().type != Type::String) &&
+           (args.front().type != Type::Identifier)) {
+         if (args.front().type == Type::List) {
+           maybe_eval = eval(args.front(), PATH);
+         } else
+           throw std::logic_error{"the 'defined' boolean procedure expects an "
+                                  "identifier or a string literal!\n"};
        }
        std::string name;
        if (std::holds_alternative<std::string>(maybe_eval.value)) {
-	 name = std::get<std::string>(maybe_eval.value);
+         name = std::get<std::string>(maybe_eval.value);
        } else
-	 name = std::get<std::string>(args.front().value);
+         name = std::get<std::string>(args.front().value);
        if (!user_defined_procedures.empty() &&
            user_defined_procedures[user_defined_procedures.size() - 1].contains(
                name)) {
          return Symbol("", true, Type::Boolean);
        }
-       if (variable_lookup(Symbol("", name, Type::Identifier)) != std::nullopt) {
+       if (variable_lookup(Symbol("", name, Type::Identifier)) !=
+           std::nullopt) {
          return Symbol("", true, Type::Boolean);
        }
        return Symbol("", false, Type::Boolean);
@@ -1240,8 +1249,6 @@ std::map<std::string, Functor> procedures = {
        for (auto e : args) {
          if (e.type == Type::Defunc)
            continue;
-         if (e.type == Type::List)
-           e = eval(e, PATH);
          std::cout << rec_print_ast(e);
        }
        return Symbol("", false, Type::Command);
@@ -1506,7 +1513,7 @@ std::map<std::string, Functor> procedures = {
              (last_evaluated.type != Type::CommandResult))
            rec_print_ast(last_evaluated);
        } catch (std::logic_error ex) {
-	 return Symbol("", ex.what(), Type::Error);
+         return Symbol("", ex.what(), Type::Error);
        }
        return last_evaluated;
      }}},
@@ -1537,36 +1544,30 @@ std::map<std::string, Functor> procedures = {
        }
      }}},
     {"ast", {[](std::list<Symbol> args, path PATH) -> Symbol {
-      // what this function  does is, it takes a single string as input,
-      // and it generates an ast representation of it to be used in coupling
-      // with the "typeof" operator or otherwise for parsing purposes.
-      std::string input;
-      if (args.size() != 1) {
-	throw std::logic_error {"Exception: The 'ast' procedure expects a single string!\n"};
-      }
-      auto sym = eval(args.front(), PATH);
-      if (sym.type != Type::String) {
-	throw std::logic_error{"Exception: The 'ast' procedure expects a single string!\n"};
-      }
-      input = std::get<std::string>(sym.value);
-      try {
-	auto ast = get_ast(get_tokens(input));
-	return ast;
-      } catch (std::logic_error ex) {
-	return Symbol("", ex.what(), Type::Error);
-      };
-    }}}};
+       // what this function  does is, it takes a single string as input,
+       // and it generates an ast representation of it to be used in coupling
+       // with the "typeof" operator or otherwise for parsing purposes.
+       std::string input;
+       if (args.size() != 1) {
+         throw std::logic_error{
+             "Exception: The 'ast' procedure expects a single string!\n"};
+       }
+       auto sym = eval(args.front(), PATH);
+       if (sym.type != Type::String) {
+         throw std::logic_error{
+             "Exception: The 'ast' procedure expects a single string!\n"};
+       }
+       input = std::get<std::string>(sym.value);
+       try {
+         auto ast = get_ast(get_tokens(input));
+         ast.type = Type::RawAst;
+         return ast;
+       } catch (std::logic_error ex) {
+         return Symbol("", ex.what(), Type::Error);
+       };
+     }}}};
 
 std::array<std::string, 11> special_forms = {
-  "->",
-  "let",
-  "if",
-  "$",
-  "cond",
-  "match",
-  "<<<",
-  "defined",
-  "ast",
-  "and",
-  "or",
+    "->",  "let",     "if",  "$",   "cond", "match",
+    "<<<", "defined", "ast", "and", "or",
 };
