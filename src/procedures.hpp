@@ -1501,16 +1501,45 @@ std::map<std::string, Functor> procedures = {
        return last_evaluated;
      }}},
     {"typeof", {[](std::list<Symbol> args, path PATH) -> Symbol {
-      switch (args.front().type) {
-      case Type::List: return Symbol("", "list", Type::String); break;
-      case Type::Number: return Symbol("", "number", Type::String); break;
-      case Type::Identifier: return Symbol("", "identifier", Type::String); break;
-      case Type::String: return Symbol("", "string", Type::String); break;
-      case Type::Boolean: return Symbol("", "boolean", Type::String); break;
-      case Type::Operator: return Symbol("", "operator", Type::String); break;
-      case Type::Error: return Symbol("", "error", Type::String);
-      default: return Symbol("", "undefined", Type::String); break;
+       switch (args.front().type) {
+       case Type::List:
+         return Symbol("", "list", Type::String);
+         break;
+       case Type::Number:
+         return Symbol("", "number", Type::String);
+         break;
+       case Type::Identifier:
+         return Symbol("", "identifier", Type::String);
+         break;
+       case Type::String:
+         return Symbol("", "string", Type::String);
+         break;
+       case Type::Boolean:
+         return Symbol("", "boolean", Type::String);
+         break;
+       case Type::Operator:
+         return Symbol("", "operator", Type::String);
+         break;
+       case Type::Error:
+         return Symbol("", "error", Type::String);
+       default:
+         return Symbol("", "undefined", Type::String);
+         break;
+       }
+     }}},
+    {"ast", {[](std::list<Symbol> args) -> Symbol {
+      // what this function  does is, it takes a single string as input,
+      // and it generates an ast representation of it to be used in coupling
+      // with the "typeof" operator or otherwise for parsing purposes.
+      std::string input;
+      if (args.size() != 1) {
+	throw std::logic_error {"Exception: The 'ast' procedure expects a single string!\n"};
       }
+      if (args.front().type != Type::String) {
+	throw std::logic_error{"Exception: The 'ast' procedure expects a single string!\n"};
+      }
+      input = std::get<std::string>(args.front().value);
+      return get_ast(get_tokens(input));
     }}}};
 
 std::array<std::string, 8> special_forms = {
