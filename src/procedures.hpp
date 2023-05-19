@@ -794,25 +794,35 @@ std::map<std::string, Functor> procedures = {
        }
        return Symbol("", is_true, Type::Boolean);
      }}},
-    {"and", {[](std::list<Symbol> args) -> Symbol {
+    {"and", {[](std::list<Symbol> args, path PATH) -> Symbol {
        bool is_true = true;
+       Symbol clause;
        for (auto e : args) {
-         if (e.type != Type::Boolean) {
+	 clause = eval(e, PATH);
+	 if (clause.type != Type::Boolean) {
            throw std::logic_error{"Type mismatch in the 'and' operator: Only "
                                   "booleans are allowed!\n"};
          }
-         is_true = is_true && std::get<bool>(e.value);
+         is_true = is_true && std::get<bool>(clause.value);
+	 if (!is_true) {
+	   return Symbol("", false, Type::Boolean);
+	 }
        }
        return Symbol("", is_true, Type::Boolean);
      }}},
-    {"or", {[](std::list<Symbol> args) -> Symbol {
+    {"or", {[](std::list<Symbol> args, path PATH) -> Symbol {
        bool is_true = false;
+       Symbol clause;
        for (auto e : args) {
-         if (e.type != Type::Boolean) {
+	 clause = eval(e, PATH);
+         if (clause.type != Type::Boolean) {
            throw std::logic_error{"Type mismatch in the 'and' operator: Only "
                                   "booleans are allowed!\n"};
          }
-         is_true = is_true || std::get<bool>(e.value);
+         is_true = is_true || std::get<bool>(clause.value);
+	 if (is_true) {
+	   return Symbol("", true, Type::Boolean);
+	 }
        }
        return Symbol("", is_true, Type::Boolean);
      }}},
@@ -1547,7 +1557,7 @@ std::map<std::string, Functor> procedures = {
       };
     }}}};
 
-std::array<std::string, 9> special_forms = {
+std::array<std::string, 11> special_forms = {
   "->",
   "let",
   "if",
@@ -1557,4 +1567,6 @@ std::array<std::string, 9> special_forms = {
   "<<<",
   "defined",
   "ast",
+  "and",
+  "or",
 };
