@@ -1524,10 +1524,9 @@ std::map<std::string, Functor> procedures = {
          return Symbol("", "error", Type::String);
        default:
          return Symbol("", "undefined", Type::String);
-         break;
        }
      }}},
-    {"ast", {[](std::list<Symbol> args) -> Symbol {
+    {"ast", {[](std::list<Symbol> args, path PATH) -> Symbol {
       // what this function  does is, it takes a single string as input,
       // and it generates an ast representation of it to be used in coupling
       // with the "typeof" operator or otherwise for parsing purposes.
@@ -1535,14 +1534,20 @@ std::map<std::string, Functor> procedures = {
       if (args.size() != 1) {
 	throw std::logic_error {"Exception: The 'ast' procedure expects a single string!\n"};
       }
-      if (args.front().type != Type::String) {
+      auto sym = eval(args.front(), PATH);
+      if (sym.type != Type::String) {
 	throw std::logic_error{"Exception: The 'ast' procedure expects a single string!\n"};
       }
-      input = std::get<std::string>(args.front().value);
-      return get_ast(get_tokens(input));
+      input = std::get<std::string>(sym.value);
+      try {
+	auto ast = get_ast(get_tokens(input));
+	return ast;
+      } catch (std::logic_error ex) {
+	return Symbol("", ex.what(), Type::Error);
+      };
     }}}};
 
-std::array<std::string, 8> special_forms = {
+std::array<std::string, 9> special_forms = {
   "->",
   "let",
   "if",
@@ -1550,5 +1555,6 @@ std::array<std::string, 8> special_forms = {
   "cond",
   "match",
   "<<<",
-  "defined"
+  "defined",
+  "ast",
 };
