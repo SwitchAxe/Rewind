@@ -190,7 +190,11 @@ bool weak_compare(Symbol fst, Symbol other) {
           is_same_pattern = is_same_pattern && (l.value == r.value);
         } else if (r.type == Type::Operator) {
           is_same_pattern = is_same_pattern && (l.value == r.value);
-        } else
+        } else if (r.type == Type::Identifier) {
+	  is_same_pattern = is_same_pattern && (l.type != Type::List);
+	} else if (l.type == Type::Identifier) {
+	  is_same_pattern = is_same_pattern && (r.type != Type::List);
+	} else
           is_same_pattern = is_same_pattern && (l.type == r.type);
       }
       return is_same_pattern;
@@ -1030,10 +1034,6 @@ std::map<std::string, Functor> procedures = {
        }
        Symbol element = eval(args.front(), PATH);
        args.pop_front();
-       if (element.type == Type::Number) {
-       }
-       if (element.type == Type::List) {
-       }
        for (auto branch : args) {
          if (branch.type != Type::List) {
            throw std::logic_error{"Invalid argument to 'match' after the "
@@ -1047,6 +1047,8 @@ std::map<std::string, Functor> procedures = {
          branchl.pop_front();
          if (match_any == pattern) {
            Symbol result;
+	   variables.push_back(std::map<std::string, Symbol>{});
+	   variables[variables.size() - 1].insert_or_assign("_", element);
            for (auto expr : branchl) {
              result = eval(expr, PATH);
            }
@@ -1064,7 +1066,9 @@ std::map<std::string, Functor> procedures = {
                throw std::logic_error{"Type mismatch in a 'match' block! "
                                       "Expected an integer in a pattern!\n"};
            }
-           if (get_int(element.value) < get_int(value.value)) {
+           if (std::visit([]<class T, class U>(T t, U u) -> bool {
+		 return std::cmp_less(t, u);
+	       }, get_int(element.value), get_int(value.value))) {
              Symbol result;
              for (auto expr : branchl) {
                result = eval(expr, PATH);
@@ -1090,7 +1094,9 @@ std::map<std::string, Functor> procedures = {
            variables.push_back(std::map<std::string, Symbol>{});
            variables[variables.size() - 1].insert_or_assign(
                std::get<std::string>(id.value), element);
-           if (get_int(element.value) < get_int(value.value)) {
+           if (std::visit([]<class T, class U>(T t, U u) -> bool {
+		 return std::cmp_less(t, u);
+	       }, get_int(element.value), get_int(value.value))) {
              Symbol result;
              for (auto expr : branchl) {
                result = eval(expr, PATH);
@@ -1110,7 +1116,9 @@ std::map<std::string, Functor> procedures = {
                throw std::logic_error{"Type mismatch in a 'match' block! "
                                       "Expected an integer in a pattern!\n"};
            }
-           if (get_int(element.value) == get_int(value.value)) {
+           if (std::visit([]<class T, class U>(T t, U u) -> bool {
+		 return std::cmp_equal(t, u);
+	       }, get_int(element.value), get_int(value.value))) {
              Symbol result;
              for (auto expr : branchl) {
                result = eval(expr, PATH);
@@ -1136,7 +1144,9 @@ std::map<std::string, Functor> procedures = {
            variables.push_back(std::map<std::string, Symbol>{});
            variables[variables.size() - 1].insert_or_assign(
                std::get<std::string>(id.value), element);
-           if (get_int(element.value) == get_int(value.value)) {
+           if (std::visit([]<class T, class U>(T t, U u) -> bool {
+		 return std::cmp_equal(t, u);
+	       }, get_int(element.value), get_int(value.value))) {
              Symbol result;
              for (auto expr : branchl) {
                result = eval(expr, PATH);

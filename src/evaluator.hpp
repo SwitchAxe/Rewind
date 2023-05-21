@@ -29,14 +29,14 @@
 Symbol eval(Symbol root, const std::vector<std::string> &PATH);
 Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH);
 
-std::optional<Symbol> check_for_tail_recursion(std::string name, Symbol funcall,
+std::pair<std::string, Symbol> check_for_tail_recursion(std::string name, Symbol funcall,
                                                path &PATH) {
-  if (funcall.type != Type::List) return std::nullopt;
+  if (funcall.type != Type::List) return {"no", funcall};
   auto lst = std::get<std::list<Symbol>>(funcall.value);
-  if (lst.empty()) return std::nullopt;
+  if (lst.empty()) return {"no", funcall};
   auto fstnode = lst.front();
   if ((fstnode.type != Type::Identifier) && (fstnode.type != Type::Operator)) {
-    return std::nullopt;
+    return {"no", funcall};
   }
   auto nodename = std::get<std::string>(fstnode.value);
   if ((nodename == "if") || (nodename == "cond")) {
@@ -45,9 +45,9 @@ std::optional<Symbol> check_for_tail_recursion(std::string name, Symbol funcall,
     return check_for_tail_recursion(name, branch, PATH);
   }
   if (nodename == name) {
-    return funcall;
+    return {"yes", funcall};
   }
-  return std::nullopt;
+  return {"no", funcall};
 }
 
 Symbol eval_function(Symbol node, const std::vector<std::string> &PATH) {
@@ -94,11 +94,10 @@ Symbol eval_function(Symbol node, const std::vector<std::string> &PATH) {
     result = eval(e, PATH);
   }
   if (auto last_call = check_for_tail_recursion(op, last, PATH);
-      last_call == std::nullopt) {
-    result = eval(last, PATH);
-    result = eval(result, PATH);
+      last_call.first == "no") {
+    result = eval(last_call.second, PATH);
   } else {
-    last = *last_call;
+    last = last_call.second;
     last.type = Type::Funcall;
     return last;
   }
