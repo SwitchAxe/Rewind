@@ -52,7 +52,7 @@ std::vector<int> active_pids;
 // if this vector contains more than *number of elements in a pipe* or more than
 // 1 for a single program call, it's most likely an error.
 std::vector<std::map<std::string, std::string>> environment_variables;
-termios original; // this will contain the "cooked" terminal mode
+termios original;  // this will contain the "cooked" terminal mode
 termios immediate; // raw terminal mode
 // These two functions are used to get an integer, or 0, from a variant,
 // depending on if the variant contains an integer (see the concept in
@@ -192,10 +192,10 @@ bool weak_compare(Symbol fst, Symbol other) {
         } else if (r.type == Type::Operator) {
           is_same_pattern = is_same_pattern && (l.value == r.value);
         } else if (r.type == Type::Identifier) {
-	  is_same_pattern = is_same_pattern && (l.type != Type::List);
-	} else if (l.type == Type::Identifier) {
-	  is_same_pattern = is_same_pattern && (r.type != Type::List);
-	} else
+          is_same_pattern = is_same_pattern && (l.type != Type::List);
+        } else if (l.type == Type::Identifier) {
+          is_same_pattern = is_same_pattern && (r.type != Type::List);
+        } else
           is_same_pattern = is_same_pattern && (l.type == r.type);
       }
       return is_same_pattern;
@@ -889,11 +889,12 @@ std::map<std::string, Functor> procedures = {
        return Symbol("", n, Type::Number);
      }}},
     {"tos", {[](std::list<Symbol> args) -> Symbol {
-      if (args.size() != 1) {
-	throw std::logic_error {"Exception in 'tos': This function accepts only one argument!\n"};
-      }
-      return Symbol("", rec_print_ast(args.front()), Type::String);
-    }}},
+       if (args.size() != 1) {
+         throw std::logic_error{
+             "Exception in 'tos': This function accepts only one argument!\n"};
+       }
+       return Symbol("", rec_print_ast(args.front()), Type::String);
+     }}},
     {"chtoi", {[](std::list<Symbol> args) -> Symbol {
        if (args.size() != 1) {
          throw std::logic_error{
@@ -929,6 +930,23 @@ std::map<std::string, Functor> procedures = {
          l.push_back(Symbol("", std::string{ch}, Type::String));
        }
        return Symbol("", l, Type::List);
+     }}},
+    {"ltos", {[](std::list<Symbol> args) -> Symbol {
+       if ((args.size() != 1) || (args.front().type != Type::List)) {
+         throw std::logic_error{
+             "'ltos' expects a list of strings to concatenate!\n"};
+       }
+       auto l = std::get<std::list<Symbol>>(args.front().value);
+       std::string ret;
+       for (auto e : l) {
+         if ((e.type != Type::Identifier) && (e.type != Type::String) &&
+             (e.type != Type::Operator)) {
+           throw std::logic_error{
+               "Exception in 'ltos'! Found a non-string list element.\n"};
+         }
+	 ret += std::get<std::string>(e.value);
+       }
+       return Symbol("", ret, Type::String);
      }}},
     {"let", {[](std::list<Symbol> args, path PATH) -> Symbol {
        if (args.front().type != Type::Identifier) {
@@ -1054,8 +1072,8 @@ std::map<std::string, Functor> procedures = {
          branchl.pop_front();
          if (match_any == pattern) {
            Symbol result;
-	   variables.push_back(std::map<std::string, Symbol>{});
-	   variables[variables.size() - 1].insert_or_assign("_", element);
+           variables.push_back(std::map<std::string, Symbol>{});
+           variables[variables.size() - 1].insert_or_assign("_", element);
            for (auto expr : branchl) {
              result = eval(expr, PATH);
            }
@@ -1073,9 +1091,9 @@ std::map<std::string, Functor> procedures = {
                throw std::logic_error{"Type mismatch in a 'match' block! "
                                       "Expected an integer in a pattern!\n"};
            }
-           if (std::visit([]<class T, class U>(T t, U u) -> bool {
-		 return std::cmp_less(t, u);
-	       }, get_int(element.value), get_int(value.value))) {
+           if (std::visit([]<class T, class U>(
+                              T t, U u) -> bool { return std::cmp_less(t, u); },
+                          get_int(element.value), get_int(value.value))) {
              Symbol result;
              for (auto expr : branchl) {
                result = eval(expr, PATH);
@@ -1101,9 +1119,9 @@ std::map<std::string, Functor> procedures = {
            variables.push_back(std::map<std::string, Symbol>{});
            variables[variables.size() - 1].insert_or_assign(
                std::get<std::string>(id.value), element);
-           if (std::visit([]<class T, class U>(T t, U u) -> bool {
-		 return std::cmp_less(t, u);
-	       }, get_int(element.value), get_int(value.value))) {
+           if (std::visit([]<class T, class U>(
+                              T t, U u) -> bool { return std::cmp_less(t, u); },
+                          get_int(element.value), get_int(value.value))) {
              Symbol result;
              for (auto expr : branchl) {
                result = eval(expr, PATH);
@@ -1123,9 +1141,9 @@ std::map<std::string, Functor> procedures = {
                throw std::logic_error{"Type mismatch in a 'match' block! "
                                       "Expected an integer in a pattern!\n"};
            }
-           if (std::visit([]<class T, class U>(T t, U u) -> bool {
-		 return std::cmp_equal(t, u);
-	       }, get_int(element.value), get_int(value.value))) {
+           if (std::visit([]<class T, class U>(T t, U u)
+                              -> bool { return std::cmp_equal(t, u); },
+                          get_int(element.value), get_int(value.value))) {
              Symbol result;
              for (auto expr : branchl) {
                result = eval(expr, PATH);
@@ -1151,9 +1169,9 @@ std::map<std::string, Functor> procedures = {
            variables.push_back(std::map<std::string, Symbol>{});
            variables[variables.size() - 1].insert_or_assign(
                std::get<std::string>(id.value), element);
-           if (std::visit([]<class T, class U>(T t, U u) -> bool {
-		 return std::cmp_equal(t, u);
-	       }, get_int(element.value), get_int(value.value))) {
+           if (std::visit([]<class T, class U>(T t, U u)
+                              -> bool { return std::cmp_equal(t, u); },
+                          get_int(element.value), get_int(value.value))) {
              Symbol result;
              for (auto expr : branchl) {
                result = eval(expr, PATH);
@@ -1318,18 +1336,18 @@ std::map<std::string, Functor> procedures = {
        }
        variables[variables.size() - 1].insert_or_assign(in, ret);
        return ret;
-    }}},
+     }}},
     {"rawmode", {[](std::list<Symbol> args) -> Symbol {
-      tcsetattr(STDIN_FILENO, TCSANOW, &immediate);
-      return Symbol("", false, Type::Command);
-    }}},
+       tcsetattr(STDIN_FILENO, TCSANOW, &immediate);
+       return Symbol("", false, Type::Command);
+     }}},
     {"cookedmode", {[](std::list<Symbol> args) -> Symbol {
-      tcsetattr(STDIN_FILENO, TCSANOW, &original);
-      return Symbol("", false, Type::Command);
-    }}},
+       tcsetattr(STDIN_FILENO, TCSANOW, &original);
+       return Symbol("", false, Type::Command);
+     }}},
     {"readch", {[](std::list<Symbol> args) -> Symbol {
        // save the terminal settings for restoring them later on
-       
+
        // read the character
        int ch;
        int tmp[1];
@@ -1338,7 +1356,7 @@ std::map<std::string, Functor> procedures = {
        // restore the normal terminal mode
        auto ret = Symbol("", std::string{static_cast<char>(ch)}, Type::String);
        return ret;
-    }}},
+     }}},
     {"strip", {[](std::list<Symbol> args) -> Symbol {
        const auto is_strlit = [](const std::string &s) -> bool {
          return (s.size() > 1) && (s[0] == '"') && (s[s.length() - 1] == '"');
@@ -1457,6 +1475,40 @@ std::map<std::string, Functor> procedures = {
          return Symbol("", lst, Type::List);
        }
        return lst.front();
+     }}},
+    {"delete", {[](std::list<Symbol> args) -> Symbol {
+       if ((args.size() != 2) || (args.front().type != Type::List) ||
+           (args.back().type != Type::Number)) {
+         throw std::logic_error{"Exception: The 'delete' procedure accepts a "
+                                "list and an index!\n"};
+       }
+       auto l = std::get<std::list<Symbol>>(args.front().value);
+       args.pop_front();
+       long long signed int sidx = 0;
+       long long unsigned int uidx = 0;
+       if (std::holds_alternative<long long signed int>(args.front().value)) {
+         sidx = std::get<long long signed int>(args.front().value);
+         long long signed int i = 0;
+         for (std::list<Symbol>::iterator it = l.begin(); it != l.end(); ++it) {
+           if (i == sidx) {
+             l.erase(it);
+             break;
+           }
+           i++;
+         }
+         return Symbol("", l, Type::List);
+       } else {
+         uidx = std::get<long long unsigned int>(args.front().value);
+         long long unsigned int i = 0;
+         for (std::list<Symbol>::iterator it = l.begin(); it != l.end(); ++it) {
+           if (i == uidx) {
+             l.erase(it);
+             break;
+           }
+           i++;
+         }
+         return Symbol("", l, Type::List);
+       }
      }}},
     {"length", {[](std::list<Symbol> args) -> Symbol {
        if (args.empty()) {
