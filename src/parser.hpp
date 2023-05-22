@@ -154,9 +154,9 @@ std::string rec_print_ast(Symbol root) {
           } else if constexpr (std::is_same_v<std::decay_t<T>, std::string>) {
             res += process_escapes(v);
           } else if (std::is_same_v<std::decay_t<T>, bool>) {
-            res += std::string{(v ? "true" : "false")} + " ";
+            res += std::string{(v ? "true" : "false")};
           } else
-            res += std::to_string(v) + " ";
+            res += std::to_string(v);
         },
         root.value);
   }

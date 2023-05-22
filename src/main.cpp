@@ -24,14 +24,21 @@
 #include <string>
 #include <sys/types.h>
 #include <sanitizer/lsan_interface.h>
+#include <termios.h>
 static void catch_SIGINT(int sig) {
   for (auto p : active_pids) {
     kill(p, SIGINT);
   }
   active_pids = {};
 }
-
 int main(int argc, char **argv) {
+  tcgetattr(STDIN_FILENO, &original);
+  // enable some sort of "pseudo raw" mode where characters are
+  // available immediately, without modifying anything else
+  memcpy(&immediate, &original, sizeof(termios));
+  immediate.c_lflag &= ~ICANON;
+  immediate.c_lflag &= ~ECHO;
+  immediate.c_cc[VMIN] = 1;
   signal(SIGINT, catch_SIGINT);
   auto PATH = rewind_get_system_PATH();
   std::optional<Symbol> conf;
@@ -48,6 +55,7 @@ int main(int argc, char **argv) {
       } catch (std::exception e) {
         std::cout << "Exception: " << e.what() << "\n";
       }
+      tcsetattr(STDIN_FILENO, TCSANOW, &original);
       return 0;
     }
     try {
@@ -55,6 +63,7 @@ int main(int argc, char **argv) {
     } catch (std::exception e) {
       std::cout << "Exception: " << e.what() << "\n";
     }
+    tcsetattr(STDIN_FILENO, TCSANOW, &original);
     return 0;
   }
 
@@ -64,6 +73,7 @@ int main(int argc, char **argv) {
       Symbol sym = Symbol("", __argvi, Type::String);
       cmdline_args.insert({std::to_string(i - 1), eval(sym, *PATH)});
     }
+    tcsetattr(STDIN_FILENO, TCSANOW, &original);
   } else if (argc > 2) {
     std::string filename{argv[1]};
     std::string expr = rewind_read_file(filename);
@@ -100,6 +110,7 @@ int main(int argc, char **argv) {
         }
       }
     }
+    tcsetattr(STDIN_FILENO, TCSANOW, &original);
     return 0;
   } else if (argc > 1) {
     std::string filename{argv[1]};
@@ -122,8 +133,10 @@ int main(int argc, char **argv) {
         }
       }
     }
+    tcsetattr(STDIN_FILENO, TCSANOW, &original);
     return 0;
   }
+  tcsetattr(STDIN_FILENO, TCSANOW, &original);
   rewind_sh_loop();
   return 0;
 }

@@ -161,6 +161,7 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH) {
       ext.value = *get_absolute_path(std::get<std::string>((*lit).value), PATH);
     rest.push_front(ext);
     Symbol pipel = Symbol("", rest, Type::List);
+    tcsetattr(STDIN_FILENO, TCSANOW, &original);
     if (node.name != "root") {
       pipel = Symbol("", std::list<Symbol>{pipel}, Type::List);
       auto result = rewind_pipe(pipel, PATH);

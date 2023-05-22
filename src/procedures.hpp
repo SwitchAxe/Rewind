@@ -52,7 +52,8 @@ std::vector<int> active_pids;
 // if this vector contains more than *number of elements in a pipe* or more than
 // 1 for a single program call, it's most likely an error.
 std::vector<std::map<std::string, std::string>> environment_variables;
-
+termios original; // this will contain the "cooked" terminal mode
+termios immediate; // raw terminal mode
 // These two functions are used to get an integer, or 0, from a variant,
 // depending on if the variant contains an integer (see the concept in
 // types.hpp) or another type. The return value of the second function is not a
@@ -887,6 +888,12 @@ std::map<std::string, Functor> procedures = {
        }
        return Symbol("", n, Type::Number);
      }}},
+    {"tos", {[](std::list<Symbol> args) -> Symbol {
+      if (args.size() != 1) {
+	throw std::logic_error {"Exception in 'tos': This function accepts only one argument!\n"};
+      }
+      return Symbol("", rec_print_ast(args.front()), Type::String);
+    }}},
     {"chtoi", {[](std::list<Symbol> args) -> Symbol {
        if (args.size() != 1) {
          throw std::logic_error{
@@ -1311,29 +1318,27 @@ std::map<std::string, Functor> procedures = {
        }
        variables[variables.size() - 1].insert_or_assign(in, ret);
        return ret;
-     }}},
+    }}},
+    {"rawmode", {[](std::list<Symbol> args) -> Symbol {
+      tcsetattr(STDIN_FILENO, TCSANOW, &immediate);
+      return Symbol("", false, Type::Command);
+    }}},
+    {"cookedmode", {[](std::list<Symbol> args) -> Symbol {
+      tcsetattr(STDIN_FILENO, TCSANOW, &original);
+      return Symbol("", false, Type::Command);
+    }}},
     {"readch", {[](std::list<Symbol> args) -> Symbol {
        // save the terminal settings for restoring them later on
-       termios original;
-       tcgetattr(STDIN_FILENO, &original);
-       // enable some sort of "pseudo raw" mode where characters are
-       // available immediately, without modifying anything else
-       termios mycfg;
-       memcpy(&mycfg, &original, sizeof(termios));
-       mycfg.c_lflag &= ~ICANON;
-       mycfg.c_lflag &= ~ECHO;
-       mycfg.c_cc[VMIN] = 1;
-       tcsetattr(STDIN_FILENO, TCSANOW, &mycfg);
+       
        // read the character
        int ch;
        int tmp[1];
        read(STDIN_FILENO, tmp, 1);
        ch = tmp[0];
        // restore the normal terminal mode
-       tcsetattr(STDIN_FILENO, TCSANOW, &original);
        auto ret = Symbol("", std::string{static_cast<char>(ch)}, Type::String);
        return ret;
-     }}},
+    }}},
     {"strip", {[](std::list<Symbol> args) -> Symbol {
        const auto is_strlit = [](const std::string &s) -> bool {
          return (s.size() > 1) && (s[0] == '"') && (s[s.length() - 1] == '"');
