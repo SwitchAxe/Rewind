@@ -772,9 +772,6 @@ std::map<std::string, Functor> procedures = {
                                     get_int(e.value), get_int(prev.value));
            continue;
          }
-         if (e.type != prev.type) {
-           return Symbol("", false, Type::Boolean);
-         }
          is_true = is_true && (e.value == prev.value);
          prev = e;
        }
@@ -932,7 +929,8 @@ std::map<std::string, Functor> procedures = {
        return Symbol("", l, Type::List);
      }}},
     {"ltos", {[](std::list<Symbol> args) -> Symbol {
-       if ((args.size() != 1) || (args.front().type != Type::List)) {
+       if ((args.size() != 1) || (((args.front().type != Type::List) &&
+                                   (args.front().type != Type::RawAst)))) {
          throw std::logic_error{
              "'ltos' expects a list of strings to concatenate!\n"};
        }
@@ -944,7 +942,7 @@ std::map<std::string, Functor> procedures = {
            throw std::logic_error{
                "Exception in 'ltos'! Found a non-string list element.\n"};
          }
-	 ret += std::get<std::string>(e.value);
+         ret += std::get<std::string>(e.value);
        }
        return Symbol("", ret, Type::String);
      }}},
@@ -1419,7 +1417,8 @@ std::map<std::string, Functor> procedures = {
        else
          n = std::get<long long int>(args.front().value);
        args.pop_front();
-       if (args.front().type != Type::List) {
+       if (((args.front().type != Type::List) &&
+            (args.front().type != Type::RawAst))) {
          throw std::logic_error{
              "The second argument to 'hd' must be a list!\n"};
        }
@@ -1445,28 +1444,31 @@ std::map<std::string, Functor> procedures = {
        else
          n = std::get<long long int>(args.front().value);
        args.pop_front();
-       if (args.front().type != Type::List) {
+       if ((args.front().type != Type::List) &&
+           (args.front().type != Type::RawAst)) {
          throw std::logic_error{
              "The second argument to 'tl' must be a list!\n"};
        }
        auto lst = std::get<std::list<Symbol>>(args.front().value);
        std::reverse(lst.begin(), lst.end());
        if (n > lst.size()) {
-         return Symbol("", lst, Type::List);
+         return Symbol("", lst, args.front().type);
        }
        auto ret = std::list<Symbol>{};
        for (int i = 0; i < n; ++i) {
          ret.push_back(lst.front());
          lst.pop_front();
        }
-       Symbol rets = Symbol("", ret, Type::List);
+       Symbol rets = Symbol("", ret, args.front().type);
        return rets;
      }}},
     {"first", {[](std::list<Symbol> args) -> Symbol {
        if (args.empty()) {
          return Symbol("", std::list<Symbol>{}, Type::List);
        }
-       if ((args.front().type != Type::List) || (args.size() > 1)) {
+       if (((args.front().type != Type::List) &&
+            (args.front().type != Type::RawAst)) ||
+           (args.size() > 1)) {
          throw std::logic_error{"'first' expects a list of which to return "
                                 "the first element!\n"};
        }
@@ -1477,7 +1479,10 @@ std::map<std::string, Functor> procedures = {
        return lst.front();
      }}},
     {"delete", {[](std::list<Symbol> args) -> Symbol {
-       if ((args.size() != 2) || (args.front().type != Type::List) ||
+       if ((args.size() != 2) ||
+           ((args.front().type != Type::RawAst) &&
+            (((args.front().type != Type::List) &&
+              (args.front().type != Type::RawAst)))) ||
            (args.back().type != Type::Number)) {
          throw std::logic_error{"Exception: The 'delete' procedure accepts a "
                                 "list and an index!\n"};
@@ -1510,11 +1515,23 @@ std::map<std::string, Functor> procedures = {
          return Symbol("", l, Type::List);
        }
      }}},
+    {"reverse", {[](std::list<Symbol> args) -> Symbol {
+       if ((args.size() != 1) || ((args.front().type != Type::RawAst) &&
+                                  (args.front().type != Type::List))) {
+         throw std::logic_error{
+             "Exception: The 'reverse' procedure only accepts a list!\n"};
+       }
+       auto l = std::get<std::list<Symbol>>(args.front().value);
+       std::reverse(l.begin(), l.end());
+       return Symbol("", l, args.front().type);
+     }}},
     {"length", {[](std::list<Symbol> args) -> Symbol {
        if (args.empty()) {
          return Symbol("", 0, Type::Number);
        }
-       if ((args.front().type != Type::List) || (args.size() > 1)) {
+       if ((((args.front().type != Type::List) &&
+             (args.front().type != Type::RawAst))) ||
+           (args.size() > 1)) {
          throw std::logic_error{"'first' expects a list of which to return "
                                 "the first element!\n"};
        }
@@ -1528,13 +1545,12 @@ std::map<std::string, Functor> procedures = {
     {"++", {[](std::list<Symbol> args) -> Symbol {
        std::list<Symbol> l;
        for (auto e : args) {
-         if (e.type == Type::List) {
+         if (e.type == Type::List)
            for (auto x : std::get<std::list<Symbol>>(e.value)) {
              l.push_back(x);
            }
-         } else {
+         else
            l.push_back(e);
-         }
        }
        return Symbol("", l, Type::List);
      }}},
@@ -1587,6 +1603,7 @@ std::map<std::string, Functor> procedures = {
     {"typeof", {[](std::list<Symbol> args, path PATH) -> Symbol {
        switch (args.front().type) {
        case Type::List:
+       case Type::RawAst:
          return Symbol("", "list", Type::String);
          break;
        case Type::Number:
@@ -1619,22 +1636,27 @@ std::map<std::string, Functor> procedures = {
          throw std::logic_error{
              "Exception: The 'ast' procedure expects a single string!\n"};
        }
-       auto sym = eval(args.front(), PATH);
-       if (sym.type != Type::String) {
+       if (args.front().type != Type::String) {
          throw std::logic_error{
              "Exception: The 'ast' procedure expects a single string!\n"};
        }
-       input = std::get<std::string>(sym.value);
+       input = std::get<std::string>(args.front().value);
        try {
          auto ast = get_ast(get_tokens(input));
-         ast.type = Type::RawAst;
+         if (ast.type == Type::List) {
+           ast.type = Type::RawAst;
+           auto l = std::get<std::list<Symbol>>(ast.value);
+           for (auto &e : l) {
+             if (e.type == Type::List)
+               e.type = Type::RawAst;
+           }
+           ast.value = l;
+         }
          return ast;
        } catch (std::logic_error ex) {
          return Symbol("", ex.what(), Type::Error);
        };
      }}}};
 
-std::array<std::string, 11> special_forms = {
-    "->",  "let",     "if",  "$",   "cond", "match",
-    "<<<", "defined", "ast", "and", "or",
-};
+std::array<std::string, 10> special_forms = {
+    "->", "let", "if", "$", "cond", "match", "<<<", "defined", "and", "or"};

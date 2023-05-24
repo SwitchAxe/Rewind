@@ -29,11 +29,13 @@
 Symbol eval(Symbol root, const std::vector<std::string> &PATH);
 Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH);
 
-std::pair<std::string, Symbol> check_for_tail_recursion(std::string name, Symbol funcall,
-                                               path &PATH) {
-  if (funcall.type != Type::List) return {"no", funcall};
+std::pair<std::string, Symbol>
+check_for_tail_recursion(std::string name, Symbol funcall, path &PATH) {
+  if (funcall.type != Type::List)
+    return {"no", funcall};
   auto lst = std::get<std::list<Symbol>>(funcall.value);
-  if (lst.empty()) return {"no", funcall};
+  if (lst.empty())
+    return {"no", funcall};
   auto fstnode = lst.front();
   if ((fstnode.type != Type::Identifier) && (fstnode.type != Type::Operator)) {
     return {"no", funcall};
@@ -79,7 +81,9 @@ Symbol eval_function(Symbol node, const std::vector<std::string> &PATH) {
       });
   for (auto p : zipped) {
     frame.insert_or_assign(std::get<std::string>(p.first.value),
-                           eval(p.second, PATH));
+                           (p.second.type == Type::RawAst)
+                               ? p.second
+                               : eval(p.second, PATH));
   }
   if (node.type != Type::Funcall)
     call_stack.push_back(std::make_pair(op, frame));
@@ -95,7 +99,9 @@ Symbol eval_function(Symbol node, const std::vector<std::string> &PATH) {
   }
   if (auto last_call = check_for_tail_recursion(op, last, PATH);
       last_call.first == "no") {
-    result = eval(last_call.second, PATH);
+    if (result.type != Type::RawAst)
+      result = eval(last_call.second, PATH);
+    else result = last_call.second;
   } else {
     last = last_call.second;
     last.type = Type::Funcall;
@@ -118,7 +124,6 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH) {
     return node;
   }
   if (node.type == Type::RawAst) {
-    result.type = Type::List;
     return node;
   }
   if (op.type == Type::Operator) {
@@ -127,11 +132,11 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH) {
     if (procedures.contains(std::get<std::string>(op.value))) {
       Functor fun = procedures[std::get<std::string>(op.value)];
       result = fun(std::get<std::list<Symbol>>(node.value), PATH);
-      if (result.type == Type::RawAst) {
-	result.type = Type::List;
+       if (result.type == Type::RawAst) {
 	return result;
       }
-      return eval(result, PATH);
+      result = eval(result, PATH);
+      return result;
     } else
       throw std::logic_error{"Unbound procedure!\n"};
   } else if ((op.type == Type::Identifier) &&
@@ -275,14 +280,18 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH) {
         }
       }
     } else {
+      if (current_node.type == Type::RawAst) {
+	return current_node;
+      }
       if ((current_node.type == Type::Operator) &&
           (std::find(special_forms.begin(), special_forms.end(),
                      std::get<std::string>(current_node.value)) !=
-           special_forms.end())) {
+           special_forms.end()) && (!node_stk.empty())) {
         // delay the evaluation of special forms
-        auto spfl = std::get<std::list<Symbol>>(node_stk.top().value);
+	auto spfl = std::get<std::list<Symbol>>(node_stk.top().value);
         if (leaves.empty())
           leaves.push_back(std::list<Symbol>());
+
         leaves[leaves.size() - 1] = spfl;
         leaves[leaves.size() - 1].push_front(current_node);
         Symbol dummy =

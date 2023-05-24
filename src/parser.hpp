@@ -122,27 +122,10 @@ Symbol get_ast(std::vector<std::string> tokens) {
 std::string rec_print_ast(Symbol root) {
   std::cout << std::boolalpha;
   std::string res;
-  if (root.type == Type::List) {
+  if ((root.type == Type::RawAst) || (root.type == Type::List)) {
     res += "[ ";
     for (auto s : std::get<std::list<Symbol>>(root.value)) {
-      if (s.type == Type::List) {
-        res += rec_print_ast(s);
-      } else {
-        std::visit(
-            [&]<class T>(T &&v) -> void {
-              if constexpr (std::is_same_v<std::decay_t<T>, std::monostate>) {
-              } else if constexpr (std::is_same_v<std::decay_t<T>,
-                                                  std::list<Symbol>>) {
-              } else if constexpr (std::is_same_v<std::decay_t<T>,
-                                                  std::string>) {
-                res += process_escapes(v) + " ";
-              } else if (std::is_same_v<std::decay_t<T>, bool>) {
-                res += std::string{(v ? "true" : "false")} + " ";
-              } else
-                res += std::to_string(v) + " ";
-            },
-            s.value);
-      }
+      res += rec_print_ast(s) + " ";
     }
     res += "]";
   } else {
