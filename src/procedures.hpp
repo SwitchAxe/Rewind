@@ -104,6 +104,22 @@ static const Symbol match_less_than_capture =
                              Symbol("", "b", Type::Number)},
            Type::List);
 
+
+
+static const Symbol match_greater_than =
+    Symbol("",
+           std::list<Symbol>{Symbol("", ">", Type::Operator),
+                             Symbol("", "b", Type::Number)},
+           Type::List);
+
+
+static const Symbol match_greater_than_capture =
+    Symbol("",
+           std::list<Symbol>{Symbol("", ">", Type::Operator),
+                             Symbol("", "a", Type::Number),
+                             Symbol("", "b", Type::Number)},
+           Type::List);
+
 static const Symbol match_eq_capture =
     Symbol("",
            std::list<Symbol>{Symbol("", "=", Type::Operator),
@@ -1124,6 +1140,7 @@ std::map<std::string, Functor> procedures = {
              for (auto expr : branchl) {
                result = eval(expr, PATH);
              }
+	     variables.pop_back();
              return result;
            }
          } else if (weak_compare(match_eq, pattern)) {
@@ -1174,6 +1191,7 @@ std::map<std::string, Functor> procedures = {
              for (auto expr : branchl) {
                result = eval(expr, PATH);
              }
+	     variables.pop_back();
              return result;
            }
          } else if (weak_compare(match_in_list, pattern)) {
@@ -1228,6 +1246,59 @@ std::map<std::string, Functor> procedures = {
              for (auto expr : branchl) {
                result = eval(expr, PATH);
              }
+	     variables.pop_back();
+             return result;
+           }
+         } else if (weak_compare(match_greater_than, pattern)) {
+	   auto expr = std::get<std::list<Symbol>>(pattern.value);
+	   auto value = expr.back();
+	   if (element.type != Type::Number) {
+             throw std::logic_error{"Type mismatch in a 'match' block! "
+                                    "Expected an integer in a condition!\n"};
+           }
+           if (value.type != Type::Number) {
+             if (value.type == Type::List) {
+               value = eval(value, PATH);
+             } else
+               throw std::logic_error{"Type mismatch in a 'match' block! "
+                                      "Expected an integer in a pattern!\n"};
+           }
+	   if (std::visit([]<class T, class U>(
+                              T t, U u) -> bool { return std::cmp_greater(t, u); },
+                          get_int(element.value), get_int(value.value))) {
+             Symbol result;
+             for (auto expr : branchl) {
+               result = eval(expr, PATH);
+             }
+             return result;
+           }
+         } else if (weak_compare(match_greater_than_capture, pattern)) {
+	   auto expr = std::get<std::list<Symbol>>(pattern.value);
+	   auto value = expr.back();
+	   if (element.type != Type::Number) {
+             throw std::logic_error{"Type mismatch in a 'match' block! "
+                                    "Expected an integer in a condition!\n"};
+           }
+           if (value.type != Type::Number) {
+             if (value.type == Type::List) {
+               value = eval(value, PATH);
+             } else
+               throw std::logic_error{"Type mismatch in a 'match' block! "
+                                      "Expected an integer in a pattern!\n"};
+           }
+	   if (std::visit([]<class T, class U>(
+                              T t, U u) -> bool { return std::cmp_greater(t, u); },
+                          get_int(element.value), get_int(value.value))) {
+             Symbol result;
+	     std::string id;
+	     expr.pop_back();
+	     id = std::get<std::string>(expr.back().value);
+	     variables.push_back(std::map<std::string, Symbol>{});
+	     variables[variables.size() - 1].insert_or_assign(id, element);
+             for (auto expr : branchl) {
+               result = eval(expr, PATH);
+             }
+	     variables.pop_back();
              return result;
            }
          }
@@ -1508,6 +1579,50 @@ std::map<std::string, Functor> procedures = {
          for (std::list<Symbol>::iterator it = l.begin(); it != l.end(); ++it) {
            if (i == uidx) {
              l.erase(it);
+             break;
+           }
+           i++;
+         }
+         return Symbol("", l, Type::List);
+       }
+     }}},
+    {"insert", {[](std::list<Symbol> args) -> Symbol {
+       if ((args.size() != 3) ||
+           ((args.front().type != Type::List) &&
+            (args.front().type != Type::RawAst)) ||
+           (args.back().type != Type::Number)) {
+         throw std::logic_error{"Exception: The 'insert' procedure accepts a "
+                                "list, an element, and an index!\n"};
+       }
+       auto l = std::get<std::list<Symbol>>(args.front().value);
+       args.pop_front();
+       long long signed int sidx = 0;
+       long long unsigned int uidx = 0;
+       if (std::holds_alternative<long long signed int>(args.back().value)) {
+         sidx = std::get<long long signed int>(args.back().value);
+         long long signed int i = 0;
+         if (sidx >= l.size()) {
+           l.insert(l.end(), args.front());
+           return Symbol("", l, Type::List);
+         }
+         for (std::list<Symbol>::iterator it = l.begin(); it != l.end(); ++it) {
+           if (i == sidx) {
+             l.insert(it, args.front());
+             break;
+           }
+           i++;
+         }
+         return Symbol("", l, Type::List);
+       } else {
+         uidx = std::get<long long unsigned int>(args.back().value);
+         long long unsigned int i = 0;
+         if (uidx >= l.size()) {
+           l.insert(l.end(), args.front());
+           return Symbol("", l, Type::List);
+         }
+         for (std::list<Symbol>::iterator it = l.begin(); it != l.end(); ++it) {
+           if (i == uidx) {
+             l.insert(it, args.front());
              break;
            }
            i++;
