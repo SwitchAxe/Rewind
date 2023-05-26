@@ -159,7 +159,7 @@
 	    (let elems_num (length split))
 	    (let spaces_n (- elems_num 1))
 	    (let nonspaces_n (- len spaces_n))
-	    (+ nonspaces_n (- elems_num 1))]))
+	    (+ nonspaces_n spaces_n)]))
 
 (let gus_aux (app as_list len rev inspos)
      (print "\e7\e[10;1Hpos =" inspos " diff = " (- len inspos) curs_erase "\e8")
