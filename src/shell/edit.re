@@ -162,6 +162,8 @@
 	    (+ nonspaces_n spaces_n)]))
 
 (let gus_aux (app as_list len rev inspos)
+     (print "\e7\e[20;1Hpos = " inspos ", diff = " (- len inspos) curs_erase "\e8")
+     (flush)
      (let cur (getch))
      (cond [(= cur "left")
 	    (cond [(< 0 inspos)
@@ -180,29 +182,21 @@
 	   [(= (chtoi cur) 10) (print "\n") app]
 	   [(or (= (chtoi cur) 127) (= (chtoi cur) 8))
 	    (cond [(< 0 inspos)
-	    	   (cond [(= inspos len)
-		   	  (let del (hd (- len 1) as_list))
-			  (print "\b \b")
-			  (flush)
-			  (gus_aux (ltos del)
-			  	   del
-				   (- len 1)
-				   (rest rev)
-				   (- inspos 1))]
-			 [else
-			  (let del (delete as_list (- inspos 1)))
-			  (let new_app (ltos del))
-			  (let diff (- len inspos))
-			  (print (s+ "\e[" (tos inspos) "D"))
-			  (print curs_erase new_app)
-			  (visit new_app)
-		   	  (print (s+ "\e[" (tos diff) "D"))
-			  (flush)
-			  (gus_aux new_app
-			  	   del
-				   (- len 1)
-				   (delete rev (- len inspos))
-				   (- inspos 1))])]
+		   (let del (delete as_list (- inspos 1)))
+		   (let new_app (ltos del))
+		   (print "\e[" inspos "D" curs_erase)
+		   (let formatted (visit new_app))
+		   (let new_inspos (find_new_index new_app inspos))
+	    	   (let new_as_list (stol formatted))
+	    	   (let new_len (length new_as_list))
+	    	   (let diff (- new_len (- new_inspos 1)))
+	    	   (cond [(< 0 diff) (print "\e[" diff "D")])
+	    	   (flush)
+		   (gus_aux new_app
+		  	    new_as_list
+		  	    new_len
+		  	    (reverse new_as_list)
+			    (- new_inspos 1))]
 		  [else (gus_aux app
 		  		 as_list
 				 len
@@ -216,8 +210,7 @@
 	    (let new_as_list (stol formatted))
 	    (let new_len (length new_as_list))
 	    (let diff (- new_len new_inspos))
-	    (cond [(< 1 diff) (print "\e[" diff "D" curs_fwd)]
-	    	  [else false])
+	    (cond [(< 1 diff) (print "\e[" diff "D" curs_fwd)])
 	    (flush)
 	    (gus_aux formatted new_as_list new_len
 		     (reverse new_as_list)
