@@ -1,5 +1,3 @@
-# (load highlight.re)
-
 (let re_color_black "\e[0;30m")
 (let re_color_red "\e[0;31m")
 (let re_color_green "\e[0;32m")
@@ -19,75 +17,219 @@
 (let re_color_blank "\e[0m")
 (let re_color_attr_bold "\e[1m")
 
+# cursor movement forward/backwards
+(let curs_fwd "\e[1C")
+(let curs_bwd "\e[1D")
 
-(print re_color_blank)
+# erase the current line, starting from the cursor
+(let curs_erase "\e[0K")
 
-#(let curs_fwd "\e[1C")
-#(let curs_bwd "\e[1D")
-# for getting input from the user with a prompt
+# arrow key codes to be caught by readch
+(let arr_up "\e[A")
+(let arr_down "\e[B")
+(let arr_right "\e[C")
+(let arr_left "\e[D")
 
 (let rest (l)
      (tl (length l) (tl (- (length l) 1) l)))
 
-(let ltos-aux (l app)
+(let restn (l n)
+     (tl (length l) (tl (- (length l) n) l)))
+
+#map that takes a procedure which in turn doesn't take arguments
+#used only for side effects, see below.
+
+#note: tail recursive
+(let map-noargs (f l dummy)
      (if (= l [])
-     	 app
-	 (ltos-aux (rest l) (s+ app (first l)))))
-
-(let ltos (l) (ltos-aux l ""))
-
-# for overwriting a word with a colored variant depending
-# on what kind of semantic element it represents.
-
-(let map-aux (f l acc)
-     (if (= l [])
-     	[]
-	(++ (f (first l)) (map f (rest l)))))
+     	 true
+	 (map-noargs f (rest l) (f))))
 
 (let range (inf sup)
-     (if (= inf sup)
-     	 sup
-	 (++ (range (+ inf 1) sup) inf)))
+     (cond [(< sup inf) []]
+     	   [(< inf sup) (++ inf (range (+ inf 1) sup))]
+	   [else []]))
 
-(let iter (idx limit fun)
-     (map fun (range idx limit)))
+(let escape_sequences [["cursor up" 91 65]
+     		       ["cursor down" 91 66]
+		       ["cursor right" 91 67]
+		       ["cursor left" 91 68]])
+
+(let getch ()
+     (let fst_b (readch))
+     (if (!= (chtoi fst_b) 27)
+     	 fst_b
+	 (match (chtoi (readch))
+	     	[(= 91) (match (chtoi (readch))
+	     		       [(= 65) "up"]
+	     	    	       [(= 66) "down"]
+		    	       [(= 67) "right"]
+		    	       [(= 68) "left"]
+		    	       [_ "undefined"])]
+		[(_) "undefined"])))
 
 (let overwrite (word color)
-     (let as_list (stol word))
-     (let word_length (length as_list))
-     (iter 1 word_length (let () (print "\b")))
-     (print color word re_color_blank)
-     (flush))
+     (print color word re_color_blank))
 
-(let gus_aux (app lastw)
-     (let cur (readch))
-     (cond [(= (chtoi cur) 10) (print "\n") app]
+(let kind (x) (typeof (ast x)))
+
+(let map-aux (f l app)
+     (cond [(= l []) app]
+     	   [else (map-aux f (rest l) (++ app (f (first l))))]))
+
+(let map (f l)
+     (map-aux f l []))
+
+(let accumulate (f l app)
+     (cond [(= l []) app]
+     	   [else (accumulate f (rest l) (f (first l) app))]))
+
+(let min (a b) (if (< a b) a b))
+(let max (a b) (if (< a b) b a))
+
+(let number? (x) (= (typeof (ast x)) "number"))
+(let list? (x) (= (typeof (ast x)) "list"))
+(let string? (x) (= (typeof (ast x)) "string"))
+(let paren? (x) (or (= x "[") (= x "]")
+     	    	    (= x "(") (= x ")")))
+
+(let space? (x) (or (= x " ") (= x "\t")))
+
+(let ws_split-aux (l acc app)
+     (cond [(= l []) (if (= acc "") app (++ app acc))]
+     	   [(space? (first l)) (if (= acc "")
+	   	    	       	   (ws_split-aux (rest l) "" app)
+				   (ws_split-aux (rest l) "" (++ app acc)))]
+	   [else (ws_split-aux (rest l) (s+ acc (first l)) app)]))
+
+(let ws_split (s)
+     (ws_split-aux (stol s) "" []))
+
+(let format_list-aux (l)
+     (cond [(= l []) []]
+	   [(= (rest l) []) (first l)]
+	   [(= (typeof (first l)) "list")
+	       (++ "[" (format_list_aux (first l)) "]")]
+     	   [else (++ (first l) " " (format_list-aux (rest l)))]))
+
+(let format_list (s)
+     (++ "[" (format_list-aux (ast s)) "]"))
+
+# visits the AST of 'sentence' and highlights it
+(let visit (sentence)
+     (cond [(or (= sentence "(") (= sentence "["))
+            (overwrite sentence re_color_yellow)
+	    sentence]
+	   [(or (= sentence ")") (= sentence "]"))
+	    (overwrite sentence re_color_yellow)
+	    sentence]
+	   [(or (= sentence " ") (= sentence "\t"))
+	    (print sentence)
+	    sentence]
+	   [(= (kind sentence) "operator")
+     	    (overwrite sentence re_color_blue)
+	    sentence]
+	   [(= (kind sentence) "list")
+	    (let as_l (format_list sentence))
+	    (ltos (map (let (e) (visit (tos e))) as_l))]
+	   [(= (kind sentence) "number")
+	    (overwrite sentence re_color_green)
+	    sentence]
+	   [(= (kind sentence) "error")
+	    (overwrite sentence re_color_red)
+	    sentence]
+	   [(= (kind sentence) "identifier")
+	    (overwrite sentence re_color_purple)
+	    sentence]
+	   [else
+	    (overwrite sentence re_color_blank)
+	    sentence]))
+
+(let find (l i)
+     (cond [(< i 0) []]
+     	   [else (first (tl 1 (hd (+ i 1) l)))]))
+
+(let find_new_index (s i)
+     (cond [(!= (kind s) "list") i]
+     	   [(= i 0) i]
+     	   [else
+	    (let l (hd i (stol s)))
+	    (let len (length l))
+	    (let split (ws_split (ltos l)))
+	    (let elems_num (length split))
+	    (let spaces_n (- elems_num 1))
+	    (let nonspaces_n (- len spaces_n))
+	    (+ nonspaces_n (- elems_num 1))]))
+
+(let gus_aux (app as_list len rev inspos)
+     (print "\e7\e[10;1Hpos =" inspos " diff = " (- len inspos) curs_erase "\e8")
+     (flush)
+     (let cur (getch))
+     (cond [(= cur "left")
+	    (cond [(< 0 inspos)
+	    	   (print curs_bwd)
+		   (flush)
+		   (gus_aux app as_list len rev (- inspos 1))]
+		  [else (gus_aux app as_list len rev inspos)])]
+	   [(= cur "right")
+	    (cond [(< inspos len)
+	    	   (print curs_fwd)
+		   (flush)
+		   (gus_aux app as_list len rev (+ inspos 1))]
+		  [else (gus_aux app as_list len rev inspos)])]
+	   [(or (= cur "up") (= cur "down") (= cur "undefined"))
+	    (gus_aux app as_list len rev inspos)]
+	   [(= (chtoi cur) 10) (print "\n") app]
 	   [(or (= (chtoi cur) 127) (= (chtoi cur) 8))
-	    (cond [(!= app "")
-	    	   (print "\b \b")
-		   (flush)])
-	    (print "app = " app ", lastw = " lastw ".\n")
-	    (gus_aux (ltos (hd (- (length (stol app)) 1) (stol app)))
-	    	     (ltos (hd (- (length (stol lastw)) 1) (stol lastw))))]
-	   [else (print cur)
-	   	 (cond [(= (typeof (eval (s+ lastw cur))) "error")
-		        (overwrite (s+ lastw cur) re_color_red)]
-		       [(defined (s+ lastw cur)) (overwrite lastw re_color_yellow)]
-		       [(= (typeof (eval (s+ lastw cur))) "list")
-		       	(overwrite (s+ lastw cur) re_color_attr_bold)]
-		       [(= (typeof (eval (s+ lastw cur))) "operator")
-		       	(overwrite (s+ lastw cur) re_color_green)]
-		       [(= (typeof (eval (s+ lastw cur))) "string")
-		        (overwrite (s+ lastw cur) re_color_cyan)])
-	   	 (flush)
-		 (cond [(or (= (chtoi cur) 32) (= (chtoi cur) 9))
-		       	(gus_aux (s+ app cur) "")]
-		       [else
-			(print "cur = " cur ".\n")
-			(gus_aux (s+ app cur) (s+ lastw cur))])]))
+	    (cond [(< 0 inspos)
+	    	   (cond [(= inspos len)
+		   	  (let del (hd (- len 1) as_list))
+			  (print "\b \b")
+			  (flush)
+			  (gus_aux (ltos del)
+			  	   del
+				   (- len 1)
+				   (rest rev)
+				   (- inspos 1))]
+			 [else
+			  (let del (delete as_list (- inspos 1)))
+			  (let new_app (ltos del))
+			  (let diff (- len inspos))
+			  (print (s+ "\e[" (tos inspos) "D"))
+			  (print curs_erase new_app)
+			  (visit new_app)
+		   	  (print (s+ "\e[" (tos diff) "D"))
+			  (flush)
+			  (gus_aux new_app
+			  	   del
+				   (- len 1)
+				   (delete rev (- len inspos))
+				   (- inspos 1))])]
+		  [else (gus_aux app
+		  		 as_list
+				 len
+				 rev
+				 0)])]
+	   [else
+	    (let new_app (ltos (insert as_list cur inspos)))
+	    (if (< 0 inspos) (print "\e[" inspos "D" curs_erase) false)
+	    (let formatted (visit new_app))
+	    (let new_inspos (find_new_index new_app inspos))
+	    (let new_as_list (stol formatted))
+	    (let new_len (length new_as_list))
+	    (let diff (- new_len new_inspos))
+	    (cond [(< 1 diff) (print "\e[" diff "D" curs_fwd)]
+	    	  [else false])
+	    (flush)
+	    (gus_aux formatted new_as_list new_len
+		     (reverse new_as_list)
+		     (+ 1 new_inspos))]))
 
 (let get_user_string ()
-     (gus_aux "" ""))
+     (rawmode)
+     (let res (gus_aux "" [] 0 [] 0))
+     (cookedmode)
+     res)
 
 (let get_input (p)
      (cond [(!= p false)
@@ -98,6 +240,7 @@
 	   	 (get_user_string)]))
 
 (let evloop (fun) (fun) (evloop fun))
+
 (if (defined prompt)
     (evloop (let () (print (eval (get_input (prompt))))))
     (evloop (let () (print (eval (get_input false))))))
