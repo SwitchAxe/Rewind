@@ -180,6 +180,7 @@ void rewind_sh_loop() {
         std::cout << rec_print_ast(ast);
       }
     } catch (std::logic_error ex) {
+      procedures["cookedmode"]({}, {});
       std::cout << ex.what() << "\n";
       continue;
     }

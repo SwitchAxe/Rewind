@@ -109,7 +109,7 @@
      (cond [(= l []) []]
 	   [(= (rest l) []) (first l)]
 	   [(= (typeof (first l)) "list")
-	       (++ "[" (format_list_aux (first l)) "]")]
+	    (format_list (first l))]
      	   [else (++ (first l) " " (format_list-aux (rest l)))]))
 
 (let format_list (s)
@@ -130,7 +130,7 @@
      	    (overwrite sentence re_color_blue)
 	    sentence]
 	   [(= (kind sentence) "list")
-	    (let as_l (format_list sentence))
+	    (let as_l (stol sentence))
 	    (ltos (map (let (e) (visit (tos e))) as_l))]
 	   [(= (kind sentence) "number")
 	    (overwrite sentence re_color_green)
@@ -149,35 +149,23 @@
      (cond [(< i 0) []]
      	   [else (first (tl 1 (hd (+ i 1) l)))]))
 
-(let find_new_index (s i)
-     (cond [(!= (kind s) "list") i]
-     	   [(= i 0) i]
-     	   [else
-	    (let l (hd i (stol s)))
-	    (let len (length l))
-	    (let split (ws_split (ltos l)))
-	    (let elems_num (length split))
-	    (let spaces_n (- elems_num 1))
-	    (let nonspaces_n (- len spaces_n))
-	    (+ nonspaces_n spaces_n)]))
-
-(let gus_aux (app as_list len rev inspos)
+(let gus_aux (app as_list len inspos)
      (flush)
      (let cur (getch))
      (cond [(= cur "left")
 	    (cond [(< 0 inspos)
 	    	   (print curs_bwd)
 		   (flush)
-		   (gus_aux app as_list len rev (- inspos 1))]
-		  [else (gus_aux app as_list len rev inspos)])]
+		   (gus_aux app as_list len (- inspos 1))]
+		  [else (gus_aux app as_list len inspos)])]
 	   [(= cur "right")
 	    (cond [(< inspos len)
 	    	   (print curs_fwd)
 		   (flush)
-		   (gus_aux app as_list len rev (+ inspos 1))]
-		  [else (gus_aux app as_list len rev inspos)])]
+		   (gus_aux app as_list len (+ inspos 1))]
+		  [else (gus_aux app as_list len inspos)])]
 	   [(or (= cur "up") (= cur "down") (= cur "undefined"))
-	    (gus_aux app as_list len rev inspos)]
+	    (gus_aux app as_list len inspos)]
 	   [(= (chtoi cur) 10) (print "\n") app]
 	   [(or (= (chtoi cur) 127) (= (chtoi cur) 8))
 	    (cond [(< 0 inspos)
@@ -185,39 +173,31 @@
 		   (let new_app (ltos del))
 		   (print "\e[" inspos "D" curs_erase)
 		   (let formatted (visit new_app))
-		   (let new_inspos (find_new_index new_app inspos))
-	    	   (let new_as_list (stol formatted))
-	    	   (let new_len (length new_as_list))
-	    	   (let diff (- new_len (- new_inspos 1)))
+	    	   (let diff (- (- len 1) (- inspos 1)))
 	    	   (cond [(< 0 diff) (print "\e[" diff "D")])
 	    	   (flush)
 		   (gus_aux new_app
-		  	    new_as_list
-		  	    new_len
-		  	    (reverse new_as_list)
-			    (- new_inspos 1))]
+		  	    del
+		  	    (- len 1)
+			    (- inspos 1))]
 		  [else (gus_aux app
 		  		 as_list
 				 len
-				 rev
 				 0)])]
 	   [else
 	    (let new_app (ltos (insert as_list cur inspos)))
 	    (if (< 0 inspos) (print "\e[" inspos "D" curs_erase) false)
 	    (let formatted (visit new_app))
-	    (let new_inspos (find_new_index new_app inspos))
-	    (let new_as_list (stol formatted))
-	    (let new_len (length new_as_list))
-	    (let diff (- new_len new_inspos))
+	    (let new_as_list (stol new_app))
+	    (let diff (- (+ len 1) inspos))
 	    (cond [(< 1 diff) (print "\e[" diff "D" curs_fwd)])
 	    (flush)
-	    (gus_aux formatted new_as_list new_len
-		     (reverse new_as_list)
-		     (+ 1 new_inspos))]))
+	    (gus_aux formatted new_as_list (+ len 1)
+		     (+ 1 inspos))]))
 
 (let get_user_string ()
      (rawmode)
-     (let res (gus_aux "" [] 0 [] 0))
+     (let res (gus_aux "" [] 0 0))
      (cookedmode)
      res)
 

@@ -108,7 +108,7 @@ Symbol get_ast(std::vector<std::string> tokens) {
     }
   }
   if (round_balance) {
-    throw std::logic_error{"Missing closing parenthesis for an list!\n"};
+    throw std::logic_error{"Missing closing parenthesis for a list!\n"};
   }
   if (square_balance) {
     throw std::logic_error{"Missing closing square bracket for a list!\n"};
@@ -119,13 +119,17 @@ Symbol get_ast(std::vector<std::string> tokens) {
 // DEBUG PURPOSES ONLY and for printing the final result until i
 // make an iterative version of this thing
 
-std::string rec_print_ast(Symbol root) {
+std::string rec_print_ast(Symbol root, bool debug) {
   std::cout << std::boolalpha;
   std::string res;
-  if ((root.type == Type::RawAst) || (root.type == Type::List)) {
-    res += "[ ";
+  if (std::holds_alternative<std::list<Symbol>>(root.value)) {
+    if (debug)
+      res += std::string{(root.type == Type::RawAst) ? "(Ast)" : "(List) "} +
+             " [ ";
+    else
+      res += "[ ";
     for (auto s : std::get<std::list<Symbol>>(root.value)) {
-      res += rec_print_ast(s) + " ";
+      res += rec_print_ast(s, debug) + " ";
     }
     res += "]";
   } else {
@@ -135,10 +139,20 @@ std::string rec_print_ast(Symbol root) {
           } else if constexpr (std::is_same_v<std::decay_t<T>,
                                               std::list<Symbol>>) {
           } else if constexpr (std::is_same_v<std::decay_t<T>, std::string>) {
-            res += process_escapes(v);
+            if (debug)
+              res += ((root.type == Type::String) ? "(Str) " : "(Id) ") +
+                     process_escapes(v);
+            else
+              res += process_escapes(v);
           } else if (std::is_same_v<std::decay_t<T>, bool>) {
-            res += std::string{(v ? "true" : "false")};
-          } else
+            if (debug)
+              res += std::string{(v ? "(Bool) true" : "(Bool) false")};
+            else
+              res += v ? "true" : "false";
+          } else if (debug)
+            res += ((root.type == Type::Number) ? "(Num) " : "(?) ") +
+                   std::to_string(v);
+          else
             res += std::to_string(v);
         },
         root.value);

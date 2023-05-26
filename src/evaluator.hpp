@@ -132,7 +132,7 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH) {
     if (procedures.contains(std::get<std::string>(op.value))) {
       Functor fun = procedures[std::get<std::string>(op.value)];
       result = fun(std::get<std::list<Symbol>>(node.value), PATH);
-       if (result.type == Type::RawAst) {
+      if (result.type == Type::RawAst) {
 	return result;
       }
       result = eval(result, PATH);

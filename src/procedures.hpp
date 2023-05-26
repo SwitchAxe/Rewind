@@ -41,7 +41,7 @@
 #include <unistd.h>
 #include <utility>
 #include <variant>
-std::string rec_print_ast(Symbol root);
+std::string rec_print_ast(Symbol root, bool debug = false);
 Symbol get_ast(std::vector<std::string> tokens);
 std::vector<std::string> get_tokens(std::string stream);
 std::string rewind_read_file(std::string filename);
@@ -104,14 +104,11 @@ static const Symbol match_less_than_capture =
                              Symbol("", "b", Type::Number)},
            Type::List);
 
-
-
 static const Symbol match_greater_than =
     Symbol("",
            std::list<Symbol>{Symbol("", ">", Type::Operator),
                              Symbol("", "b", Type::Number)},
            Type::List);
-
 
 static const Symbol match_greater_than_capture =
     Symbol("",
@@ -945,8 +942,8 @@ std::map<std::string, Functor> procedures = {
        return Symbol("", l, Type::List);
      }}},
     {"ltos", {[](std::list<Symbol> args) -> Symbol {
-       if ((args.size() != 1) || (((args.front().type != Type::List) &&
-                                   (args.front().type != Type::RawAst)))) {
+       if ((args.size() != 1) ||
+           (!std::holds_alternative<std::list<Symbol>>(args.front().value))) {
          throw std::logic_error{
              "'ltos' expects a list of strings to concatenate!\n"};
        }
@@ -1140,7 +1137,7 @@ std::map<std::string, Functor> procedures = {
              for (auto expr : branchl) {
                result = eval(expr, PATH);
              }
-	     variables.pop_back();
+             variables.pop_back();
              return result;
            }
          } else if (weak_compare(match_eq, pattern)) {
@@ -1191,7 +1188,7 @@ std::map<std::string, Functor> procedures = {
              for (auto expr : branchl) {
                result = eval(expr, PATH);
              }
-	     variables.pop_back();
+             variables.pop_back();
              return result;
            }
          } else if (weak_compare(match_in_list, pattern)) {
@@ -1246,13 +1243,13 @@ std::map<std::string, Functor> procedures = {
              for (auto expr : branchl) {
                result = eval(expr, PATH);
              }
-	     variables.pop_back();
+             variables.pop_back();
              return result;
            }
          } else if (weak_compare(match_greater_than, pattern)) {
-	   auto expr = std::get<std::list<Symbol>>(pattern.value);
-	   auto value = expr.back();
-	   if (element.type != Type::Number) {
+           auto expr = std::get<std::list<Symbol>>(pattern.value);
+           auto value = expr.back();
+           if (element.type != Type::Number) {
              throw std::logic_error{"Type mismatch in a 'match' block! "
                                     "Expected an integer in a condition!\n"};
            }
@@ -1263,8 +1260,8 @@ std::map<std::string, Functor> procedures = {
                throw std::logic_error{"Type mismatch in a 'match' block! "
                                       "Expected an integer in a pattern!\n"};
            }
-	   if (std::visit([]<class T, class U>(
-                              T t, U u) -> bool { return std::cmp_greater(t, u); },
+           if (std::visit([]<class T, class U>(T t, U u)
+                              -> bool { return std::cmp_greater(t, u); },
                           get_int(element.value), get_int(value.value))) {
              Symbol result;
              for (auto expr : branchl) {
@@ -1273,9 +1270,9 @@ std::map<std::string, Functor> procedures = {
              return result;
            }
          } else if (weak_compare(match_greater_than_capture, pattern)) {
-	   auto expr = std::get<std::list<Symbol>>(pattern.value);
-	   auto value = expr.back();
-	   if (element.type != Type::Number) {
+           auto expr = std::get<std::list<Symbol>>(pattern.value);
+           auto value = expr.back();
+           if (element.type != Type::Number) {
              throw std::logic_error{"Type mismatch in a 'match' block! "
                                     "Expected an integer in a condition!\n"};
            }
@@ -1286,19 +1283,19 @@ std::map<std::string, Functor> procedures = {
                throw std::logic_error{"Type mismatch in a 'match' block! "
                                       "Expected an integer in a pattern!\n"};
            }
-	   if (std::visit([]<class T, class U>(
-                              T t, U u) -> bool { return std::cmp_greater(t, u); },
+           if (std::visit([]<class T, class U>(T t, U u)
+                              -> bool { return std::cmp_greater(t, u); },
                           get_int(element.value), get_int(value.value))) {
              Symbol result;
-	     std::string id;
-	     expr.pop_back();
-	     id = std::get<std::string>(expr.back().value);
-	     variables.push_back(std::map<std::string, Symbol>{});
-	     variables[variables.size() - 1].insert_or_assign(id, element);
+             std::string id;
+             expr.pop_back();
+             id = std::get<std::string>(expr.back().value);
+             variables.push_back(std::map<std::string, Symbol>{});
+             variables[variables.size() - 1].insert_or_assign(id, element);
              for (auto expr : branchl) {
                result = eval(expr, PATH);
              }
-	     variables.pop_back();
+             variables.pop_back();
              return result;
            }
          }
@@ -1415,8 +1412,6 @@ std::map<std::string, Functor> procedures = {
        return Symbol("", false, Type::Command);
      }}},
     {"readch", {[](std::list<Symbol> args) -> Symbol {
-       // save the terminal settings for restoring them later on
-
        // read the character
        int ch;
        int tmp[1];
@@ -1488,8 +1483,7 @@ std::map<std::string, Functor> procedures = {
        else
          n = std::get<long long int>(args.front().value);
        args.pop_front();
-       if (((args.front().type != Type::List) &&
-            (args.front().type != Type::RawAst))) {
+       if (!std::holds_alternative<std::list<Symbol>>(args.front().value)) {
          throw std::logic_error{
              "The second argument to 'hd' must be a list!\n"};
        }
@@ -1502,7 +1496,7 @@ std::map<std::string, Functor> procedures = {
          ret.push_back(lst.front());
          lst.pop_front();
        }
-       return Symbol("", ret, Type::List);
+       return Symbol("", ret, args.front().type);
      }}},
     {"tl", {[](std::list<Symbol> args) -> Symbol {
        if (args.front().type != Type::Number) {
@@ -1515,8 +1509,7 @@ std::map<std::string, Functor> procedures = {
        else
          n = std::get<long long int>(args.front().value);
        args.pop_front();
-       if ((args.front().type != Type::List) &&
-           (args.front().type != Type::RawAst)) {
+       if (!std::holds_alternative<std::list<Symbol>>(args.front().value)) {
          throw std::logic_error{
              "The second argument to 'tl' must be a list!\n"};
        }
@@ -1537,8 +1530,7 @@ std::map<std::string, Functor> procedures = {
        if (args.empty()) {
          return Symbol("", std::list<Symbol>{}, Type::List);
        }
-       if (((args.front().type != Type::List) &&
-            (args.front().type != Type::RawAst)) ||
+       if ((!std::holds_alternative<std::list<Symbol>>(args.front().value)) ||
            (args.size() > 1)) {
          throw std::logic_error{"'first' expects a list of which to return "
                                 "the first element!\n"};
@@ -1551,14 +1543,13 @@ std::map<std::string, Functor> procedures = {
      }}},
     {"delete", {[](std::list<Symbol> args) -> Symbol {
        if ((args.size() != 2) ||
-           ((args.front().type != Type::RawAst) &&
-            (((args.front().type != Type::List) &&
-              (args.front().type != Type::RawAst)))) ||
+           (!std::holds_alternative<std::list<Symbol>>(args.front().value)) ||
            (args.back().type != Type::Number)) {
          throw std::logic_error{"Exception: The 'delete' procedure accepts a "
                                 "list and an index!\n"};
        }
        auto l = std::get<std::list<Symbol>>(args.front().value);
+       auto new_t = args.front().type;
        args.pop_front();
        long long signed int sidx = 0;
        long long unsigned int uidx = 0;
@@ -1583,18 +1574,18 @@ std::map<std::string, Functor> procedures = {
            }
            i++;
          }
-         return Symbol("", l, Type::List);
+         return Symbol("", l, new_t);
        }
      }}},
     {"insert", {[](std::list<Symbol> args) -> Symbol {
        if ((args.size() != 3) ||
-           ((args.front().type != Type::List) &&
-            (args.front().type != Type::RawAst)) ||
+           (!std::holds_alternative<std::list<Symbol>>(args.front().value)) ||
            (args.back().type != Type::Number)) {
          throw std::logic_error{"Exception: The 'insert' procedure accepts a "
                                 "list, an element, and an index!\n"};
        }
        auto l = std::get<std::list<Symbol>>(args.front().value);
+       auto new_t = args.front().type;
        args.pop_front();
        long long signed int sidx = 0;
        long long unsigned int uidx = 0;
@@ -1612,7 +1603,7 @@ std::map<std::string, Functor> procedures = {
            }
            i++;
          }
-         return Symbol("", l, Type::List);
+         return Symbol("", l, new_t);
        } else {
          uidx = std::get<long long unsigned int>(args.back().value);
          long long unsigned int i = 0;
@@ -1631,8 +1622,8 @@ std::map<std::string, Functor> procedures = {
        }
      }}},
     {"reverse", {[](std::list<Symbol> args) -> Symbol {
-       if ((args.size() != 1) || ((args.front().type != Type::RawAst) &&
-                                  (args.front().type != Type::List))) {
+       if ((args.size() != 1) ||
+           (!std::holds_alternative<std::list<Symbol>>(args.front().value))) {
          throw std::logic_error{
              "Exception: The 'reverse' procedure only accepts a list!\n"};
        }
@@ -1644,8 +1635,8 @@ std::map<std::string, Functor> procedures = {
        if (args.empty()) {
          return Symbol("", 0, Type::Number);
        }
-       if ((((args.front().type != Type::List) &&
-             (args.front().type != Type::RawAst))) ||
+       if ((!std::holds_alternative<std::list<Symbol>>(
+                  args.front().value)) ||
            (args.size() > 1)) {
          throw std::logic_error{"'first' expects a list of which to return "
                                 "the first element!\n"};
@@ -1659,15 +1650,20 @@ std::map<std::string, Functor> procedures = {
      }}},
     {"++", {[](std::list<Symbol> args) -> Symbol {
        std::list<Symbol> l;
+       bool must_ret_ast = false;
        for (auto e : args) {
          if (e.type == Type::List)
            for (auto x : std::get<std::list<Symbol>>(e.value)) {
              l.push_back(x);
            }
-         else
+         else {
+           if (e.type == Type::RawAst) {
+             must_ret_ast = true;
+           }
            l.push_back(e);
+         }
        }
-       return Symbol("", l, Type::List);
+       return Symbol("", l, (must_ret_ast) ? Type::RawAst : Type::List);
      }}},
     {"load", {[](std::list<Symbol> args, path PATH) -> Symbol {
        Symbol last_evaluated;
@@ -1716,9 +1712,18 @@ std::map<std::string, Functor> procedures = {
        return last_evaluated;
      }}},
     {"typeof", {[](std::list<Symbol> args, path PATH) -> Symbol {
-       switch (args.front().type) {
+       if (args.size() != 1) {
+         throw std::logic_error{
+             "The 'typeof' procedure expects exactly one symbol!\n"};
+       }
+
+       Symbol sym;
+       if (args.front().type == Type::RawAst) {
+         sym = get_ast(get_tokens(rec_print_ast(args.front())));
+       } else
+         sym = args.front();
+       switch (sym.type) {
        case Type::List:
-       case Type::RawAst:
          return Symbol("", "list", Type::String);
          break;
        case Type::Number:
@@ -1762,14 +1767,13 @@ std::map<std::string, Functor> procedures = {
            ast.type = Type::RawAst;
            auto l = std::get<std::list<Symbol>>(ast.value);
            for (auto &e : l) {
-             if (e.type == Type::List)
-               e.type = Type::RawAst;
+             e.type = Type::RawAst;
            }
            ast.value = l;
          }
          return ast;
        } catch (std::logic_error ex) {
-         return Symbol("", ex.what(), Type::Error);
+         return Symbol("", std::string(ex.what()), Type::Error);
        };
      }}}};
 
