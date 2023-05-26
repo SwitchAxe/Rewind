@@ -162,8 +162,6 @@
 	    (+ nonspaces_n spaces_n)]))
 
 (let gus_aux (app as_list len rev inspos)
-     (print "\e7\e[10;1Hpos =" inspos " diff = " (- len inspos) curs_erase "\e8")
-     (flush)
      (let cur (getch))
      (cond [(= cur "left")
 	    (cond [(< 0 inspos)
