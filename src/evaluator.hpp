@@ -80,10 +80,9 @@ Symbol eval_function(Symbol node, const std::vector<std::string> &PATH) {
         return std::make_pair(lhs, rhs);
       });
   for (auto p : zipped) {
-    frame.insert_or_assign(std::get<std::string>(p.first.value),
-                           (p.second.type == Type::RawAst)
-                               ? p.second
-                               : eval(p.second, PATH));
+    frame.insert_or_assign(
+        std::get<std::string>(p.first.value),
+        (p.second.type == Type::RawAst) ? p.second : eval(p.second, PATH));
   }
   if (node.type != Type::Funcall)
     call_stack.push_back(std::make_pair(op, frame));
@@ -101,7 +100,8 @@ Symbol eval_function(Symbol node, const std::vector<std::string> &PATH) {
       last_call.first == "no") {
     if (result.type != Type::RawAst)
       result = eval(last_call.second, PATH);
-    else result = last_call.second;
+    else
+      result = last_call.second;
   } else {
     last = last_call.second;
     last.type = Type::Funcall;
@@ -133,7 +133,7 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH) {
       Functor fun = procedures[std::get<std::string>(op.value)];
       result = fun(std::get<std::list<Symbol>>(node.value), PATH);
       if (result.type == Type::RawAst) {
-	return result;
+        return result;
       }
       result = eval(result, PATH);
       return result;
@@ -281,23 +281,27 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH) {
       }
     } else {
       if (current_node.type == Type::RawAst) {
-	return current_node;
+        return current_node;
       }
       if ((current_node.type == Type::Operator) &&
           (std::find(special_forms.begin(), special_forms.end(),
                      std::get<std::string>(current_node.value)) !=
-           special_forms.end()) && (!node_stk.empty())) {
+           special_forms.end()) &&
+          (!node_stk.empty())) {
         // delay the evaluation of special forms
-	auto spfl = std::get<std::list<Symbol>>(node_stk.top().value);
+        auto spfl = std::get<std::list<Symbol>>(node_stk.top().value);
         if (leaves.empty())
           leaves.push_back(std::list<Symbol>());
-
-        leaves[leaves.size() - 1] = spfl;
-        leaves[leaves.size() - 1].push_front(current_node);
-        Symbol dummy =
-            Symbol(node_stk.top().name, std::list<Symbol>(), Type::List);
-        node_stk.pop();
-        node_stk.push(dummy);
+        if (!leaves.back().empty()) {
+          leaves[leaves.size() - 1].push_back(current_node);
+        } else {
+          leaves[leaves.size() - 1] = spfl;
+          leaves[leaves.size() - 1].push_front(current_node);
+          Symbol dummy =
+              Symbol(node_stk.top().name, std::list<Symbol>(), Type::List);
+          node_stk.pop();
+          node_stk.push(dummy);
+        }
       } else if ((leaves.empty() || leaves[leaves.size() - 1].empty()) &&
                  (current_node.type == Type::Identifier) &&
                  (!user_defined_procedures.empty()) &&
