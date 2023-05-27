@@ -725,6 +725,22 @@ std::map<std::string, Functor> procedures = {
        Symbol ret("", r, Type::Number);
        return ret;
      }}},
+    {"%", {[](std::list<Symbol> args) -> Symbol {
+       if ((args.size() != 2) || (args.front().type != args.back().type) ||
+           (args.front().type != Type::Number) ||
+           (args.back().type != Type::Number)) {
+         throw std::logic_error{
+             "Exception: The 'modulus' operator only accepts two integers!\n"};
+       }
+       return Symbol("",
+                     std::visit(
+                         [](auto t, auto u) -> long long unsigned int {
+                           return std::modulus<>{}(t, u);
+                         },
+                         get_int(args.front().value),
+                         get_int(args.back().value)),
+                     Type::Number);
+     }}},
     {"*", {[](std::list<Symbol> args) -> Symbol {
        int r;
        if (args.front().type != Type::Number) {
@@ -1137,25 +1153,23 @@ std::map<std::string, Functor> procedures = {
              for (auto expr : branchl) {
                result = eval(expr, PATH);
              }
-             variables.pop_back();
              return result;
            }
+	   variables.pop_back();
          } else if (weak_compare(match_eq, pattern)) {
            Symbol value = std::get<std::list<Symbol>>(pattern.value).back();
-           if (element.type != Type::Number) {
-             throw std::logic_error{"Type mismatch in a 'match' block! "
-                                    "Expected an integer in a condition!\n"};
+           bool is_true = false;
+           if ((element.type != Type::Number) && (value.type != Type::Number)) {
+             is_true = element.value == value.value;
+           } else if (element.type == value.type) {
+             is_true = std::visit(
+                 []<class T, class U>(T t, U u) -> bool {
+                   return std::cmp_equal(t, u);
+                 },
+                 get_int(element.value), get_int(value.value));
            }
-           if (value.type != Type::Number) {
-             if (value.type == Type::List) {
-               value = eval(value, PATH);
-             } else
-               throw std::logic_error{"Type mismatch in a 'match' block! "
-                                      "Expected an integer in a pattern!\n"};
-           }
-           if (std::visit([]<class T, class U>(T t, U u)
-                              -> bool { return std::cmp_equal(t, u); },
-                          get_int(element.value), get_int(value.value))) {
+
+           if (is_true) {
              Symbol result;
              for (auto expr : branchl) {
                result = eval(expr, PATH);
@@ -1165,32 +1179,30 @@ std::map<std::string, Functor> procedures = {
          } else if (weak_compare(match_eq_capture, pattern)) {
            auto expr = std::get<std::list<Symbol>>(pattern.value);
            auto value = expr.back();
-           if (element.type != Type::Number) {
-             throw std::logic_error{"Type mismatch in a 'match' block! "
-                                    "Expected an integer in a condition!\n"};
+           bool is_true = false;
+           if ((element.type != Type::Number) && (value.type != Type::Number)) {
+             is_true = element.value == value.value;
+           } else if (element.type == value.type) {
+             is_true = std::visit(
+                 []<class T, class U>(T t, U u) -> bool {
+                   return std::cmp_equal(t, u);
+                 },
+                 get_int(element.value), get_int(value.value));
            }
-           if (value.type != Type::Number) {
-             if (value.type == Type::List) {
-               value = eval(value, PATH);
-             } else
-               throw std::logic_error{"Type mismatch in a 'match' block! "
-                                      "Expected an integer in a pattern!\n"};
-           }
+
            expr.pop_back();
            auto id = expr.back();
            variables.push_back(std::map<std::string, Symbol>{});
            variables[variables.size() - 1].insert_or_assign(
                std::get<std::string>(id.value), element);
-           if (std::visit([]<class T, class U>(T t, U u)
-                              -> bool { return std::cmp_equal(t, u); },
-                          get_int(element.value), get_int(value.value))) {
+           if (is_true) {
              Symbol result;
              for (auto expr : branchl) {
                result = eval(expr, PATH);
              }
-             variables.pop_back();
              return result;
            }
+           variables.pop_back();
          } else if (weak_compare(match_in_list, pattern)) {
            if (element.type == Type::List) {
              throw std::logic_error{
@@ -1243,9 +1255,9 @@ std::map<std::string, Functor> procedures = {
              for (auto expr : branchl) {
                result = eval(expr, PATH);
              }
-             variables.pop_back();
              return result;
            }
+	   variables.pop_back();
          } else if (weak_compare(match_greater_than, pattern)) {
            auto expr = std::get<std::list<Symbol>>(pattern.value);
            auto value = expr.back();
@@ -1295,9 +1307,9 @@ std::map<std::string, Functor> procedures = {
              for (auto expr : branchl) {
                result = eval(expr, PATH);
              }
-             variables.pop_back();
              return result;
            }
+	   variables.pop_back();
          }
        }
        return Symbol("", false, Type::Boolean);
@@ -1635,11 +1647,10 @@ std::map<std::string, Functor> procedures = {
        if (args.empty()) {
          return Symbol("", 0, Type::Number);
        }
-       if ((!std::holds_alternative<std::list<Symbol>>(
-                  args.front().value)) ||
+       if ((!std::holds_alternative<std::list<Symbol>>(args.front().value)) ||
            (args.size() > 1)) {
-         throw std::logic_error{"'first' expects a list of which to return "
-                                "the first element!\n"};
+         throw std::logic_error{"'length' expects a list of which to return "
+                                "the length!\n"};
        }
        auto lst = std::get<std::list<Symbol>>(args.front().value);
        if (lst.empty()) {

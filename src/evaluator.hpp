@@ -290,11 +290,11 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH) {
           (!node_stk.empty())) {
         // delay the evaluation of special forms
         auto spfl = std::get<std::list<Symbol>>(node_stk.top().value);
-        if (leaves.empty())
-          leaves.push_back(std::list<Symbol>());
-        if (!leaves.back().empty()) {
+        if ((!leaves.empty()) && (!leaves.back().empty())) {
           leaves[leaves.size() - 1].push_back(current_node);
         } else {
+	  if (leaves.empty())
+	    leaves.push_back(std::list<Symbol>());
           leaves[leaves.size() - 1] = spfl;
           leaves[leaves.size() - 1].push_front(current_node);
           Symbol dummy =
