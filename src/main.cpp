@@ -20,10 +20,10 @@
 #include "src/parser.hpp"
 #include "src/procedures.hpp"
 #include <exception>
+#include <sanitizer/lsan_interface.h>
 #include <signal.h>
 #include <string>
 #include <sys/types.h>
-#include <sanitizer/lsan_interface.h>
 #include <termios.h>
 static void catch_SIGINT(int sig) {
   for (auto p : active_pids) {
@@ -51,7 +51,8 @@ int main(int argc, char **argv) {
     // Rewind will execute the single expression taken as input, and then exit.
     if (PATH != std::nullopt) {
       try {
-	std::cout << rec_print_ast(eval(get_ast(get_tokens(std::string{argv[2]})), *PATH));
+        std::cout << rec_print_ast(
+            eval(get_ast(get_tokens(std::string{argv[2]})), *PATH));
       } catch (std::exception e) {
         std::cout << "Exception: " << e.what() << "\n";
       }
@@ -59,7 +60,8 @@ int main(int argc, char **argv) {
       return 0;
     }
     try {
-      std::cout << rec_print_ast(eval(get_ast(get_tokens(std::string{argv[2]})), {}));
+      std::cout << rec_print_ast(
+          eval(get_ast(get_tokens(std::string{argv[2]})), {}));
     } catch (std::exception e) {
       std::cout << "Exception: " << e.what() << "\n";
     }
@@ -77,7 +79,7 @@ int main(int argc, char **argv) {
   } else if (argc > 2) {
     std::string filename{argv[1]};
     std::string expr = rewind_read_file(filename);
-    std::vector<std::string> expr_list = rewind_split_file(expr);
+    auto expr_list = rewind_split_file(expr);
     if (std::string{argv[2]} != "--") {
       throw std::logic_error{
           "please separate the script name from the arguments with '--'!\n"};
@@ -89,24 +91,34 @@ int main(int argc, char **argv) {
     }
     if (PATH != std::nullopt) {
       for (auto s : expr_list) {
-        Symbol ast = eval(get_ast(get_tokens(s)), *PATH);
+	Symbol ast;
+        try {
+          ast = get_ast(get_tokens(s.second));
+        } catch (std::logic_error ex) {
+          std::cout << "Rewind: Exception at line " << s.first << "of file"
+                    << filename << "; " << ex.what() << "\n";
+	  break;
+        }
+	ast = eval(ast, *PATH, s.first);
         if ((ast.type != Type::Command) && (ast.type != Type::Defunc)) {
-	  std::cout << rec_print_ast(ast);
-          if (ast.type == Type::CommandResult)
-            std::flush(std::cout);
-          else
-            std::cout << "\n";
+          std::cout << rec_print_ast(ast);
+          std::cout << "\n";
         }
       }
     } else {
       for (auto s : expr_list) {
-        Symbol ast = eval(get_ast(get_tokens(s)), {});
+	Symbol ast;
+        try {
+          ast = get_ast(get_tokens(s.second));
+        } catch (std::logic_error ex) {
+          std::cout << "Rewind: Exception at line " << s.first << "of file"
+                    << filename << "; " << ex.what() << "\n";
+	  break;
+        }
+	ast = eval(ast, {}, s.first);
         if ((ast.type != Type::Command) && (ast.type != Type::Defunc)) {
-	  std::cout << rec_print_ast(ast);
-          if (ast.type == Type::CommandResult)
-            std::flush(std::cout);
-          else
-            std::cout << "\n";
+          std::cout << rec_print_ast(ast);
+          std::cout << "\n";
         }
       }
     }
@@ -115,20 +127,36 @@ int main(int argc, char **argv) {
   } else if (argc > 1) {
     std::string filename{argv[1]};
     std::string expr = rewind_read_file(filename);
-    std::vector<std::string> expr_list = rewind_split_file(expr);
+    auto expr_list = rewind_split_file(expr);
     if (PATH != std::nullopt) {
       for (auto s : expr_list) {
-	Symbol ast = eval(get_ast(get_tokens(s)), *PATH);
+	Symbol ast;
+        try {
+          ast = get_ast(get_tokens(s.second));
+        } catch (std::logic_error ex) {
+          std::cout << "Rewind: Exception at line " << s.first << "of file"
+                    << filename << "; " << ex.what() << "\n";
+	  break;
+        }
+	ast = eval(ast, *PATH, s.first);
         if ((ast.type != Type::Command) && (ast.type != Type::Defunc)) {
-	  std::cout << rec_print_ast(ast);
+          std::cout << rec_print_ast(ast);
           std::cout << "\n";
         }
       }
     } else {
       for (auto s : expr_list) {
-        Symbol ast = eval(get_ast(get_tokens(s)), {});
+	Symbol ast;
+        try {
+          ast = get_ast(get_tokens(s.second));
+        } catch (std::logic_error ex) {
+          std::cout << "Rewind: Exception at line " << s.first << "of file"
+                    << filename << "; " << ex.what() << "\n";
+	  break;
+        }
+	ast = eval(ast, {}, s.first);
         if ((ast.type != Type::Command) && (ast.type != Type::Defunc)) {
-	  std::cout << rec_print_ast(ast);
+          std::cout << rec_print_ast(ast);
           std::cout << "\n";
         }
       }

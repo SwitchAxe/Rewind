@@ -31,20 +31,33 @@ std::string rewind_read_file(std::string filename) {
   std::string expr;
   std::string temp;
   std::ifstream in(filename);
+  bool is_comment = false;
   while (std::getline(in, temp)) {
-    if (temp[0] != '#') // comments are skipped
-      expr += temp;
+    // comments are skipped
+    for (auto ch : temp) {
+      if ((ch != ' ') && (ch != '\t')) {
+	if (ch == '#') {
+	  is_comment = true;
+	} else is_comment = false;
+	break;
+      }
+    }
+    if (!is_comment) expr += temp + "\n";
   }
   in.close();
   return expr;
 }
 
-std::vector<std::string> rewind_split_file(std::string content) {
+std::vector<std::pair<int, std::string>> rewind_split_file(std::string content) {
   int bracket_balance = 0;
-  std::vector<std::string> ret;
+  std::vector<std::pair<int, std::string>> ret;
+  int current_line = 0;
   std::string temp;
   bool in_string = false;
   for (int i = 0; i < content.size(); ++i) {
+    if (content[i] == '\n') {
+      current_line++;
+    }
     if (content[i] == '"') {
       temp += '"';
       in_string = !in_string;
@@ -61,7 +74,7 @@ std::vector<std::string> rewind_split_file(std::string content) {
       bracket_balance--;
       temp += content[i];
       if (!bracket_balance) {
-        ret.push_back(temp);
+        ret.push_back(std::make_pair(current_line, temp));
         temp = "";
       }
     } else
@@ -102,10 +115,10 @@ std::optional<Symbol> rewind_read_config(const path &PATH) {
   Symbol last_expr;
   for (auto expr : expr_vec) {
     try {
-      last_expr = get_ast(get_tokens(expr));
+      last_expr = get_ast(get_tokens(expr.second));
       last_evaluated = eval(last_expr, PATH);
     } catch (std::logic_error e) {
-      std::cout << "error in the Rewind config file!\n" << e.what() << "\n";
+      throw std::logic_error { "(line " + std::to_string(expr.first) + "): error in the Rewind config file!\n" + e.what() + "\n"};
     }
   }
   return last_expr;

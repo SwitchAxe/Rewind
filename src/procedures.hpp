@@ -45,7 +45,7 @@ std::string rec_print_ast(Symbol root, bool debug = false);
 Symbol get_ast(std::vector<std::string> tokens);
 std::vector<std::string> get_tokens(std::string stream);
 std::string rewind_read_file(std::string filename);
-std::vector<std::string> rewind_split_file(std::string content);
+std::vector<std::pair<int, std::string>> rewind_split_file(std::string content);
 std::vector<std::map<std::string, Symbol>> variables;
 std::vector<int> active_pids;
 // this is used to pass single-use environment variables to external programs.
@@ -301,7 +301,7 @@ Symbol rewind_redirect_overwrite(Symbol node,
 namespace fs = std::filesystem;
 // just so the compiler doesn't complain about nonexistent PATH
 // later in the 'procedures' map.
-Symbol eval(Symbol root, const std::vector<std::string> &PATH);
+Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line = 0);
 ;
 std::optional<std::string> get_absolute_path(std::string progn, path &PATH) {
   std::string full_path;
@@ -1684,15 +1684,15 @@ std::map<std::string, Functor> procedures = {
                                   "literals or barewords!"};
          }
          std::string filename = std::get<std::string>(e.value);
-         std::vector<std::string> expr_list =
+         std::vector<std::pair<int, std::string>> expr_list =
              rewind_split_file(rewind_read_file(filename));
          for (auto expr : expr_list) {
            try {
-             Symbol ast = get_ast(get_tokens(expr));
+             Symbol ast = get_ast(get_tokens(expr.second));
              last_evaluated = eval(ast, PATH);
            } catch (std::logic_error e) {
              std::cout << "Rewind: Exception in included file " << filename
-                       << ": " << e.what() << "\n";
+                       << "at line " << expr.first << ": " << e.what() << "\n";
            }
          }
        }
@@ -1703,8 +1703,6 @@ std::map<std::string, Functor> procedures = {
          throw std::logic_error{
              "'eval' expects exactly one string to evaluate!\n"};
        }
-       std::vector<std::string> expr_list =
-           rewind_split_file(std::get<std::string>(args.front().value));
        Symbol last_evaluated;
        std::string line = std::get<std::string>(args.front().value);
        if ((line == "exit") || (line == "(exit)")) {

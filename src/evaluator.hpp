@@ -26,8 +26,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <variant>
-Symbol eval(Symbol root, const std::vector<std::string> &PATH);
-Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH);
+Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line);
+Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH, int line = 0);
 
 std::pair<std::string, Symbol>
 check_for_tail_recursion(std::string name, Symbol funcall, path &PATH) {
@@ -52,7 +52,7 @@ check_for_tail_recursion(std::string name, Symbol funcall, path &PATH) {
   return {"no", funcall};
 }
 
-Symbol eval_function(Symbol node, const std::vector<std::string> &PATH) {
+Symbol eval_function(Symbol node, const std::vector<std::string> &PATH, int line) {
   Symbol result;
   auto argl = std::get<std::list<Symbol>>(node.value);
   auto dummy = argl.front();
@@ -82,7 +82,7 @@ Symbol eval_function(Symbol node, const std::vector<std::string> &PATH) {
   for (auto p : zipped) {
     frame.insert_or_assign(
         std::get<std::string>(p.first.value),
-        (p.second.type == Type::RawAst) ? p.second : eval(p.second, PATH));
+        (p.second.type == Type::RawAst) ? p.second : eval(p.second, PATH, line));
   }
   if (node.type != Type::Funcall)
     call_stack.push_back(std::make_pair(op, frame));
@@ -94,12 +94,12 @@ Symbol eval_function(Symbol node, const std::vector<std::string> &PATH) {
   Symbol last = body_list.back();
   body_list.pop_back();
   for (auto e : body_list) {
-    result = eval(e, PATH);
+    result = eval(e, PATH, line);
   }
   if (auto last_call = check_for_tail_recursion(op, last, PATH);
       last_call.first == "no") {
     if (result.type != Type::RawAst)
-      result = eval(last_call.second, PATH);
+      result = eval(last_call.second, PATH, line);
     else
       result = last_call.second;
   } else {
@@ -112,7 +112,7 @@ Symbol eval_function(Symbol node, const std::vector<std::string> &PATH) {
 }
 
 // to use with nodes with only leaf children.
-Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH) {
+Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH, int line) {
   Symbol result;
   std::optional<std::string> absolute; // absolute path of an executable, if any
   auto it = PATH.begin();
@@ -131,19 +131,23 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH) {
     node.value = l;
     if (procedures.contains(std::get<std::string>(op.value))) {
       Functor fun = procedures[std::get<std::string>(op.value)];
-      result = fun(std::get<std::list<Symbol>>(node.value), PATH);
+      try {
+	result = fun(std::get<std::list<Symbol>>(node.value), PATH);
+      } catch (std::logic_error ex) {
+	throw std::logic_error {"Rewind (line " + std::to_string(line) + "): " + ex.what() };
+      }
       if (result.type == Type::RawAst) {
         return result;
       }
-      result = eval(result, PATH);
+      result = eval(result, PATH, line);
       return result;
     } else
-      throw std::logic_error{"Unbound procedure!\n"};
+      throw std::logic_error{"Rewind (line" + std::to_string(line) + "): Unbound procedure!\n"};
   } else if ((op.type == Type::Identifier) &&
              !user_defined_procedures.empty() &&
              user_defined_procedures[user_defined_procedures.size() - 1]
                  .contains(std::get<std::string>(op.value))) {
-    result = eval_function(node, PATH);
+    result = eval_function(node, PATH, line);
     return result;
   } else if (auto lit = std::find_if(
                  l.begin(), l.end(),
@@ -182,7 +186,7 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH) {
   return node;
 }
 
-Symbol eval(Symbol root, const std::vector<std::string> &PATH) {
+Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line) {
   Symbol result;
   std::stack<Symbol> node_stk;
   Symbol current_node;
@@ -215,13 +219,13 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH) {
 
         eval_temp_arg =
             Symbol(current_node.name, leaves[leaves.size() - 1], Type::List);
-        result = eval_primitive_node(eval_temp_arg, PATH);
+        result = eval_primitive_node(eval_temp_arg, PATH, line);
         leaves.pop_back();
 
         // main trampoline
         if (result.type == Type::Funcall) {
           while (result.type == Type::Funcall) {
-            result = eval_function(result, PATH);
+            result = eval_function(result, PATH, line);
           }
         }
         if (leaves.empty())
