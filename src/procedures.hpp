@@ -1218,8 +1218,7 @@ std::map<std::string, Functor> procedures = {
            }
            auto l = std::get<std::list<Symbol>>(value.value);
            if (std::find_if(l.begin(), l.end(), [&](Symbol s) -> bool {
-                 return (s.type == Type::Number) &&
-                        (get_int(s.value) == get_int(element.value));
+	     return s == element;
                }) != l.end()) {
              Symbol result;
              for (auto expr : branchl) {
@@ -1248,7 +1247,7 @@ std::map<std::string, Functor> procedures = {
                std::get<std::string>(id.value), element);
            auto l = std::get<std::list<Symbol>>(value.value);
            if (std::find_if(l.begin(), l.end(), [&](const Symbol s) -> bool {
-                 return (s.value == element.value) && (s.type == element.type);
+	     return s == element;
                }) != l.end()) {
              Symbol result;
              for (auto expr : branchl) {
