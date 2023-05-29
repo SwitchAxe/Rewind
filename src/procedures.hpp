@@ -28,7 +28,6 @@
 #include <iostream>
 #include <iterator>
 #include <map>
-#include <ncurses/curses.h>
 #include <optional>
 #include <ostream>
 #include <stdexcept>
