@@ -165,12 +165,32 @@ bool compare_list_structure(Symbol l, Symbol r) {
             is_structure_equal && compare_list_structure(p.first, p.second);
       } else
         return false;
-    }
-    if (p.second.type == Type::List) {
+    } else if (p.second.type == Type::List) {
       return false;
     }
   }
   return is_structure_equal;
+}
+
+std::list<std::pair<Symbol, Symbol>> rec_bind_list(Symbol lhs, Symbol rhs) {
+  std::list<std::pair<Symbol, Symbol>> ret;
+  auto fst = std::get<std::list<Symbol>>(lhs.value);
+  auto snd = std::get<std::list<Symbol>>(rhs.value);
+  std::list<std::pair<Symbol, Symbol>> zipped;
+  std::transform(fst.begin(), fst.end(), snd.begin(),
+                 std::back_inserter(zipped),
+                 [](Symbol l, Symbol r) -> std::pair<Symbol, Symbol> {
+                   return std::make_pair(l, r);
+                 });
+  for (auto p : zipped) {
+    if (p.first.type != Type::List) {
+      ret.push_back(p);
+    } else {
+      auto rec = rec_bind_list(p.first, p.second);
+      ret.insert(ret.end(), rec.begin(), rec.end());
+    }
+  }
+  return ret;
 }
 
 bool weak_compare(Symbol fst, Symbol other) {
@@ -1154,7 +1174,7 @@ std::map<std::string, Functor> procedures = {
              }
              return result;
            }
-	   variables.pop_back();
+           variables.pop_back();
          } else if (weak_compare(match_eq, pattern)) {
            Symbol value = std::get<std::list<Symbol>>(pattern.value).back();
            bool is_true = false;
@@ -1218,7 +1238,7 @@ std::map<std::string, Functor> procedures = {
            }
            auto l = std::get<std::list<Symbol>>(value.value);
            if (std::find_if(l.begin(), l.end(), [&](Symbol s) -> bool {
-	     return s == element;
+                 return s == element;
                }) != l.end()) {
              Symbol result;
              for (auto expr : branchl) {
@@ -1247,7 +1267,7 @@ std::map<std::string, Functor> procedures = {
                std::get<std::string>(id.value), element);
            auto l = std::get<std::list<Symbol>>(value.value);
            if (std::find_if(l.begin(), l.end(), [&](const Symbol s) -> bool {
-	     return s == element;
+                 return s == element;
                }) != l.end()) {
              Symbol result;
              for (auto expr : branchl) {
@@ -1255,7 +1275,7 @@ std::map<std::string, Functor> procedures = {
              }
              return result;
            }
-	   variables.pop_back();
+           variables.pop_back();
          } else if (weak_compare(match_greater_than, pattern)) {
            auto expr = std::get<std::list<Symbol>>(pattern.value);
            auto value = expr.back();
@@ -1307,7 +1327,25 @@ std::map<std::string, Functor> procedures = {
              }
              return result;
            }
-	   variables.pop_back();
+           variables.pop_back();
+         } else if (pattern.type == Type::List) {
+           if (!std::holds_alternative<std::list<Symbol>>(element.value)) {
+             throw std::logic_error{"List destructuring requests a list!\n"};
+           }
+           bool same_structure = compare_list_structure(pattern, element);
+           if (same_structure) {
+             auto vars = rec_bind_list(pattern, element);
+             variables.push_back({});
+             Symbol result;
+             for (auto p : vars) {
+               variables[variables.size() - 1].insert_or_assign(
+                   std::get<std::string>(p.first.value), p.second);
+             }
+             for (auto expr : branchl) {
+               result = eval(expr, PATH);
+             }
+             return result;
+           }
          }
        }
        return Symbol("", false, Type::Boolean);
