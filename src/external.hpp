@@ -91,20 +91,14 @@ Symbol rewind_call_ext_program(Symbol node,
   active_pids.push_back(pid);
   if (pid == 0) {
     if (must_pipe) {
-      if (pipe_fd_out) {
-        if (dup2(pipe_fd_out, STDOUT_FILENO) != STDOUT_FILENO) {
-          throw std::logic_error{"Error while piping " + prog +
-                                 " (writing)!\n"};
-        }
-        close(pipe_fd_out);
+      if (dup2(pipe_fd_out, STDOUT_FILENO) != STDOUT_FILENO) {
+        throw std::logic_error{"Error while piping " + prog + " (writing)!\n"};
       }
-      if (pipe_fd_in) {
-        if (dup2(pipe_fd_in, STDIN_FILENO) != STDIN_FILENO) {
-          throw std::logic_error{"Error while piping " + prog +
-                                 " (reading)!\n"};
-        }
-        close(pipe_fd_in);
+      close(pipe_fd_out);
+      if (dup2(pipe_fd_in, STDIN_FILENO) != STDIN_FILENO) {
+        throw std::logic_error{"Error while piping " + prog + " (reading)!\n"};
       }
+      close(pipe_fd_in);
     }
     // check for additional environment variables
     if (environment_variables.empty()) {
@@ -182,6 +176,7 @@ Symbol rewind_pipe(Symbol node, const std::vector<std::string> &PATH) {
     status = rewind_call_ext_program(cur, PATH, true, fd[1], old_read_end);
   }
   old_read_end = dup(fd[0]);
+  int old_write_end = dup(fd[1]);
   pipe(fd);
   status = rewind_call_ext_program(last, PATH, true, fd[1], old_read_end);
   char buf[1024];
@@ -190,8 +185,10 @@ Symbol rewind_pipe(Symbol node, const std::vector<std::string> &PATH) {
     return Symbol("", "Null", Type::String);
   }
   close(fd[1]);
+  close(old_write_end);
   close(old_read_end);
   int cnt;
+
   while ((cnt = read(fd[0], buf, 1023))) {
     if (cnt == -1)
       throw std::logic_error{"Read failed in a pipe!\n"};
@@ -199,13 +196,10 @@ Symbol rewind_pipe(Symbol node, const std::vector<std::string> &PATH) {
     std::string tmp{buf};
     result += tmp;
   }
-  while (wait(nullptr) != -1)
-    ;
+
   close(fd[0]);
   if (result.back() == '\n') {
     result.pop_back();
   }
   return Symbol("", result, Type::String);
 }
-
-
