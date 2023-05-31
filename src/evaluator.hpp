@@ -28,7 +28,7 @@
 #include <variant>
 Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line);
 Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH, int line = 0);
-
+Symbol eval_dispatch(Symbol node, const std::vector<std::string> &PATH, int line);
 std::pair<std::string, Symbol>
 check_for_tail_recursion(std::string name, Symbol funcall, path &PATH) {
   if (funcall.type != Type::List)
@@ -82,24 +82,25 @@ Symbol eval_function(Symbol node, const std::vector<std::string> &PATH, int line
   for (auto p : zipped) {
     frame.insert_or_assign(
         std::get<std::string>(p.first.value),
-        (p.second.type == Type::RawAst) ? p.second : eval(p.second, PATH, line));
+        (p.second.type == Type::RawAst) ? p.second : eval_dispatch(p.second, PATH, line));
   }
   if (node.type != Type::Funcall)
     call_stack.push_back(std::make_pair(op, frame));
   else {
-    call_stack.pop_back();
+    if (!call_stack.empty())
+      call_stack.pop_back();
     call_stack.push_back(std::make_pair(op, frame));
   }
   std::list<Symbol> body_list = std::get<std::list<Symbol>>(body.value);
   Symbol last = body_list.back();
   body_list.pop_back();
   for (auto e : body_list) {
-    result = eval(e, PATH, line);
+    result = eval_dispatch(e, PATH, line);
   }
   if (auto last_call = check_for_tail_recursion(op, last, PATH);
       last_call.first == "no") {
     if (result.type != Type::RawAst)
-      result = eval(last_call.second, PATH, line);
+      result = eval_dispatch(last_call.second, PATH, line);
     else
       result = last_call.second;
   } else {
@@ -377,4 +378,21 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line) {
     }
   } while (1);
   return result;
+}
+
+
+Symbol eval_dispatch(Symbol node, path PATH, int line) {
+  if (node.type == Type::Funcall) {
+    node.type = Type::List;
+    node = eval_primitive_node(node, PATH, line);
+    while (node.type == Type::Funcall) {
+      node = eval_primitive_node(node, PATH, line);
+    }
+    return node;
+  } else if (node.type == Type::Command) {
+    node.type = Type::List;
+    return eval_primitive_node(node, PATH, line);
+  }
+
+  else return eval(node, PATH, line);
 }

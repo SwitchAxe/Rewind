@@ -73,13 +73,15 @@ std::vector<std::pair<int, std::string>> rewind_split_file(std::string content) 
     } else if ((content[i] == ')') || (content[i] == ']')) {
       bracket_balance--;
       temp += content[i];
-      if (!bracket_balance) {
-        ret.push_back(std::make_pair(current_line, temp));
-        temp = "";
-      }
-    } else
+    } else if ((content[i] == ';') || (content[i] == ',')) {
+      ret.push_back({current_line, temp + std::string{content[i]}});
+      temp = "";
+    }
+    else
       temp += content[i];
   }
+  if (temp != "")
+    ret.push_back({current_line, temp});
   return ret;
 }
 
@@ -115,7 +117,7 @@ std::optional<Symbol> rewind_read_config(const path &PATH) {
   Symbol last_expr;
   for (auto expr : expr_vec) {
     try {
-      last_expr = get_ast(get_tokens(expr.second));
+      last_expr = get_ast(get_tokens(expr.second), PATH);
       last_evaluated = eval(last_expr, PATH);
     } catch (std::logic_error e) {
       throw std::logic_error { "(line " + std::to_string(expr.first) + "): error in the Rewind config file!\n" + e.what() + "\n"};
@@ -188,9 +190,9 @@ void rewind_sh_loop() {
     if (line.empty())
       continue;
     try {
-      Symbol ast = eval(get_ast(get_tokens(line)), *PATH);
+      Symbol ast = eval_dispatch(get_ast(get_tokens(line), *PATH), *PATH, 0);
       if ((ast.type != Type::Command) && (ast.type != Type::Defunc)) {
-        std::cout << rec_print_ast(ast);
+        std::cout << rec_print_ast(ast) << "\n";
       }
     } catch (std::logic_error ex) {
       procedures["cookedmode"]({}, {});

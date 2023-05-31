@@ -20,7 +20,6 @@
 #include "src/parser.hpp"
 #include "src/procedures.hpp"
 #include <exception>
-#include <sanitizer/lsan_interface.h>
 #include <signal.h>
 #include <string>
 #include <sys/types.h>
@@ -52,7 +51,7 @@ int main(int argc, char **argv) {
     if (PATH != std::nullopt) {
       try {
         std::cout << rec_print_ast(
-            eval(get_ast(get_tokens(std::string{argv[2]})), *PATH));
+            eval(get_ast(get_tokens(std::string{argv[2]}), *PATH), *PATH));
       } catch (std::exception e) {
         std::cout << "Exception: " << e.what() << "\n";
       }
@@ -61,7 +60,7 @@ int main(int argc, char **argv) {
     }
     try {
       std::cout << rec_print_ast(
-          eval(get_ast(get_tokens(std::string{argv[2]})), {}));
+          eval(get_ast(get_tokens(std::string{argv[2]}), {}), {}));
     } catch (std::exception e) {
       std::cout << "Exception: " << e.what() << "\n";
     }
@@ -91,15 +90,15 @@ int main(int argc, char **argv) {
     }
     if (PATH != std::nullopt) {
       for (auto s : expr_list) {
-	Symbol ast;
+        Symbol ast;
         try {
-          ast = get_ast(get_tokens(s.second));
+          ast = get_ast(get_tokens(s.second), *PATH);
         } catch (std::logic_error ex) {
           std::cout << "Rewind: Exception at line " << s.first << "of file"
                     << filename << "; " << ex.what() << "\n";
-	  break;
+          break;
         }
-	ast = eval(ast, *PATH, s.first);
+        ast = eval_dispatch(ast, *PATH, s.first);
         if ((ast.type != Type::Command) && (ast.type != Type::Defunc)) {
           std::cout << rec_print_ast(ast);
           std::cout << "\n";
@@ -107,15 +106,15 @@ int main(int argc, char **argv) {
       }
     } else {
       for (auto s : expr_list) {
-	Symbol ast;
+        Symbol ast;
         try {
-          ast = get_ast(get_tokens(s.second));
+          ast = get_ast(get_tokens(s.second), {});
         } catch (std::logic_error ex) {
           std::cout << "Rewind: Exception at line " << s.first << "of file"
                     << filename << "; " << ex.what() << "\n";
-	  break;
+          break;
         }
-	ast = eval(ast, {}, s.first);
+        ast = eval_dispatch(ast, {}, s.first);
         if ((ast.type != Type::Command) && (ast.type != Type::Defunc)) {
           std::cout << rec_print_ast(ast);
           std::cout << "\n";
@@ -130,15 +129,15 @@ int main(int argc, char **argv) {
     auto expr_list = rewind_split_file(expr);
     if (PATH != std::nullopt) {
       for (auto s : expr_list) {
-	Symbol ast;
+        Symbol ast;
         try {
-          ast = get_ast(get_tokens(s.second));
+          ast = get_ast(get_tokens(s.second), *PATH);
         } catch (std::logic_error ex) {
           std::cout << "Rewind: Exception at line " << s.first << "of file"
                     << filename << "; " << ex.what() << "\n";
-	  break;
+          break;
         }
-	ast = eval(ast, *PATH, s.first);
+        ast = eval_dispatch(ast, *PATH, s.first);
         if ((ast.type != Type::Command) && (ast.type != Type::Defunc)) {
           std::cout << rec_print_ast(ast);
           std::cout << "\n";
@@ -146,15 +145,15 @@ int main(int argc, char **argv) {
       }
     } else {
       for (auto s : expr_list) {
-	Symbol ast;
+        Symbol ast;
         try {
-          ast = get_ast(get_tokens(s.second));
+          ast = get_ast(get_tokens(s.second), {});
         } catch (std::logic_error ex) {
           std::cout << "Rewind: Exception at line " << s.first << "of file"
                     << filename << "; " << ex.what() << "\n";
-	  break;
+          break;
         }
-	ast = eval(ast, {}, s.first);
+        ast = eval_dispatch(ast, {}, s.first);
         if ((ast.type != Type::Command) && (ast.type != Type::Defunc)) {
           std::cout << rec_print_ast(ast);
           std::cout << "\n";

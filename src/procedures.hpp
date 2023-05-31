@@ -41,7 +41,7 @@
 #include <utility>
 #include <variant>
 std::string rec_print_ast(Symbol root, bool debug = false);
-Symbol get_ast(std::vector<std::string> tokens);
+Symbol get_ast(std::vector<std::string> tokens, path PATH);
 std::vector<std::string> get_tokens(std::string stream);
 std::string rewind_read_file(std::string filename);
 std::vector<std::pair<int, std::string>> rewind_split_file(std::string content);
@@ -1724,7 +1724,7 @@ std::map<std::string, Functor> procedures = {
              rewind_split_file(rewind_read_file(filename));
          for (auto expr : expr_list) {
            try {
-             Symbol ast = get_ast(get_tokens(expr.second));
+             Symbol ast = get_ast(get_tokens(expr.second), PATH);
              last_evaluated = eval(ast, PATH);
            } catch (std::logic_error e) {
              std::cout << "Rewind: Exception in included file " << filename
@@ -1746,7 +1746,7 @@ std::map<std::string, Functor> procedures = {
          return Symbol("", false, Type::Command);
        }
        try {
-         Symbol ast = get_ast(get_tokens(line));
+         Symbol ast = get_ast(get_tokens(line), PATH);
          last_evaluated = eval(ast, PATH);
          if ((last_evaluated.type != Type::Command) &&
              (last_evaluated.type != Type::CommandResult))
@@ -1764,7 +1764,7 @@ std::map<std::string, Functor> procedures = {
 
        Symbol sym;
        if (args.front().type == Type::RawAst) {
-         sym = get_ast(get_tokens(rec_print_ast(args.front())));
+         sym = get_ast(get_tokens(rec_print_ast(args.front())), PATH);
        } else
          sym = args.front();
        switch (sym.type) {
@@ -1807,7 +1807,7 @@ std::map<std::string, Functor> procedures = {
        }
        input = std::get<std::string>(args.front().value);
        try {
-         auto ast = get_ast(get_tokens(input));
+         auto ast = get_ast(get_tokens(input), PATH);
          if (ast.type == Type::List) {
            ast.type = Type::RawAst;
            auto l = std::get<std::list<Symbol>>(ast.value);
