@@ -382,17 +382,5 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line) {
 
 
 Symbol eval_dispatch(Symbol node, path PATH, int line) {
-  if (node.type == Type::Funcall) {
-    node.type = Type::List;
-    node = eval_primitive_node(node, PATH, line);
-    while (node.type == Type::Funcall) {
-      node = eval_primitive_node(node, PATH, line);
-    }
-    return node;
-  } else if (node.type == Type::Command) {
-    node.type = Type::List;
-    return eval_primitive_node(node, PATH, line);
-  }
-
-  else return eval(node, PATH, line);
+  return eval(node, PATH, line);
 }

@@ -38,9 +38,18 @@ std::optional<long long signed int> try_convert_num(std::string n) {
 Symbol get_ast(std::vector<std::string> tokens, path PATH) {
   Symbol result;
   std::stack<Symbol> stk;
-  Symbol cur_funcall;
+  bool in_lambda_fn = false;
+  std::list<Symbol> lambda_fn_statements;
+  std::list<Symbol> lambda_fn_parameters;
+  static int lambda_id = 0;
+  bool in_def = false;
+  bool in_def_past_name = false;
+  int bracket_balance = 0;
   for (auto tk : tokens) {
     if (procedures.contains(tk)) {
+      if (tk == "let") {
+        in_def = true;
+      }
       if (stk.empty() ||
           ((stk.size() > 0) &&
            (std::get<std::list<Symbol>>(stk.top().value).size() > 0))) {
@@ -89,42 +98,93 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
       cur.value = l;
       stk.push(cur);
     } else if ((tk == ")") || (tk == "]") || (tk == ",")) {
-      if (stk.empty()) {
-        throw std::logic_error{"Rewind: Exception in the parser, "
-                               "Unexpected closing paren while the stack "
-                               "is empty."};
+      if (in_lambda_fn) {
+        lambda_fn_statements.push_back(stk.top());
+        stk.pop();
+      } else {
+        if (stk.empty()) {
+          throw std::logic_error{"Rewind: Exception in the parser, "
+                                 "Unexpected closing paren while the stack "
+                                 "is empty."};
+        }
+        auto last = stk.top();
+        stk.pop();
+        auto parent = stk.top();
+        stk.pop();
+        auto l = std::get<std::list<Symbol>>(parent.value);
+        l.push_back(last);
+        parent.value = l;
+        stk.push(parent);
       }
-      auto last = stk.top();
-      stk.pop();
-      if (stk.empty()) {
-        return last;
-      }
-      auto parent = stk.top();
-      stk.pop();
-      auto l = std::get<std::list<Symbol>>(parent.value);
-      l.push_back(last);
-      parent.value = l;
-      stk.push(parent);
     } else if ((tk == "(") || (tk == "[")) {
       stk.push(Symbol("", std::list<Symbol>{}, Type::List));
     } else if (tk == ";") {
-      if (stk.size() != 2) {
-        throw std::logic_error{"Invalid token in the parser, ';' is a "
-                               "termination token for function definitions.\n"};
+      if (in_lambda_fn) {
+        in_lambda_fn = false;
+        if (lambda_fn_statements.empty()) {
+          lambda_fn_statements.push_back(stk.top());
+        }
+        user_defined_procedures[user_defined_procedures.size() - 1]
+            .insert_or_assign(
+                "__re_lambda" + std::to_string(lambda_id),
+                std::make_pair(Symbol("", lambda_fn_parameters, Type::List),
+                               Symbol("", lambda_fn_statements, Type::List)));
+        stk.pop();
+        auto last = stk.top();
+        stk.pop();
+        auto l = std::get<std::list<Symbol>>(last.value);
+        l.push_back(Symbol("", "__re_lambda" + std::to_string(lambda_id),
+                           Type::Identifier));
+        last.value = l;
+        stk.push(last);
+      } else {
+        if (stk.size() != 2) {
+          if (stk.size() != 1) {
+            throw std::logic_error{
+                "Invalid token in the parser, ';' is a "
+                "termination token for function definitions. "
+                "(node stack too big)\n"};
+          }
+          auto root = stk.top();
+          auto l = std::get<std::list<Symbol>>(root.value);
+          auto keyword = l.front();
+          auto as_string = std::get<std::string>(keyword.value);
+          if (as_string != "let") {
+            throw std::logic_error{
+                "Invalid token in the parser, ';' is a "
+                "termination token for function definitions. "
+                "(non-matching 'let' found for ';')\n"};
+          }
+          return root;
+        }
+        auto last = stk.top();
+        stk.pop();
+        auto root = stk.top();
+        auto l = std::get<std::list<Symbol>>(root.value);
+        auto keyword = l.front();
+        auto as_string = std::get<std::string>(keyword.value);
+        if (as_string != "let") {
+          throw std::logic_error{
+              "Invalid token in the parser, ';' is a "
+              "termination token for function definitions.\n"};
+        }
+        l.push_back(last);
+        root.value = l;
+        return root;
       }
+    } else if (tk == "=>") {
+      // at this point we already have a list in the expression,
+      // we can consider it as a list of arguments for our lambda function:
       auto last = stk.top();
       stk.pop();
-      auto root = stk.top();
-      auto l = std::get<std::list<Symbol>>(root.value);
-      auto keyword = l.front();
-      auto as_string = std::get<std::string>(keyword.value);
-      if (as_string != "let") {
-        throw std::logic_error{"Invalid token in the parser, ';' is a "
-                               "termination token for function definitions.\n"};
-      }
-      l.push_back(last);
-      root.value = l;
-      return root;
+      auto l = std::get<std::list<Symbol>>(last.value);
+      auto args = l.back();
+      l.pop_back();
+      last.value = l;
+      stk.push(last);
+      in_lambda_fn = true;
+      lambda_id++;
+      lambda_fn_parameters = std::get<std::list<Symbol>>(args.value);
     } else {
       auto sym = Symbol("", tk, Type::Identifier);
       if (stk.empty() && ((tk[0] != '$') && (tk[0] != '%')))
@@ -142,12 +202,28 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
         } else
           throw std::logic_error{"Unbound variable" + tk.substr(1) + ".\n"};
       } else {
-        auto last = stk.top();
-        stk.pop();
-        auto l = std::get<std::list<Symbol>>(last.value);
-        l.push_back(Symbol("", tk, Type::Identifier));
-        last.value = l;
-        stk.push(last);
+        if (in_def_past_name && (stk.size() == 1)) {
+          in_def_past_name = false;
+          stk.push(Symbol("", std::list<Symbol>{}, Type::List));
+        }
+        if (in_def) {
+          in_def_past_name = true;
+          in_def = false;
+        }
+        if (std::holds_alternative<std::list<Symbol>>(stk.top().value) &&
+            std::get<std::list<Symbol>>(stk.top().value).empty()) {
+          stk.pop();
+          stk.push(Symbol("",
+                          std::list<Symbol>{Symbol("", tk, Type::Identifier)},
+                          Type::List));
+        } else {
+          auto last = stk.top();
+          stk.pop();
+          auto l = std::get<std::list<Symbol>>(last.value);
+          l.push_back(Symbol("", tk, Type::Identifier));
+          last.value = l;
+          stk.push(last);
+        }
       }
     }
   }
