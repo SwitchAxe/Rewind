@@ -22,98 +22,136 @@
 #include <stack>
 #include <type_traits>
 
-Symbol get_ast(std::vector<std::string> tokens) {
-  int round_balance = 0;  // for paren balancing
-  int square_balance = 0; // see above
-  bool list_entered = false;
-  bool is_root = true;
-  Symbol node;
-  std::stack<Symbol> node_stk;
-  for (auto tok : tokens) {
-    if ((tok == "(") || (tok == "[")) {
-      if (tok == "(")
-        round_balance++;
-      else
-        square_balance++;
-      if (std::holds_alternative<std::monostate>(node.value)) {
-        node.type = Type::List;
-        if (is_root) {
-          node.name = "root";
-          is_root = false;
-        }
-        node.value = std::list<Symbol>();
+bool is_strlit(std::string s) {
+  return (s.size() > 1) && (s[0] == '"') && (s.back() == '"');
+}
+
+std::optional<long long signed int> try_convert_num(std::string n) {
+  long long int v;
+  auto [ptr, ec] = std::from_chars(n.data(), n.data() + n.size(), v);
+  if (ptr == n.data() + n.size()) {
+    return v;
+  }
+  return std::nullopt;
+}
+
+Symbol get_ast(std::vector<std::string> tokens, path PATH) {
+  Symbol result;
+  std::stack<Symbol> stk;
+  Symbol cur_funcall;
+  for (auto tk : tokens) {
+    if (procedures.contains(tk)) {
+      if (stk.empty() ||
+          ((stk.size() > 0) &&
+           (std::get<std::list<Symbol>>(stk.top().value).size() > 0))) {
+        auto l = std::list<Symbol>{Symbol("", tk, Type::Operator)};
+        auto sym = Symbol("", l, Type::List);
+        if (stk.size() > 0) {
+          auto parent = stk.top();
+          stk.pop();
+          auto l = std::get<std::list<Symbol>>(parent.value);
+          parent.value = l;
+          stk.push(parent);
+          stk.push(sym);
+        } else
+          stk.push(sym);
       } else {
-        if (!std::holds_alternative<std::list<Symbol>>(node.value)) {
-          throw std::logic_error{"Failed to parse the input expression!"
-                                 "Unexpected list...\n"};
-        } else {
-          // append a new list at the end and update
-          // the current node 'node'.
-          node_stk.push(node);
-          node.value = std::list<Symbol>();
-        }
+        auto sym = Symbol("", tk, Type::Operator);
+        auto last = stk.top();
+        stk.pop();
+        auto l = std::get<std::list<Symbol>>(last.value);
+        l.push_back(sym);
+        last.value = l;
+        stk.push(last);
       }
-    } else if ((tok == ")") || (tok == "]")) {
-      if (tok == ")")
-        round_balance--;
-      else
-        square_balance--;
-      // we finished parsing the subexpression/sublist, so we can
-      // append the resulting tree to the previous one.
-      Symbol child = node;
-      child.name = "";
-      if (!node_stk.empty()) {
-        node = node_stk.top();
-        node_stk.pop();
-        if (node.type != Type::List) {
-          throw std::logic_error{
-              "I have honestly no clue of how you got this error.\n"};
-        }
-        auto temp = std::get<std::list<Symbol>>(node.value);
-        temp.push_back(child);
-        node.value = temp;
-      } else
-        return node;
+    } else if (auto v = try_convert_num(tk); v != std::nullopt) {
+      auto sym = Symbol("", *v, Type::Number);
+      if (stk.empty()) {
+        sym.name = "root";
+        return sym;
+      }
+      auto cur = stk.top();
+      stk.pop();
+      auto l = std::get<std::list<Symbol>>(cur.value);
+      l.push_back(sym);
+      cur.value = l;
+      stk.push(cur);
+    } else if (is_strlit(tk)) {
+      auto sym = Symbol("", tk.substr(1, tk.size() - 2), Type::String);
+      if (stk.empty()) {
+        sym.name = "root";
+        return sym;
+      }
+      auto cur = stk.top();
+      stk.pop();
+      auto l = std::get<std::list<Symbol>>(cur.value);
+      l.push_back(sym);
+      cur.value = l;
+      stk.push(cur);
+    } else if ((tk == ")") || (tk == "]") || (tk == ",")) {
+      if (stk.empty()) {
+        throw std::logic_error{"Rewind: Exception in the parser, "
+                               "Unexpected closing paren while the stack "
+                               "is empty."};
+      }
+      auto last = stk.top();
+      stk.pop();
+      if (stk.empty()) {
+        return last;
+      }
+      auto parent = stk.top();
+      stk.pop();
+      auto l = std::get<std::list<Symbol>>(parent.value);
+      l.push_back(last);
+      parent.value = l;
+      stk.push(parent);
+    } else if ((tk == "(") || (tk == "[")) {
+      stk.push(Symbol("", std::list<Symbol>{}, Type::List));
+    } else if (tk == ";") {
+      if (stk.size() != 2) {
+        throw std::logic_error{"Invalid token in the parser, ';' is a "
+                               "termination token for function definitions.\n"};
+      }
+      auto last = stk.top();
+      stk.pop();
+      auto root = stk.top();
+      auto l = std::get<std::list<Symbol>>(root.value);
+      auto keyword = l.front();
+      auto as_string = std::get<std::string>(keyword.value);
+      if (as_string != "let") {
+        throw std::logic_error{"Invalid token in the parser, ';' is a "
+                               "termination token for function definitions.\n"};
+      }
+      l.push_back(last);
+      root.value = l;
+      return root;
     } else {
-      // identifiers, operators, literals and so on
-      Symbol child;
-      long long int v;
-      if (auto [ptr, ec] =
-              std::from_chars(tok.data(), tok.data() + tok.size(), v);
-          ptr == tok.data() + tok.size()) {
-        // a number!
-        child.type = Type::Number;
-        child.value = v;
-      } else if (procedures.contains(tok)) {
-        child.type = Type::Operator;
-        child.value = tok;
-      } else if (tok[0] == '"') {
-        child.type = Type::String;
-        std::string tmp = tok.substr(1, tok.length() - 2);
-        child.value = tmp;
-      } else if ((tok == "false") || (tok == "true")) {
-        child.type = Type::Boolean;
-        child.value = (tok == "false") ? false : true;
+      auto sym = Symbol("", tk, Type::Identifier);
+      if (stk.empty() && ((tk[0] != '$') && (tk[0] != '%')))
+        stk.push(Symbol("root", std::list<Symbol>{sym}, Type::List));
+      else if (tk[0] == '%') {
+        sym.value = tk.substr(1);
+        stk.push(sym);
+      } else if (tk[0] == '$') {
+        auto varname = Symbol("", tk.substr(1), Type::Identifier);
+        Symbol var_lookup;
+        if (auto cs = callstack_variable_lookup(varname); cs != std::nullopt) {
+          stk.push(*cs);
+        } else if (auto vs = variable_lookup(varname); vs != std::nullopt) {
+          stk.push(*vs);
+        } else
+          throw std::logic_error{"Unbound variable" + tk.substr(1) + ".\n"};
       } else {
-        child.type = Type::Identifier;
-        child.value = tok;
-      }
-      if (std::holds_alternative<std::list<Symbol>>(node.value)) {
-        auto temp = std::get<std::list<Symbol>>(node.value);
-        temp.push_back(child);
-        node.value = temp;
-      } else {
-        node = child;
+        auto last = stk.top();
+        stk.pop();
+        auto l = std::get<std::list<Symbol>>(last.value);
+        l.push_back(Symbol("", tk, Type::Identifier));
+        last.value = l;
+        stk.push(last);
       }
     }
   }
-  if (round_balance) {
-    throw std::logic_error{"Missing closing parenthesis for a list!\n"};
-  }
-  if (square_balance) {
-    throw std::logic_error{"Missing closing square bracket for a list!\n"};
-  }
-  return node;
+  return stk.top();
 }
 
 // DEBUG PURPOSES ONLY and for printing the final result until i
