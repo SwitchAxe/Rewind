@@ -47,6 +47,7 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
   bool in_def = false;
   bool in_def_past_name = false;
   int bracket_balance = 0;
+  bool must_open_new_list = false;
   for (auto tk : tokens) {
     if (procedures.contains(tk)) {
       if (tk == "let") {
@@ -57,23 +58,14 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
            (std::get<std::list<Symbol>>(stk.top().value).size() > 0))) {
         auto l = std::list<Symbol>{Symbol("", tk, Type::Operator)};
         auto sym = Symbol("", l, Type::List);
-        if (stk.size() > 0) {
-          auto parent = stk.top();
-          stk.pop();
-          auto l = std::get<std::list<Symbol>>(parent.value);
-          parent.value = l;
-          stk.push(parent);
-          stk.push(sym);
-        } else
-          stk.push(sym);
-      } else {
+        stk.push(sym);
+      } else if ((stk.size() > 0) &&
+                 std::get<std::list<Symbol>>(stk.top().value).empty()) {
         auto sym = Symbol("", tk, Type::Operator);
-        auto last = stk.top();
         stk.pop();
-        auto l = std::get<std::list<Symbol>>(last.value);
-        l.push_back(sym);
-        last.value = l;
-        stk.push(last);
+        auto l = std::list<Symbol>{sym};
+        auto node = Symbol("", l, Type::List);
+        stk.push(node);
       }
     } else if (auto v = try_convert_num(tk); v != std::nullopt) {
       if (in_lambda_fn) {
@@ -124,12 +116,15 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
         auto parent = stk.top();
         stk.pop();
         auto l = std::get<std::list<Symbol>>(parent.value);
-        if ((stk.size() > 1) && (l.back().type == Type::Identifier)) {
+        if ((stk.size() > 1) && ((l.back().type == Type::Operator) ||
+                                 (l.back().type == Type::Identifier))) {
           auto id = l.back();
           l.pop_back();
           auto new_sym = Symbol("", std::list<Symbol>{id, last}, Type::List);
-          l.push_back(new_sym);
-          parent.value = l;
+          if (!l.empty())
+            l.push_back(new_sym);
+          else
+            parent = new_sym;
         } else {
           l.push_back(last);
           parent.value = l;
@@ -232,9 +227,7 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
       in_conditional = true;
       in_lambda_fn = true;
       lambda_fn_parameters = std::get<std::list<Symbol>>(args.value);
-    }
-
-    else {
+    } else {
       auto sym = Symbol("", tk, Type::Identifier);
       if (stk.empty() && ((tk[0] != '$') && (tk[0] != '%')))
         stk.push(Symbol("root", std::list<Symbol>{sym}, Type::List));
