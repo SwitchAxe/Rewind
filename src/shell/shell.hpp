@@ -73,7 +73,7 @@ std::vector<std::pair<int, std::string>> rewind_split_file(std::string content) 
     } else if ((content[i] == ')') || (content[i] == ']')) {
       bracket_balance--;
       temp += content[i];
-    } else if ((content[i] == ';') || (content[i] == ',')) {
+    } else if ((content[i] == ';') || ((!bracket_balance) && (content[i] == ','))) {
       ret.push_back({current_line, temp + std::string{content[i]}});
       temp = "";
     }

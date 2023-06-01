@@ -124,12 +124,20 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
         auto parent = stk.top();
         stk.pop();
         auto l = std::get<std::list<Symbol>>(parent.value);
-        l.push_back(last);
-        parent.value = l;
+        if ((stk.size() > 1) && (l.back().type == Type::Identifier)) {
+          auto id = l.back();
+          l.pop_back();
+          auto new_sym = Symbol("", std::list<Symbol>{id, last}, Type::List);
+          l.push_back(new_sym);
+          parent.value = l;
+        } else {
+          l.push_back(last);
+          parent.value = l;
+        }
         stk.push(parent);
       }
     } else if ((tk == "(") || (tk == "[")) {
-      stk.push(Symbol("", std::list<Symbol>{}, Type::List));
+      stk.push(Symbol("root", std::list<Symbol>{}, Type::List));
     } else if (tk == ";") {
       if (in_lambda_fn) {
         in_lambda_fn = false;
@@ -193,6 +201,7 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
         }
         l.push_back(last);
         root.value = l;
+
         return root;
       }
     } else if (tk == "=>") {
@@ -282,6 +291,17 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
         }
       }
     }
+  }
+  // merge the first stack element with the second iff stk.size == 2
+  if (stk.size() == 2) {
+    auto last = stk.top();
+    stk.pop();
+    auto parent = stk.top();
+    stk.pop();
+    auto l = std::get<std::list<Symbol>>(parent.value);
+    l.push_back(last);
+    parent.value = l;
+    return parent;
   }
   return stk.top();
 }
