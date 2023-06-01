@@ -109,6 +109,7 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
         }
         auto last = stk.top();
         stk.pop();
+	if (stk.empty()) return last;
         auto parent = stk.top();
         stk.pop();
         auto l = std::get<std::list<Symbol>>(parent.value);
@@ -191,16 +192,30 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
         stk.push(Symbol("root", std::list<Symbol>{sym}, Type::List));
       else if (tk[0] == '%') {
         sym.value = tk.substr(1);
-        stk.push(sym);
+	if (stk.empty()) return sym;
+	auto last = stk.top();
+	stk.pop();
+	auto l = std::get<std::list<Symbol>>(last.value);
+	l.push_back(sym);
+	last.value = l;
+	stk.push(last);
       } else if (tk[0] == '$') {
         auto varname = Symbol("", tk.substr(1), Type::Identifier);
         Symbol var_lookup;
+	Symbol sym;
         if (auto cs = callstack_variable_lookup(varname); cs != std::nullopt) {
-          stk.push(*cs);
+          sym = *cs;
         } else if (auto vs = variable_lookup(varname); vs != std::nullopt) {
-          stk.push(*vs);
+          sym = *vs;
         } else
           throw std::logic_error{"Unbound variable" + tk.substr(1) + ".\n"};
+	if (stk.empty()) return sym;
+	auto last = stk.top();
+	stk.pop();
+	auto l = std::get<std::list<Symbol>>(last.value);
+	l.push_back(sym);
+	last.value = l;
+	stk.push(last);
       } else {
         if (in_def_past_name && (stk.size() == 1)) {
           in_def_past_name = false;
