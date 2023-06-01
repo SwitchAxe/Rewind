@@ -74,7 +74,6 @@ Symbol rewind_call_ext_program(Symbol node,
         argv[i] = (char *)malloc(arg.length() + 1);
         std::strcpy(argv[i], arg.c_str());
         i++;
-#undef p
       }
     } else {
       cur_arg = cur;
@@ -83,7 +82,6 @@ Symbol rewind_call_ext_program(Symbol node,
       std::strcpy(argv[i], arg.c_str());
       i++;
     }
-#undef p
   }
   argv[i] = nullptr;
   int status = 0;

@@ -62,11 +62,25 @@ Symbol eval_function(Symbol node, const std::vector<std::string> &PATH, int line
           op)) {
     throw std::logic_error{"Unbound procedure " + op + "!\n"};
   }
+  Symbol condition;
   Symbol params =
       user_defined_procedures[user_defined_procedures.size() - 1][op].first;
   auto paraml = std::get<std::list<Symbol>>(params.value);
   Symbol body =
       user_defined_procedures[user_defined_procedures.size() - 1][op].second;
+  if (op.substr(0, 6) == "__re_c") {
+    // we got a conditional lambda, so we must store the condition in its variable
+    if (paraml.size() != 2) {
+      throw std::logic_error {"Missing condition or arguments in a conditional lambda!\n"};
+    }
+    condition = paraml.back();
+    params = paraml.front();
+    paraml = std::get<std::list<Symbol>>(params.value);
+    auto bodyl = std::get<std::list<Symbol>>(body.value);
+    if (bodyl.size() != 2) {
+      throw std::logic_error {"A conditional lambda can only accept two expressions!\n"};
+    }
+  }
   if (argl.size() != paraml.size()) {
     throw std::logic_error{"Wrong amount of arguments to procedure " + op +
                            "!\n"};
@@ -92,6 +106,14 @@ Symbol eval_function(Symbol node, const std::vector<std::string> &PATH, int line
     call_stack.push_back(std::make_pair(op, frame));
   }
   std::list<Symbol> body_list = std::get<std::list<Symbol>>(body.value);
+  if (op.substr(0, 6) == "__re_c") {
+    Symbol expr;
+    if (convert_value_to_bool(eval(condition, PATH, line))) {
+      expr = body_list.front();
+    } else expr = body_list.back();
+    result = eval(expr, PATH, line);
+    return result;
+  }
   Symbol last = body_list.back();
   body_list.pop_back();
   for (auto e : body_list) {
