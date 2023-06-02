@@ -131,9 +131,7 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
       if (cur[0] == '$') {
         Symbol sym;
         Symbol varname = Symbol("", cur.substr(1), Type::Identifier);
-        if (auto cs = callstack_variable_lookup(varname); cs != std::nullopt) {
-          sym = *cs;
-        } else if (auto vs = variable_lookup(varname); vs != std::nullopt) {
+        if (auto vs = variable_lookup(varname); vs != std::nullopt) {
           sym = *vs;
         } else
           throw std::logic_error{"Unbound variable " + cur.substr(1) + ".\n"};
@@ -171,7 +169,7 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
     }
     res.result = Symbol((i == 0) ? "root" : "", as_list, Type::List);
   }
-  return res;
+  return {.result = res.result, .end_index = ei};
 }
 
 Symbol get_ast(std::vector<std::string> tokens, path PATH) {
