@@ -189,6 +189,7 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
         if (l.empty() && stk.empty()) {
           return sym;
         }
+	l.push_back(sym);
         final_expr.value = l;
       } else {
         auto l = std::get<std::list<Symbol>>(final_expr.value);
