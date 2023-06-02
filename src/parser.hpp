@@ -139,11 +139,10 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
           throw std::logic_error{"Unbound variable " + cur.substr(1) + ".\n"};
         as_list.push_back(sym);
       } else {
-        if (res.let_level == 2) {
-          as_list.push_back(Symbol(
-              "", cur,
-              procedures.contains(cur) ? Type::Operator : Type::Identifier));
-        } else if (res.let_level > 1) {
+	if (res.let_level > -1) {
+	  ++res.let_level;
+	}
+	if (res.let_level > 1) {
           // found a function call with or without the 'let' having any args
           RecInfo info = get_ast_aux(tokens, i + 1, ei, true, false, -1, PATH);
           i = info.end_index;
@@ -157,9 +156,6 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
           as_list.push_back(sym);
           res.let_level = -1;
         } else {
-          if (res.let_level > -1) {
-            ++res.let_level;
-          }
           if (cur == "let") {
             if (res.let_level > 0) {
               throw std::logic_error{"Parser error: Found a 'let' special form "
