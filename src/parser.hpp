@@ -45,6 +45,7 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
   bool in_lambda_statements = false;
   bool must_call = true;
   bool in_call = false;
+  bool in_let = false;
   std::stack<Symbol> stk;
   Symbol final_expr = Symbol("root", std::list<Symbol>{}, Type::List);
   static int lambda_n = 0;
@@ -59,6 +60,7 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
           l.push_back(final_expr);
         lambda_statements.value = l;
         final_expr.value = std::list<Symbol>{};
+        must_call = true;
       } else {
         if (stk.size() > 1) {
           auto top = stk.top();
@@ -79,6 +81,8 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
       auto l = std::get<std::list<Symbol>>(top.value);
       l.push_back(final_expr);
       final_expr.value = l;
+      if (in_let)
+        in_let = false;
       must_call = true;
       in_call = false;
     } else if (tk == ";") {
@@ -150,6 +154,7 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
       final_expr.value = l;
       stk.push(final_expr);
       final_expr.value = std::list<Symbol>{};
+      must_call = true;
     } else if (tk == "?=>") {
       auto l = std::get<std::list<Symbol>>(final_expr.value);
       if ((l.size() < 2) || (l.back().type != Type::List)) {
@@ -164,6 +169,7 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
       final_expr.value = l;
       stk.push(final_expr);
       final_expr.value = std::list<Symbol>{};
+      must_call = true;
     } else if (is_strlit(tk)) {
       Symbol sym = Symbol("", tk, Type::String);
       auto l = std::get<std::list<Symbol>>(final_expr.value);
@@ -184,7 +190,7 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
         } else if (auto vs = variable_lookup(varname); vs != std::nullopt) {
           sym = *vs;
         } else
-          throw std::logic_error{"Unbound variable" + tk.substr(1) + ".\n"};
+          throw std::logic_error{"Unbound variable " + tk.substr(1) + ".\n"};
         auto l = std::get<std::list<Symbol>>(final_expr.value);
         if (l.empty() && stk.empty()) {
           return sym;
@@ -196,21 +202,37 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
         if ((l.empty()) && (stk.empty()) &&
             ((user_defined_procedures.empty()) ||
              !user_defined_procedures.back().contains(tk)) &&
-            !procedures.contains(tk) && (get_absolute_path(tk, PATH) == std::nullopt)) {
+            !procedures.contains(tk) &&
+            (get_absolute_path(tk, PATH) == std::nullopt)) {
           return Symbol("root", tk, Type::String);
-        }
-        if (must_call || (stk.empty() && l.empty() && (get_absolute_path(tk, PATH) != std::nullopt))) {
-          if (!l.empty())
+        } else if (must_call) {
+          if (tk == "let") {
+            final_expr =
+                Symbol((stk.empty() && l.empty()) ? "root" : "",
+                       std::list<Symbol>{Symbol("", tk,
+                                                procedures.contains(tk)
+                                                    ? Type::Operator
+                                                    : Type::Identifier)},
+                       Type::List);
+            in_let = true;
+            must_call = false;
+          } else {
+            if (!l.empty())
+              stk.push(final_expr);
+            final_expr =
+                Symbol((stk.empty() && l.empty()) ? "root" : "",
+                       std::list<Symbol>{Symbol("", tk,
+                                                procedures.contains(tk)
+                                                    ? Type::Operator
+                                                    : Type::Identifier)},
+                       Type::List);
+            must_call = false;
+            in_call = true;
             stk.push(final_expr);
-          final_expr = Symbol((stk.empty() && l.empty()) ? "root" : "",
-                              std::list<Symbol>{Symbol("", tk,
-                                                       procedures.contains(tk)
-                                                           ? Type::Operator
-                                                           : Type::Identifier)},
-                              Type::List);
-          must_call = false;
-          in_call = true;
+          }
         } else {
+          if (in_let)
+            must_call = true;
           l.push_back(Symbol("", tk,
                              procedures.contains(tk) ? Type::Operator
                                                      : Type::Identifier));
@@ -219,6 +241,22 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
       }
     }
   }
+  if (stk.size() > 1) {
+    // this can happen if we 'let' a variable with the result of some
+    // function, so we can merge all the previous stack elements into one
+    // expression
+    auto top = stk.top();
+    stk.pop();
+    while (stk.size() > 0) {
+      auto p = stk.top();
+      stk.pop();
+      auto l = std::get<std::list<Symbol>>(p.value);
+      l.push_back(top);
+      p.value = l;
+      top = p;
+    }
+    return top;
+  }
   return final_expr;
 }
 
@@ -226,7 +264,6 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
 // make an iterative version of this thing
 
 std::string rec_print_ast(Symbol root, bool debug) {
-  std::cout << std::boolalpha;
   std::string res;
   if (std::holds_alternative<std::list<Symbol>>(root.value)) {
     if (debug)
