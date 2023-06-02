@@ -189,34 +189,33 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
         if (l.empty() && stk.empty()) {
           return sym;
         }
-	l.push_back(sym);
+        l.push_back(sym);
         final_expr.value = l;
       } else {
         auto l = std::get<std::list<Symbol>>(final_expr.value);
         if ((l.empty()) && (stk.empty()) &&
             ((user_defined_procedures.empty()) ||
              !user_defined_procedures.back().contains(tk)) &&
-            !procedures.contains(tk)) {
-	  return Symbol("root", tk, Type::String);
-	}
-          if (must_call) {
-            if (!l.empty())
-              stk.push(final_expr);
-            final_expr =
-                Symbol(stk.empty() ? "root" : "",
-                       std::list<Symbol>{Symbol("", tk,
-                                                procedures.contains(tk)
-                                                    ? Type::Operator
-                                                    : Type::Identifier)},
-                       Type::List);
-            must_call = false;
-            in_call = true;
-          } else {
-            l.push_back(Symbol("", tk,
-                               procedures.contains(tk) ? Type::Operator
-                                                       : Type::Identifier));
-            final_expr.value = l;
-          }
+            !procedures.contains(tk) && (get_absolute_path(tk, PATH) == std::nullopt)) {
+          return Symbol("root", tk, Type::String);
+        }
+        if (must_call || (stk.empty() && l.empty() && (get_absolute_path(tk, PATH) != std::nullopt))) {
+          if (!l.empty())
+            stk.push(final_expr);
+          final_expr = Symbol((stk.empty() && l.empty()) ? "root" : "",
+                              std::list<Symbol>{Symbol("", tk,
+                                                       procedures.contains(tk)
+                                                           ? Type::Operator
+                                                           : Type::Identifier)},
+                              Type::List);
+          must_call = false;
+          in_call = true;
+        } else {
+          l.push_back(Symbol("", tk,
+                             procedures.contains(tk) ? Type::Operator
+                                                     : Type::Identifier));
+          final_expr.value = l;
+        }
       }
     }
   }
