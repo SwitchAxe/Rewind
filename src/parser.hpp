@@ -60,11 +60,13 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
         lambda_statements.value = l;
         final_expr.value = std::list<Symbol>{};
       } else {
-        auto top = stk.top();
-        stk.pop();
-        auto l = std::get<std::list<Symbol>>(top.value);
-        l.push_back(final_expr);
-        final_expr.value = l;
+        if (stk.size() > 1) {
+          auto top = stk.top();
+          stk.pop();
+          auto l = std::get<std::list<Symbol>>(top.value);
+          l.push_back(final_expr);
+          final_expr.value = l;
+        }
         must_call = true;
         in_call = false;
       }
@@ -108,8 +110,8 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
                                lambda_statements));
         lambda_n++;
         final_expr = stk.top();
-	l = std::get<std::list<Symbol>>(final_expr.value);
-	l.push_back(Symbol("", id, Type::Identifier));
+        l = std::get<std::list<Symbol>>(final_expr.value);
+        l.push_back(Symbol("", id, Type::Identifier));
         final_expr.value = l;
         stk.pop();
         in_lambda_function = false;
