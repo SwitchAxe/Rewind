@@ -36,212 +36,131 @@ std::optional<long long signed int> try_convert_num(std::string n) {
 }
 
 Symbol get_ast(std::vector<std::string> tokens, path PATH) {
-  Symbol result;
+  bool in_lambda_function = false;
+  bool in_lambda_arguments = false;
+  Symbol lambda_arguments = Symbol("", std::list<Symbol>{}, Type::List);
+  Symbol lambda_condition = Symbol("", std::list<Symbol>{}, Type::List);
+  Symbol lambda_statements = Symbol("", std::list<Symbol>{}, Type::List);
+  bool in_lambda_condition = false;
+  bool in_lambda_statements = false;
+  bool in_let_right_after_first_op = false;
+  bool in_let_before_first_op = false;
+  bool in_let_before_args = false;
+  bool in_let_before_name = false;
+  bool must_call = true;
+  bool in_call = false;
   std::stack<Symbol> stk;
-  bool in_lambda_fn = false;
-  std::list<Symbol> lambda_fn_statements;
-  std::list<Symbol> lambda_fn_parameters;
-  static int lambda_id = 0;
-  bool in_conditional = false;
-  Symbol condition;
-  bool in_def = false;
-  bool in_def_past_name = false;
-  int bracket_balance = 0;
-  bool must_open_new_list = false;
+  Symbol final_expr = Symbol("root", std::list<Symbol>{}, Type::List);
+  static int lambda_n = 0;
   for (auto tk : tokens) {
-    if (procedures.contains(tk)) {
-      if (tk == "let") {
-        in_def = true;
-      }
-      if (stk.empty() ||
-          ((stk.size() > 0) &&
-           (std::get<std::list<Symbol>>(stk.top().value).size() > 0))) {
-        auto l = std::list<Symbol>{Symbol("", tk, Type::Operator)};
-        auto sym = Symbol("", l, Type::List);
-        stk.push(sym);
-      } else if ((stk.size() > 0) &&
-                 std::get<std::list<Symbol>>(stk.top().value).empty()) {
-        auto sym = Symbol("", tk, Type::Operator);
-        stk.pop();
-        auto l = std::list<Symbol>{sym};
-        auto node = Symbol("", l, Type::List);
-        stk.push(node);
-      }
-    } else if (auto v = try_convert_num(tk); v != std::nullopt) {
-      if (in_lambda_fn) {
-        stk.push(Symbol("", *v, Type::Number));
+    if (tk == ",") {
+      if (in_lambda_function) {
+        auto l = std::get<std::list<Symbol>>(lambda_arguments.value);
+        l.push_back(final_expr);
+        lambda_statements.value = l;
       } else {
-        auto sym = Symbol("", *v, Type::Number);
-        if (stk.empty()) {
-          sym.name = "root";
-          return sym;
-        }
-        auto cur = stk.top();
+        auto top = stk.top();
         stk.pop();
-        auto l = std::get<std::list<Symbol>>(cur.value);
-        l.push_back(sym);
-        cur.value = l;
-        stk.push(cur);
-      }
-    } else if (is_strlit(tk)) {
-      auto sym = Symbol("", tk.substr(1, tk.size() - 2), Type::String);
-      if (in_lambda_fn) {
-        stk.push(sym);
-      } else {
-        if (stk.empty()) {
-          sym.name = "root";
-          return sym;
-        }
-        auto cur = stk.top();
-        stk.pop();
-        auto l = std::get<std::list<Symbol>>(cur.value);
-        l.push_back(sym);
-        cur.value = l;
-        stk.push(cur);
-      }
-    } else if ((tk == ")") || (tk == "]") || (tk == ",")) {
-      if (in_lambda_fn) {
-        lambda_fn_statements.push_back(stk.top());
-        stk.pop();
-      } else {
-        if (stk.empty()) {
-          throw std::logic_error{"Rewind: Exception in the parser, "
-                                 "Unexpected closing paren while the stack "
-                                 "is empty."};
-        }
-        auto last = stk.top();
-        stk.pop();
-        if (stk.empty())
-          return last;
-        auto parent = stk.top();
-        stk.pop();
-        auto l = std::get<std::list<Symbol>>(parent.value);
-        if ((stk.size() > 1) && ((l.back().type == Type::Operator) ||
-                                 (l.back().type == Type::Identifier))) {
-          auto id = l.back();
-          l.pop_back();
-          auto new_sym = Symbol("", std::list<Symbol>{id, last}, Type::List);
-          if (!l.empty())
-            l.push_back(new_sym);
-          else
-            parent = new_sym;
-        } else {
-          l.push_back(last);
-          parent.value = l;
-        }
-        stk.push(parent);
+        auto l = std::get<std::list<Symbol>>(top.value);
+        l.push_back(final_expr);
+        final_expr.value = l;
+        must_call = true;
+        in_call = false;
       }
     } else if ((tk == "(") || (tk == "[")) {
-      stk.push(Symbol("root", std::list<Symbol>{}, Type::List));
+      stk.push(final_expr);
+      final_expr.value = std::list<Symbol>{};
+    } else if ((tk == ")") || (tk == "]")) {
+      auto top = stk.top();
+      stk.pop();
+      auto l = std::get<std::list<Symbol>>(top.value);
+      l.push_back(final_expr);
+      final_expr.value = l;
+      must_call = true;
+      in_call = false;
+      if (in_let_before_args == true) {
+        in_let_before_first_op = true;
+        in_let_before_args = false;
+      }
     } else if (tk == ";") {
-      if (in_lambda_fn) {
-        in_lambda_fn = false;
-        std::string id = "__re_lambda";
-        lambda_fn_statements.push_back(stk.top());
-        stk.pop();
-        if (in_conditional) {
-          in_conditional = false;
-          id = "__re_clambda";
+      if (in_lambda_function) {
+        std::string id = "__re_lambda" + std::to_string(lambda_n);
+        auto l = std::get<std::list<Symbol>>(final_expr.value);
+        if (l.size() == 1) {
+          auto last_arg = l.back();
+          auto l = std::get<std::list<Symbol>>(lambda_statements.value);
+          l.push_back(last_arg);
+          lambda_statements.value = l;
         }
         user_defined_procedures[user_defined_procedures.size() - 1]
             .insert_or_assign(
-                id + std::to_string(lambda_id),
-                std::make_pair(
-                    Symbol(
-                        "",
-                        (id == "__re_lambda")
-                            ? lambda_fn_parameters
-                            : std::list<Symbol>{Symbol("", lambda_fn_parameters,
-                                                       Type::List),
-                                                condition},
-                        Type::List),
-                    Symbol("", lambda_fn_statements, Type::List)));
-        auto last = stk.top();
+                id, std::make_pair(lambda_arguments, lambda_statements));
+        lambda_n++;
+        final_expr = stk.top();
+        l = std::get<std::list<Symbol>>(final_expr.value);
+        l.push_back(Symbol("", id, Type::Identifier));
+        final_expr.value = l;
         stk.pop();
-        auto l = std::get<std::list<Symbol>>(last.value);
-        l.push_back(
-            Symbol("", id + std::to_string(lambda_id), Type::Identifier));
-        last.value = l;
-        stk.push(last);
+        in_lambda_function = false;
       } else {
-        if (stk.size() != 2) {
-          if (stk.size() != 1) {
-            throw std::logic_error{
-                "Invalid token in the parser, ';' is a "
-                "termination token for function definitions. "
-                "(node stack too big)\n"};
+        if (stk.size() == 1) {
+          auto top = stk.top();
+          auto l = std::get<std::list<Symbol>>(top.value);
+          l.push_back(final_expr);
+          top.value = l;
+          return top;
+        } else {
+          auto top = stk.top();
+          auto l = std::get<std::list<Symbol>>(top.value);
+          l.push_back(final_expr);
+          top.value = l;
+	  stk.pop();
+          while (stk.size() > 0) {
+            auto p = stk.top();
+            stk.pop();
+            auto l = std::get<std::list<Symbol>>(p.value);
+            l.push_back(top);
+            p.value = l;
+            top = p;
           }
-          auto root = stk.top();
-          auto l = std::get<std::list<Symbol>>(root.value);
-          auto keyword = l.front();
-          auto as_string = std::get<std::string>(keyword.value);
-          if (as_string != "let") {
-            throw std::logic_error{
-                "Invalid token in the parser, ';' is a "
-                "termination token for function definitions. "
-                "(non-matching 'let' found for ';')\n"};
-          }
-          return root;
+          return top;
         }
-        auto last = stk.top();
-        stk.pop();
-        auto root = stk.top();
-        auto l = std::get<std::list<Symbol>>(root.value);
-        auto keyword = l.front();
-        auto as_string = std::get<std::string>(keyword.value);
-        if (as_string != "let") {
-          throw std::logic_error{
-              "Invalid token in the parser, ';' is a "
-              "termination token for function definitions.\n"};
-        }
-        l.push_back(last);
-        root.value = l;
-
-        return root;
       }
     } else if (tk == "=>") {
-      // at this point we already have a list in the expression,
-      // we can consider it as a list of arguments for our lambda function:
-      auto last = stk.top();
-      stk.pop();
-      auto l = std::get<std::list<Symbol>>(last.value);
-      auto args = l.back();
+      auto l = std::get<std::list<Symbol>>(final_expr.value);
+      if (l.empty() || (l.back().type != Type::List)) {
+        throw std::logic_error{"Missing parameters to a lambda function!\n"};
+      }
+      in_lambda_function = true;
+      lambda_arguments = l.back();
       l.pop_back();
-      last.value = l;
-      stk.push(last);
-      in_lambda_fn = true;
-      lambda_id++;
-      lambda_fn_parameters = std::get<std::list<Symbol>>(args.value);
+      final_expr.value = l;
+      stk.push(final_expr);
     } else if (tk == "?=>") {
-      // same considerations as before, but we instead have a condition, like
-      // so: (x y) : <condition> ?=> if_true, if_false;
-      auto last = stk.top();
-      stk.pop();
-      auto l = std::get<std::list<Symbol>>(last.value);
-      condition = l.back();
+      auto l = std::get<std::list<Symbol>>(final_expr.value);
+      if ((l.size() < 2) || (l.back().type != Type::List)) {
+        throw std::logic_error{"Missing parameters or a condition to a "
+                               "conditional lambda function!\n"};
+      }
+      in_lambda_function = true;
+      lambda_condition = l.back();
       l.pop_back();
-      auto args = l.back();
+      lambda_arguments = l.back();
       l.pop_back();
-      last.value = l;
-      stk.push(last);
-      in_conditional = true;
-      in_lambda_fn = true;
-      lambda_fn_parameters = std::get<std::list<Symbol>>(args.value);
+      final_expr.value = l;
+      stk.push(final_expr);
+    } else if (is_strlit(tk)) {
+      Symbol sym = Symbol("", tk, Type::String);
+      auto l = std::get<std::list<Symbol>>(final_expr.value);
+      l.push_back(sym);
+      final_expr.value = l;
+    } else if (auto v = try_convert_num(tk); v != std::nullopt) {
+      Symbol sym = Symbol("", *v, Type::Number);
+      auto l = std::get<std::list<Symbol>>(final_expr.value);
+      l.push_back(sym);
+      final_expr.value = l;
     } else {
-      auto sym = Symbol("", tk, Type::Identifier);
-      if (stk.empty() && ((tk[0] != '$') && (tk[0] != '%')))
-        stk.push(Symbol("root", std::list<Symbol>{sym}, Type::List));
-      else if (tk[0] == '%') {
-        sym.value = tk.substr(1);
-        if (stk.empty())
-          return sym;
-        auto last = stk.top();
-        stk.pop();
-        auto l = std::get<std::list<Symbol>>(last.value);
-        l.push_back(sym);
-        last.value = l;
-        stk.push(last);
-      } else if (tk[0] == '$') {
+      if (tk[0] == '$') {
         auto varname = Symbol("", tk.substr(1), Type::Identifier);
         Symbol var_lookup;
         Symbol sym;
@@ -251,52 +170,34 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
           sym = *vs;
         } else
           throw std::logic_error{"Unbound variable" + tk.substr(1) + ".\n"};
-        if (stk.empty())
-          return sym;
-        auto last = stk.top();
-        stk.pop();
-        auto l = std::get<std::list<Symbol>>(last.value);
+        auto l = std::get<std::list<Symbol>>(final_expr.value);
         l.push_back(sym);
-        last.value = l;
-        stk.push(last);
+        final_expr.value = l;
       } else {
-        if (in_def_past_name && (stk.size() == 1)) {
-          in_def_past_name = false;
-          stk.push(Symbol("", std::list<Symbol>{}, Type::List));
-        }
-        if (in_def) {
-          in_def_past_name = true;
-          in_def = false;
-        }
-        if (std::holds_alternative<std::list<Symbol>>(stk.top().value) &&
-            std::get<std::list<Symbol>>(stk.top().value).empty()) {
-          stk.pop();
-          stk.push(Symbol("",
-                          std::list<Symbol>{Symbol("", tk, Type::Identifier)},
-                          Type::List));
+        auto l = std::get<std::list<Symbol>>(final_expr.value);
+        if (must_call) {
+	  if (!l.empty())
+	    stk.push(final_expr);
+          final_expr = Symbol("",
+                             std::list<Symbol>{Symbol("", tk,
+                                                      procedures.contains(tk)
+                                                          ? Type::Operator
+                                                          : Type::Identifier)},
+                             Type::List);
+          in_let_before_first_op = false;
+          must_call = false;
+          in_call = true;
+          in_let_right_after_first_op = true;
         } else {
-          auto last = stk.top();
-          stk.pop();
-          auto l = std::get<std::list<Symbol>>(last.value);
-          l.push_back(Symbol("", tk, Type::Identifier));
-          last.value = l;
-          stk.push(last);
+          l.push_back(Symbol("", tk,
+                             procedures.contains(tk) ? Type::Operator
+                                                     : Type::Identifier));
+          final_expr.value = l;
         }
       }
     }
   }
-  // merge the first stack element with the second iff stk.size == 2
-  if (stk.size() == 2) {
-    auto last = stk.top();
-    stk.pop();
-    auto parent = stk.top();
-    stk.pop();
-    auto l = std::get<std::list<Symbol>>(parent.value);
-    l.push_back(last);
-    parent.value = l;
-    return parent;
-  }
-  return stk.top();
+  return final_expr;
 }
 
 // DEBUG PURPOSES ONLY and for printing the final result until i
