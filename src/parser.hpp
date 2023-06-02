@@ -178,7 +178,7 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
         if (must_call) {
 	  if (!l.empty())
 	    stk.push(final_expr);
-          final_expr = Symbol("",
+          final_expr = Symbol(stk.empty() ? "root" : "",
                              std::list<Symbol>{Symbol("", tk,
                                                       procedures.contains(tk)
                                                           ? Type::Operator
