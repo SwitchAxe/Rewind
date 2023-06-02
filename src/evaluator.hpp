@@ -346,7 +346,15 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line) {
         dummy = Symbol(node_stk.top().name, std::list<Symbol>(), Type::List);
         node_stk.pop();
         node_stk.push(dummy);
-      } else {
+      } else if (auto p_opt = callstack_variable_lookup(current_node); p_opt != std::nullopt) {
+	if (!leaves.empty()) {
+	  leaves[leaves.size() - 1].push_back(*p_opt);
+	} else {
+	  leaves.push_back(std::list<Symbol>{*p_opt});
+	}
+      }
+
+      else {
         if (!leaves.empty())
           leaves[leaves.size() - 1].push_back(current_node);
         else

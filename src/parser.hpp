@@ -59,7 +59,7 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
   int lambda_id = 0;
   for (int i = si; i < ei; ++i) {
     auto cur = tokens[i];
-    if ((cur == "(") || (cur == "[") || (cur == ",")) {
+    if ((cur == "(") || (cur == "[")) {
       RecInfo info = get_ast_aux(tokens, i + 1, ei, true, false,
                                  (res.let_level == 1) ? 2 : -1, PATH);
       i = info.end_index;
@@ -74,7 +74,7 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
           Symbol("", cur.substr(1, cur.size() - 2), Type::String));
     } else if (auto v = try_convert_num(cur); v != std::nullopt) {
       as_list.push_back(Symbol("", *v, Type::Number));
-    } else if (cur == ";") {
+    } else if ((cur == ",") || (cur == ";")) {
       return {.result = res.result, .end_index = i, .let_level = -1};
     } else if (cur == "=>") {
       // pop the last list we got and make it the arguments of our lambda
@@ -90,10 +90,15 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
       as_list.pop_back();
       RecInfo info = get_ast_aux(tokens, i + 1, ei, true, false, -1, PATH);
       // now info.result should contain the entirety of our lambda's body
+      auto wrapped = Symbol("", std::list<Symbol>{info.result}, Type::List);
       std::string id = "__re_lambda" + std::to_string(lambda_id);
+      if (user_defined_procedures.empty()) {
+	user_defined_procedures.push_back({});
+      }
       user_defined_procedures[user_defined_procedures.size() - 1]
-          .insert_or_assign(id, std::make_pair(lambda_parameters, info.result));
+          .insert_or_assign(id, std::make_pair(lambda_parameters, wrapped));
       lambda_id++;
+      i = info.end_index;
       as_list.push_back(Symbol("", id, Type::Identifier));
     } else if (cur == "?=>") {
       // exact same considerations as above, but we also require a second list
@@ -121,6 +126,7 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
               id, std::make_pair(
                       Symbol("", std::list<Symbol>{params, cond}, Type::List),
                       info.result));
+      i = info.end_index;
     } else {
       if (cur[0] == '$') {
         Symbol sym;
@@ -133,7 +139,11 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
           throw std::logic_error{"Unbound variable " + cur.substr(1) + ".\n"};
         as_list.push_back(sym);
       } else {
-        if (res.let_level > 1) {
+        if (res.let_level == 2) {
+          as_list.push_back(Symbol(
+              "", cur,
+              procedures.contains(cur) ? Type::Operator : Type::Identifier));
+        } else if (res.let_level > 1) {
           // found a function call with or without the 'let' having any args
           RecInfo info = get_ast_aux(tokens, i + 1, ei, true, false, -1, PATH);
           i = info.end_index;
@@ -173,8 +183,8 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
   if (fexpr.result.type == Type::List) {
     if (auto l = std::get<std::list<Symbol>>(fexpr.result.value);
         l.size() == 1) {
-      if (std::holds_alternative<std::string>(l.back().value)) {
-        if (auto s = std::get<std::string>(l.back().value);
+      if (std::holds_alternative<std::string>(l.front().value)) {
+        if (auto s = std::get<std::string>(l.front().value);
             !procedures.contains(s) &&
             (user_defined_procedures.empty() ||
              !user_defined_procedures.back().contains(s)) &&
