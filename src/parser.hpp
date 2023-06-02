@@ -43,10 +43,6 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
   Symbol lambda_statements = Symbol("", std::list<Symbol>{}, Type::List);
   bool in_lambda_condition = false;
   bool in_lambda_statements = false;
-  bool in_let_right_after_first_op = false;
-  bool in_let_before_first_op = false;
-  bool in_let_before_args = false;
-  bool in_let_before_name = false;
   bool must_call = true;
   bool in_call = false;
   std::stack<Symbol> stk;
@@ -55,9 +51,14 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
   for (auto tk : tokens) {
     if (tk == ",") {
       if (in_lambda_function) {
-        auto l = std::get<std::list<Symbol>>(lambda_arguments.value);
-        l.push_back(final_expr);
+        auto l = std::get<std::list<Symbol>>(lambda_statements.value);
+        auto r = std::get<std::list<Symbol>>(final_expr.value);
+        if (r.size() == 1)
+          l.push_back(r.back());
+        else
+          l.push_back(final_expr);
         lambda_statements.value = l;
+        final_expr.value = std::list<Symbol>{};
       } else {
         auto top = stk.top();
         stk.pop();
@@ -78,26 +79,37 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
       final_expr.value = l;
       must_call = true;
       in_call = false;
-      if (in_let_before_args == true) {
-        in_let_before_first_op = true;
-        in_let_before_args = false;
-      }
     } else if (tk == ";") {
       if (in_lambda_function) {
         std::string id = "__re_lambda" + std::to_string(lambda_n);
+        if (!lambda_condition.value.valueless_by_exception()) {
+          id = "__re_clambda" + std::to_string(lambda_n);
+        }
         auto l = std::get<std::list<Symbol>>(final_expr.value);
         if (l.size() > 0) {
           auto l = std::get<std::list<Symbol>>(lambda_statements.value);
-          l.push_back(final_expr);
+          auto r = std::get<std::list<Symbol>>(final_expr.value);
+          if (r.size() == 1)
+            l.push_back(r.back());
+          else
+            l.push_back(final_expr);
+
           lambda_statements.value = l;
         }
         user_defined_procedures[user_defined_procedures.size() - 1]
             .insert_or_assign(
-                id, std::make_pair(lambda_arguments, lambda_statements));
+                id,
+                std::make_pair((lambda_condition.value.valueless_by_exception())
+                                   ? lambda_arguments
+                                   : Symbol("",
+                                            std::list<Symbol>{lambda_arguments,
+                                                              lambda_condition},
+                                            Type::List),
+                               lambda_statements));
         lambda_n++;
         final_expr = stk.top();
-        l = std::get<std::list<Symbol>>(final_expr.value);
-        l.push_back(Symbol("", id, Type::Identifier));
+	l = std::get<std::list<Symbol>>(final_expr.value);
+	l.push_back(Symbol("", id, Type::Identifier));
         final_expr.value = l;
         stk.pop();
         in_lambda_function = false;
@@ -113,7 +125,7 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
           auto l = std::get<std::list<Symbol>>(top.value);
           l.push_back(final_expr);
           top.value = l;
-	  stk.pop();
+          stk.pop();
           while (stk.size() > 0) {
             auto p = stk.top();
             stk.pop();
@@ -135,6 +147,7 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
       l.pop_back();
       final_expr.value = l;
       stk.push(final_expr);
+      final_expr.value = std::list<Symbol>{};
     } else if (tk == "?=>") {
       auto l = std::get<std::list<Symbol>>(final_expr.value);
       if ((l.size() < 2) || (l.back().type != Type::List)) {
@@ -148,6 +161,7 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
       l.pop_back();
       final_expr.value = l;
       stk.push(final_expr);
+      final_expr.value = std::list<Symbol>{};
     } else if (is_strlit(tk)) {
       Symbol sym = Symbol("", tk, Type::String);
       auto l = std::get<std::list<Symbol>>(final_expr.value);
@@ -175,18 +189,16 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
       } else {
         auto l = std::get<std::list<Symbol>>(final_expr.value);
         if (must_call) {
-	  if (!l.empty())
-	    stk.push(final_expr);
+          if (!l.empty())
+            stk.push(final_expr);
           final_expr = Symbol(stk.empty() ? "root" : "",
-                             std::list<Symbol>{Symbol("", tk,
-                                                      procedures.contains(tk)
-                                                          ? Type::Operator
-                                                          : Type::Identifier)},
-                             Type::List);
-          in_let_before_first_op = false;
+                              std::list<Symbol>{Symbol("", tk,
+                                                       procedures.contains(tk)
+                                                           ? Type::Operator
+                                                           : Type::Identifier)},
+                              Type::List);
           must_call = false;
           in_call = true;
-          in_let_right_after_first_op = true;
         } else {
           l.push_back(Symbol("", tk,
                              procedures.contains(tk) ? Type::Operator
