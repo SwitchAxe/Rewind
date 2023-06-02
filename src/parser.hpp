@@ -186,27 +186,36 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
         } else
           throw std::logic_error{"Unbound variable" + tk.substr(1) + ".\n"};
         auto l = std::get<std::list<Symbol>>(final_expr.value);
-        l.push_back(sym);
+        if (l.empty() && stk.empty()) {
+          return sym;
+        }
         final_expr.value = l;
       } else {
         auto l = std::get<std::list<Symbol>>(final_expr.value);
-        if (must_call) {
-          if (!l.empty())
-            stk.push(final_expr);
-          final_expr = Symbol(stk.empty() ? "root" : "",
-                              std::list<Symbol>{Symbol("", tk,
-                                                       procedures.contains(tk)
-                                                           ? Type::Operator
-                                                           : Type::Identifier)},
-                              Type::List);
-          must_call = false;
-          in_call = true;
-        } else {
-          l.push_back(Symbol("", tk,
-                             procedures.contains(tk) ? Type::Operator
-                                                     : Type::Identifier));
-          final_expr.value = l;
-        }
+        if ((l.empty()) && (stk.empty()) &&
+            ((user_defined_procedures.empty()) ||
+             !user_defined_procedures.back().contains(tk)) &&
+            !procedures.contains(tk)) {
+	  return Symbol("root", tk, Type::String);
+	}
+          if (must_call) {
+            if (!l.empty())
+              stk.push(final_expr);
+            final_expr =
+                Symbol(stk.empty() ? "root" : "",
+                       std::list<Symbol>{Symbol("", tk,
+                                                procedures.contains(tk)
+                                                    ? Type::Operator
+                                                    : Type::Identifier)},
+                       Type::List);
+            must_call = false;
+            in_call = true;
+          } else {
+            l.push_back(Symbol("", tk,
+                               procedures.contains(tk) ? Type::Operator
+                                                       : Type::Identifier));
+            final_expr.value = l;
+          }
       }
     }
   }

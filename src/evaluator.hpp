@@ -346,47 +346,6 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line) {
         dummy = Symbol(node_stk.top().name, std::list<Symbol>(), Type::List);
         node_stk.pop();
         node_stk.push(dummy);
-      } else if ((leaves.empty() || leaves[leaves.size() - 1].empty()) &&
-                 (current_node.type == Type::Identifier)) {
-        auto opt = variable_lookup(current_node);
-        auto popt = procedure_lookup(current_node);
-        auto csopt = callstack_variable_lookup(current_node);
-        if (csopt != std::nullopt) {
-          if (!leaves.empty())
-            leaves[leaves.size() - 1].push_front(*csopt);
-          else
-            leaves.push_back(std::list<Symbol>{*csopt});
-        } else if (opt != std::nullopt) {
-          if (!leaves.empty())
-            leaves[leaves.size() - 1].push_front(*opt);
-          else
-            leaves.push_back(std::list<Symbol>{*opt});
-        } else {
-          if (!leaves.empty())
-            leaves[leaves.size() - 1].push_front(current_node);
-          else
-            leaves.push_back(std::list<Symbol>{current_node});
-        }
-      } else if (current_node.type == Type::Identifier) {
-        auto opt = variable_lookup(current_node);
-        auto popt = procedure_lookup(current_node);
-        auto csopt = callstack_variable_lookup(current_node);
-        if (csopt != std::nullopt) {
-          if (!leaves.empty())
-            leaves[leaves.size() - 1].push_back(*csopt);
-          else
-            leaves.push_back(std::list<Symbol>{*csopt});
-        } else if (opt != std::nullopt) {
-          if (!leaves.empty())
-            leaves[leaves.size() - 1].push_back(*opt);
-          else
-            leaves.push_back(std::list<Symbol>{*opt});
-        } else {
-          if (!leaves.empty())
-            leaves[leaves.size() - 1].push_back(current_node);
-          else
-            leaves.push_back(std::list<Symbol>{current_node});
-        }
       } else {
         if (!leaves.empty())
           leaves[leaves.size() - 1].push_back(current_node);
