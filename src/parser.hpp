@@ -86,10 +86,9 @@ Symbol get_ast(std::vector<std::string> tokens, path PATH) {
       if (in_lambda_function) {
         std::string id = "__re_lambda" + std::to_string(lambda_n);
         auto l = std::get<std::list<Symbol>>(final_expr.value);
-        if (l.size() == 1) {
-          auto last_arg = l.back();
+        if (l.size() > 0) {
           auto l = std::get<std::list<Symbol>>(lambda_statements.value);
-          l.push_back(last_arg);
+          l.push_back(final_expr);
           lambda_statements.value = l;
         }
         user_defined_procedures[user_defined_procedures.size() - 1]
