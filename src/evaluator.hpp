@@ -163,8 +163,11 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH,
     node.value = l;
     if (procedures.contains(std::get<std::string>(op.value))) {
       Functor fun = procedures[std::get<std::string>(op.value)];
+      if (std::get<std::string>(op.value) == "->") {
+        l.push_front(Symbol("", node.name != "root", Type::Boolean));
+      }
       try {
-        result = fun(std::get<std::list<Symbol>>(node.value), PATH);
+        result = fun(l, PATH);
       } catch (std::logic_error ex) {
         throw std::logic_error{"Rewind (line " + std::to_string(line) +
                                "): " + ex.what()};
@@ -207,15 +210,14 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH,
     tcsetattr(STDIN_FILENO, TCSANOW, &original);
     if (node.name != "root") {
       pipel = Symbol("", std::list<Symbol>{pipel}, Type::List);
-      auto result = rewind_pipe(pipel, PATH);
+      auto result = rewind_pipe(pipel, PATH, true);
       active_pids = {};
       return result;
     }
     auto result = rewind_call_ext_program(pipel, PATH, false);
-    while (wait(nullptr) != -1)
-      ;
+    while (waitpid(result.pid, nullptr, 0) > 0);
     active_pids = {};
-    return result;
+    return result.s;
   }
   return node;
 }

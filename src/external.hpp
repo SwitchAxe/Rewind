@@ -46,7 +46,8 @@ std::string to_str(Symbol sym) {
 #undef p
   return arg;
 }
-Symbol rewind_call_ext_program(Symbol node,
+
+PidSym rewind_call_ext_program(Symbol node,
                                const std::vector<std::string> &PATH,
                                bool must_pipe, int pipe_fd_out,
                                int pipe_fd_in) {
@@ -89,14 +90,20 @@ Symbol rewind_call_ext_program(Symbol node,
   active_pids.push_back(pid);
   if (pid == 0) {
     if (must_pipe) {
-      if (dup2(pipe_fd_out, STDOUT_FILENO) != STDOUT_FILENO) {
-        throw std::logic_error{"Error while piping " + prog + " (writing)!\n"};
+      if (pipe_fd_out != 1) {
+        if (dup2(pipe_fd_out, STDOUT_FILENO) != STDOUT_FILENO) {
+          throw std::logic_error{"Error while piping " + prog +
+                                 " (writing)!\n"};
+        }
+        close(pipe_fd_out);
       }
-      close(pipe_fd_out);
-      if (dup2(pipe_fd_in, STDIN_FILENO) != STDIN_FILENO) {
-        throw std::logic_error{"Error while piping " + prog + " (reading)!\n"};
+      if (pipe_fd_in != 0) {
+        if (dup2(pipe_fd_in, STDIN_FILENO) != STDIN_FILENO) {
+          throw std::logic_error{"Error while piping " + prog +
+                                 " (reading)!\n"};
+        }
+        close(pipe_fd_in);
       }
-      close(pipe_fd_in);
     }
     // check for additional environment variables
     if (environment_variables.empty()) {
@@ -117,11 +124,11 @@ Symbol rewind_call_ext_program(Symbol node,
       status = execve(prog.c_str(), argv, envp);
     }
     if (status) {
-      return Symbol("", status, Type::Number);
+      return {Symbol("", status, Type::Number), -1};
     }
     exit(1);
   } else if (pid > 0) {
-    if (pipe_fd_out) {
+    if (pipe_fd_out && (pipe_fd_out != 1)) {
       close(pipe_fd_out);
     }
     if (pipe_fd_in)
@@ -129,22 +136,23 @@ Symbol rewind_call_ext_program(Symbol node,
     for (int idx = 1; argv[idx] != nullptr; ++idx) {
       free(argv[idx]);
     }
-    return Symbol("", status, Type::Command);
+    return {Symbol("", status, Type::Command), pid};
   } else {
     throw std::logic_error{"Error while executing child process " + prog +
                            "!\n"};
   }
 }
 
-Symbol rewind_pipe(Symbol node, const std::vector<std::string> &PATH) {
+Symbol rewind_pipe(Symbol node, const std::vector<std::string> &PATH,
+                   bool must_read) {
   int fd[2]; // fd[0] reads, fd[1] writes
-  Symbol status;
+  PidSym status;
   std::list<Symbol> nodel = std::get<std::list<Symbol>>(node.value);
   auto last = nodel.back();
   nodel.pop_back();
   pipe(fd);
   if (nodel.empty()) {
-    auto status = rewind_call_ext_program(last, PATH, true, fd[1], 0);
+    status = rewind_call_ext_program(last, PATH, true, fd[1], 0);
     close(fd[1]);
     char buf[1024];
     int cnt = 0;
@@ -152,12 +160,15 @@ Symbol rewind_pipe(Symbol node, const std::vector<std::string> &PATH) {
     while ((cnt = read(fd[0], buf, 1023))) {
       if (cnt == -1)
         throw std::logic_error{"Read failed in a pipe!\n"};
+      if (cnt == 0) {
+	break;
+      }
       buf[cnt] = '\0';
       std::string tmp{buf};
       result += tmp;
     }
     close(fd[0]);
-    while (wait(nullptr) != -1)
+    while (waitpid(status.pid, nullptr, 0) != -1)
       ;
     if (result.back() == '\n') {
       result.pop_back();
@@ -170,34 +181,44 @@ Symbol rewind_pipe(Symbol node, const std::vector<std::string> &PATH) {
   status = rewind_call_ext_program(first, PATH, true, fd[1], 0);
   for (auto cur : nodel) {
     old_read_end = dup(fd[0]);
+    close(fd[1]);
     pipe(fd);
     status = rewind_call_ext_program(cur, PATH, true, fd[1], old_read_end);
   }
-  old_read_end = dup(fd[0]);
-  int old_write_end = dup(fd[1]);
-  pipe(fd);
-  status = rewind_call_ext_program(last, PATH, true, fd[1], old_read_end);
-  char buf[1024];
-  std::string result;
-  if (std::get<long long int>(status.value) == -1) {
-    return Symbol("", "Null", Type::String);
+  if (must_read) {
+    int cnt;
+    old_read_end = dup(fd[0]);
+    pipe(fd);
+    status = rewind_call_ext_program(last, PATH, true, fd[1], old_read_end);
+    close(fd[1]);
+    close(old_read_end);
+    char buf[1024];
+    std::string result;
+    if (std::get<long long int>(status.s.value) == -1) {
+      return Symbol("", "Null", Type::String);
+    }
+    while ((cnt = read(fd[0], buf, 1023))) {
+      if (cnt == -1)
+        throw std::logic_error{"Read failed in a pipe!\n"};
+      if (cnt == 0) {
+	break;
+      }
+      buf[cnt] = '\0';
+      std::string tmp{buf};
+      result += tmp;
+    }
+    close(fd[0]);
+    if (result.back() == '\n') {
+      result.pop_back();
+    }
+    return Symbol("", result, Type::String);
+  } else {
+    close(fd[1]);
+    status = rewind_call_ext_program(last, PATH, true, 1, fd[0]);
+    close(fd[0]);
+    while (waitpid(status.pid, nullptr, 0) != -1);
+    fflush(stdout);
+    return status.s;
   }
-  close(fd[1]);
-  close(old_write_end);
-  close(old_read_end);
-  int cnt;
-
-  while ((cnt = read(fd[0], buf, 1023))) {
-    if (cnt == -1)
-      throw std::logic_error{"Read failed in a pipe!\n"};
-    buf[cnt] = '\0';
-    std::string tmp{buf};
-    result += tmp;
-  }
-
-  close(fd[0]);
-  if (result.back() == '\n') {
-    result.pop_back();
-  }
-  return Symbol("", result, Type::String);
+  return status.s;
 }

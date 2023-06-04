@@ -40,6 +40,10 @@
 #include <unistd.h>
 #include <utility>
 #include <variant>
+struct PidSym {
+  Symbol s;
+  pid_t pid;
+};
 std::string rec_print_ast(Symbol root, bool debug = false);
 Symbol get_ast(std::vector<std::string> tokens, path PATH);
 std::vector<std::string> get_tokens(std::string stream);
@@ -308,8 +312,9 @@ void get_env_vars(Symbol node, path PATH) {
 std::vector<std::pair<std::string, std::map<std::string, Symbol>>> call_stack;
 std::vector<std::map<std::string, std::pair<Symbol, Symbol>>>
     user_defined_procedures;
-Symbol rewind_pipe(Symbol node, const std::vector<std::string> &PATH);
-Symbol rewind_call_ext_program(Symbol node,
+Symbol rewind_pipe(Symbol node, const std::vector<std::string> &PATH,
+                   bool must_read);
+PidSym rewind_call_ext_program(Symbol node,
                                const std::vector<std::string> &PATH,
                                bool must_pipe = false, int pipe_fd_out = 0,
                                int pipe_fd_in = 0);
@@ -445,6 +450,8 @@ std::map<std::string, Functor> procedures = {
        return Symbol("", "Nil", Type::String);
      }}},
     {"->", {[](std::list<Symbol> args, path PATH) -> Symbol {
+       bool must_read = std::get<bool>(args.front().value);
+       args.pop_front();
        for (auto &e : args) {
          auto progl = std::get<std::list<Symbol>>(e.value);
          auto lit =
@@ -473,7 +480,7 @@ std::map<std::string, Functor> procedures = {
        }
        std::reverse(environment_variables.begin(), environment_variables.end());
        Symbol node = Symbol("", args, Type::List);
-       Symbol result = rewind_pipe(node, PATH);
+       Symbol result = rewind_pipe(node, PATH, must_read);
        return Symbol("", result.value, result.type);
      }}},
     {">", {[](std::list<Symbol> args, path PATH) -> Symbol {
@@ -579,9 +586,9 @@ std::map<std::string, Functor> procedures = {
          ext.pop_front();
          if (ext.empty()) {
            close(fd[1]);
-           Symbol status =
+           PidSym status =
                rewind_call_ext_program(first, PATH, true, readfd[1], fd[0]);
-           while (wait(nullptr) != -1)
+           while (waitpid(status.pid, nullptr, 0) != -1)
              ;
            close(readfd[1]);
            char buf[1024];
@@ -592,6 +599,9 @@ std::map<std::string, Functor> procedures = {
              if (cnt == -1) {
                throw std::logic_error{"failed read in '<<<'!\n"};
              }
+	     if (cnt == 0) {
+	       break;
+	     }
              buf[cnt] = '\0';
              std::string tmp{buf};
              result += tmp;
@@ -603,7 +613,7 @@ std::map<std::string, Functor> procedures = {
            return Symbol("", result, Type::String);
          }
          close(fd[1]);
-         Symbol status =
+         PidSym status =
              rewind_call_ext_program(first, PATH, true, readfd[1], fd[0]);
          Symbol last = ext.back();
          ext.pop_back();
@@ -625,6 +635,9 @@ std::map<std::string, Functor> procedures = {
          char buf[1024];
          while ((cnt = read(readfd[0], buf, 1023))) {
            buf[cnt] = '\0';
+	   if (cnt == 0) {
+	     break;
+	   }
            std::string tmp{buf};
            result += tmp;
          }
@@ -657,9 +670,9 @@ std::map<std::string, Functor> procedures = {
            "", *get_absolute_path(std::get<std::string>(lit->value), PATH),
            Type::Identifier);
        rest.push_front(prog);
-       Symbol status = rewind_call_ext_program(Symbol("", rest, Type::List),
+       PidSym status = rewind_call_ext_program(Symbol("", rest, Type::List),
                                                PATH, true, readfd[1], fd[0]);
-       while (wait(nullptr) != -1)
+       while (waitpid(status.pid, nullptr, 0) != -1)
          ;
        close(readfd[1]);
        std::string result;
@@ -669,6 +682,9 @@ std::map<std::string, Functor> procedures = {
          if (cnt == -1) {
            throw std::logic_error{"Read failed in '<<<' (here-string!)\n"};
          }
+	 if (cnt == 0) {
+	   break;
+	 }
          buf[cnt] = '\0';
          std::string tmp{buf};
          result += tmp;
