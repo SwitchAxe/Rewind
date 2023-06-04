@@ -46,6 +46,8 @@ enum class State {
   LambdaFunctionFirstFunctionCall,
   LambdaFunctionInArgumentList,
   LambdaFunctionLiteral,
+  LambdaFunctionIdentifier,
+  LambdaFunctionArgumentList,
   End,
   Error,
 };
@@ -113,6 +115,8 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
       as_list.push_back(Symbol(is_root ? "root" : "", *v, Type::Number));
       if (cur_state == State::LambdaFunctionFirstFunctionCall) {
         cur_state = State::LambdaFunctionLiteral;
+      } else if (cur_state == State::LambdaFunctionIdentifier) {
+	cur_state = State::LambdaFunctionFirstFunctionCall;
       }
     } else if (cur == "=>") {
       if (as_list.empty() || as_list.back().type != Type::List) {
@@ -124,6 +128,17 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
                                  State::LambdaFunctionFirstFunctionCall);
       cur_state = State::None;
       auto body = info.result;
+      // keep iterating until we finish the statements composing the lambda
+      // function
+      while ((info.st == State::LambdaFunctionInArgumentList) ||
+             (info.st == State::LambdaFunctionFirstFunctionCall)) {
+        i = info.end_index;
+        info = get_ast_aux(tokens, i + 1, ei, false, PATH, level + 1,
+                           State::LambdaFunctionFirstFunctionCall);
+        auto l = std::get<std::list<Symbol>>(body.value);
+        l.push_back(info.result);
+        body.value = l;
+      }
       i = info.end_index;
       auto parameters = as_list.back();
       as_list.pop_back();
@@ -180,7 +195,9 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
           (cur_state == State::LambdaFunctionFirstFunctionCall)) {
         RecInfo info = get_ast_aux(
             tokens, i + 1, ei, false, PATH, level + 1,
-            cur == "let" ? State::Identifier
+            cur == "let" ? (cur_state == State::LambdaFunctionFirstFunctionCall
+                                ? State::LambdaFunctionIdentifier
+                                : State::Identifier)
                          : (cur_state == State::LambdaFunctionFirstFunctionCall
                                 ? State::LambdaFunctionInArgumentList
                                 : State::InFunCallArguments));
@@ -206,7 +223,8 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
         cur_state = info.st;
         res.st = cur_state;
         if ((level > 0) &&
-            (cur_state != State::LambdaFunctionFirstFunctionCall)) {
+            (cur_state != State::LambdaFunctionFirstFunctionCall) &&
+            (cur_state != State::LambdaFunctionInArgumentList)) {
           // early return to completely exit a function call when we're done
           // collecting all its arguments
           res.result.value = as_list;
@@ -214,12 +232,6 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
                   .end_index = i,
                   .st = State::FirstFunctionCall};
         }
-      } else if ((cur_state == State::InFunCallArguments) ||
-                 (cur_state == State::InArgumentList) ||
-                 (cur_state == State::List)) {
-        as_list.push_back(Symbol("", cur,
-                                 procedures.contains(cur) ? Type::Operator
-                                                          : Type::Identifier));
       } else {
         as_list.push_back(Symbol("", cur,
                                  procedures.contains(cur) ? Type::Operator
