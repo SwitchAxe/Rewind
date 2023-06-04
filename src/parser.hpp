@@ -45,6 +45,7 @@ enum class State {
   LambdaFunction,
   LambdaFunctionFirstFunctionCall,
   LambdaFunctionInArgumentList,
+  LambdaFunctionLiteral,
   End,
   Error,
 };
@@ -90,10 +91,7 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
           .result = res.result, .end_index = i, .st = State::FirstFunctionCall};
     } else if (cur == ",") {
       res.result.value = as_list;
-      if (cur_state == State::LambdaFunctionFirstFunctionCall) {
-        continue;
-      }
-      if (cur_state == State::LambdaFunctionInArgumentList) {
+      if (cur_state == State::LambdaFunctionLiteral) {
         continue;
       }
       return {.result = res.result,
@@ -108,8 +106,14 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
     } else if (is_strlit(cur)) {
       as_list.push_back(Symbol(is_root ? "root" : "",
                                cur.substr(1, cur.size() - 2), Type::String));
+      if (cur_state == State::LambdaFunctionFirstFunctionCall) {
+        cur_state = State::LambdaFunctionLiteral;
+      }
     } else if (auto v = try_convert_num(cur); v != std::nullopt) {
       as_list.push_back(Symbol(is_root ? "root" : "", *v, Type::Number));
+      if (cur_state == State::LambdaFunctionFirstFunctionCall) {
+        cur_state = State::LambdaFunctionLiteral;
+      }
     } else if (cur == "=>") {
       if (as_list.empty() || as_list.back().type != Type::List) {
         throw std::logic_error{"Parser error: Found a lambda token ('=>') with "

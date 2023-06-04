@@ -377,18 +377,10 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line) {
           } else
             throw std::logic_error{"Unbound variable " + s.substr(1) + "!"};
         } else {
-          auto cs_opt = callstack_variable_lookup(current_node);
-          if (cs_opt != std::nullopt) {
-            if (!leaves.empty()) {
-              leaves[leaves.size() - 1].push_back(*cs_opt);
-            } else
-              leaves.push_back(std::list<Symbol>{*cs_opt});
+          if (!leaves.empty()) {
+            leaves[leaves.size() - 1].push_back(current_node);
           } else {
-            if (!leaves.empty()) {
-              leaves[leaves.size() - 1].push_back(current_node);
-            } else {
-              leaves.push_back(std::list<Symbol>{current_node});
-            }
+            leaves.push_back(std::list<Symbol>{current_node});
           }
         }
       } else {
