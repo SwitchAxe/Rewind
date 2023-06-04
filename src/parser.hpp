@@ -68,7 +68,7 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
   static int lambda_id = 0;
   for (int i = si; i < ei; ++i) {
     auto cur = tokens[i];
-    if (cur == "(") {
+    if ((cur == "(") || (cur == "[")) {
       RecInfo info = get_ast_aux(tokens, i + 1, ei, false, PATH, level + 1,
                                  ((cur_state == State::FirstFunctionCall) ||
                                   (cur_state == State::Identifier))
@@ -78,7 +78,7 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
       as_list.push_back(info.result);
       cur_state = info.st;
       res.st = cur_state;
-    } else if (cur == ")") {
+    } else if ((cur == ")") || (cur == "]")) {
       res.result.value = as_list;
       return {.result = res.result,
               .end_index = i,
