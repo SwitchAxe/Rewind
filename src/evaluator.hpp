@@ -27,8 +27,10 @@
 #include <unistd.h>
 #include <variant>
 Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line);
-Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH, int line = 0);
-Symbol eval_dispatch(Symbol node, const std::vector<std::string> &PATH, int line);
+Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH,
+                           int line = 0);
+Symbol eval_dispatch(Symbol node, const std::vector<std::string> &PATH,
+                     int line);
 std::pair<std::string, Symbol>
 check_for_tail_recursion(std::string name, Symbol funcall, path &PATH) {
   if (funcall.type != Type::List)
@@ -52,7 +54,8 @@ check_for_tail_recursion(std::string name, Symbol funcall, path &PATH) {
   return {"no", funcall};
 }
 
-Symbol eval_function(Symbol node, const std::vector<std::string> &PATH, int line) {
+Symbol eval_function(Symbol node, const std::vector<std::string> &PATH,
+                     int line) {
   Symbol result;
   auto argl = std::get<std::list<Symbol>>(node.value);
   auto dummy = argl.front();
@@ -69,16 +72,19 @@ Symbol eval_function(Symbol node, const std::vector<std::string> &PATH, int line
   Symbol body =
       user_defined_procedures[user_defined_procedures.size() - 1][op].second;
   if (op.substr(0, 6) == "__re_c") {
-    // we got a conditional lambda, so we must store the condition in its variable
+    // we got a conditional lambda, so we must store the condition in its
+    // variable
     if (paraml.size() != 2) {
-      throw std::logic_error {"Missing condition or arguments in a conditional lambda!\n"};
+      throw std::logic_error{
+          "Missing condition or arguments in a conditional lambda!\n"};
     }
     condition = paraml.back();
     params = paraml.front();
     paraml = std::get<std::list<Symbol>>(params.value);
     auto bodyl = std::get<std::list<Symbol>>(body.value);
     if (bodyl.size() != 2) {
-      throw std::logic_error {"A conditional lambda can only accept two expressions!\n"};
+      throw std::logic_error{
+          "A conditional lambda can only accept two expressions!\n"};
     }
   }
   if (argl.size() != paraml.size()) {
@@ -94,9 +100,10 @@ Symbol eval_function(Symbol node, const std::vector<std::string> &PATH, int line
         return std::make_pair(lhs, rhs);
       });
   for (auto p : zipped) {
-    frame.insert_or_assign(
-        std::get<std::string>(p.first.value),
-        (p.second.type == Type::RawAst) ? p.second : eval_dispatch(p.second, PATH, line));
+    frame.insert_or_assign(std::get<std::string>(p.first.value),
+                           (p.second.type == Type::RawAst)
+                               ? p.second
+                               : eval_dispatch(p.second, PATH, line));
   }
   if (node.type != Type::Funcall)
     call_stack.push_back(std::make_pair(op, frame));
@@ -110,7 +117,8 @@ Symbol eval_function(Symbol node, const std::vector<std::string> &PATH, int line
     Symbol expr;
     if (convert_value_to_bool(eval(condition, PATH, line))) {
       expr = body_list.front();
-    } else expr = body_list.back();
+    } else
+      expr = body_list.back();
     result = eval(expr, PATH, line);
     return result;
   }
@@ -135,7 +143,8 @@ Symbol eval_function(Symbol node, const std::vector<std::string> &PATH, int line
 }
 
 // to use with nodes with only leaf children.
-Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH, int line) {
+Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH,
+                           int line) {
   Symbol result;
   std::optional<std::string> absolute; // absolute path of an executable, if any
   auto it = PATH.begin();
@@ -155,9 +164,10 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH, in
     if (procedures.contains(std::get<std::string>(op.value))) {
       Functor fun = procedures[std::get<std::string>(op.value)];
       try {
-	result = fun(std::get<std::list<Symbol>>(node.value), PATH);
+        result = fun(std::get<std::list<Symbol>>(node.value), PATH);
       } catch (std::logic_error ex) {
-	throw std::logic_error {"Rewind (line " + std::to_string(line) + "): " + ex.what() };
+        throw std::logic_error{"Rewind (line " + std::to_string(line) +
+                               "): " + ex.what()};
       }
       if (result.type == Type::RawAst) {
         return result;
@@ -165,7 +175,8 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH, in
       result = eval(result, PATH, line);
       return result;
     } else
-      throw std::logic_error{"Rewind (line" + std::to_string(line) + "): Unbound procedure!\n"};
+      throw std::logic_error{"Rewind (line" + std::to_string(line) +
+                             "): Unbound procedure!\n"};
   } else if ((op.type == Type::Identifier) &&
              !user_defined_procedures.empty() &&
              user_defined_procedures[user_defined_procedures.size() - 1]
@@ -320,8 +331,8 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line) {
         if ((!leaves.empty()) && (!leaves.back().empty())) {
           leaves[leaves.size() - 1].push_back(current_node);
         } else {
-	  if (leaves.empty())
-	    leaves.push_back(std::list<Symbol>());
+          if (leaves.empty())
+            leaves.push_back(std::list<Symbol>());
           leaves[leaves.size() - 1] = spfl;
           leaves[leaves.size() - 1].push_front(current_node);
           Symbol dummy =
@@ -346,15 +357,32 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line) {
         dummy = Symbol(node_stk.top().name, std::list<Symbol>(), Type::List);
         node_stk.pop();
         node_stk.push(dummy);
-      } else if (auto p_opt = callstack_variable_lookup(current_node); p_opt != std::nullopt) {
-	if (!leaves.empty()) {
-	  leaves[leaves.size() - 1].push_back(*p_opt);
-	} else {
-	  leaves.push_back(std::list<Symbol>{*p_opt});
-	}
-      }
-
-      else {
+      } else if (auto p_opt = callstack_variable_lookup(current_node);
+                 p_opt != std::nullopt) {
+        if (!leaves.empty()) {
+          leaves[leaves.size() - 1].push_back(*p_opt);
+        } else {
+          leaves.push_back(std::list<Symbol>{*p_opt});
+        }
+      } else if (current_node.type == Type::Identifier) {
+        if (auto s = std::get<std::string>(current_node.value); s[0] == '$') {
+          if (auto var_opt = variable_lookup(Symbol("", s.substr(1), Type::Identifier));
+              var_opt != std::nullopt) {
+            if (!leaves.empty()) {
+              leaves[leaves.size() - 1].push_back(*var_opt);
+            } else {
+              leaves.push_back(std::list<Symbol>{*var_opt});
+            }
+          } else
+            throw std::logic_error{"Unbound variable " + s.substr(1) + "!"};
+        } else {
+          if (!leaves.empty()) {
+            leaves[leaves.size() - 1].push_back(current_node);
+          } else {
+            leaves.push_back(std::list<Symbol>{current_node});
+          }
+        }
+      } else {
         if (!leaves.empty())
           leaves[leaves.size() - 1].push_back(current_node);
         else
@@ -368,7 +396,6 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line) {
   } while (1);
   return result;
 }
-
 
 Symbol eval_dispatch(Symbol node, path PATH, int line) {
   return eval(node, PATH, line);

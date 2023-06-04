@@ -35,145 +35,122 @@ std::optional<long long signed int> try_convert_num(std::string n) {
   return std::nullopt;
 }
 
+enum class State {
+  None,
+  Identifier,
+  Literal,
+  ArgumentList,
+  InArgumentList,
+  FirstFunctionCall,
+  InFunCallArguments,
+  InFunCallArgumentsOneLevelDeeper,
+  InFunCallArgumentsOneLevelHigher,
+  List,
+  LeftParen,
+  RightParen,
+  LambdaToken,
+  ConditionalLambdaToken,
+  End,
+  Error,
+};
+
 // information we need to keep track of in get_ast_aux
 struct RecInfo {
   Symbol result;
   int end_index;
-  // how deep we are within a 'let' form, up until the first function call
-  // -1: no 'let' found
-  // 0: keyword
-  // 1: identifier
-  // 2: args (if any)
-  // 3: fun_call or value (this measures 2 if there's no args i.e. no function)
-  int let_level;
+  State st;
 };
 
 RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
-                    bool must_call, bool in_call, int let_level, path PATH) {
+                    bool is_root, path PATH, int level, State st) {
   RecInfo res;
-  res.let_level = let_level;
-  auto as_list = std::list<Symbol>();
-  res.result = Symbol("", as_list, Type::List);
-  Symbol lambda_parameters;
-  Symbol lambda_condition;
-  int lambda_id = 0;
+  std::list<Symbol> as_list;
+  res.result = Symbol(is_root ? "root" : "", as_list, Type::List);
+  State cur_state = st;
   for (int i = si; i < ei; ++i) {
     auto cur = tokens[i];
-    if ((cur == "(") || (cur == "[")) {
-      RecInfo info = get_ast_aux(tokens, i + 1, ei, true, false,
-                                 (res.let_level == 1) ? 2 : -1, PATH);
+    if (cur == "(") {
+      RecInfo info = get_ast_aux(tokens, i + 1, ei, false, PATH, level + 1,
+                                 ((cur_state == State::FirstFunctionCall) ||
+                                  (cur_state == State::Identifier))
+                                     ? State::InArgumentList
+                                     : State::List);
       i = info.end_index;
       as_list.push_back(info.result);
-      res.let_level = info.let_level;
-    } else if ((cur == ")") || (cur == "]")) {
+      cur_state = info.st;
+      res.st = cur_state;
+    } else if (cur == ")") {
+      res.result.value = as_list;
       return {.result = res.result,
               .end_index = i,
-              .let_level = (let_level == 2) ? 3 : -1};
+              .st = (cur_state == State::InArgumentList)
+                        ? State::FirstFunctionCall
+                        : State::InFunCallArguments};
+    }
+
+    else if (cur == ";") {
+      res.result.value = as_list;
+      return {
+          .result = res.result, .end_index = i, .st = State::FirstFunctionCall};
+    } else if (cur == ",") {
+      res.result.value = as_list;
+      return {.result = res.result,
+              .end_index = i,
+              .st = (level > 0) ? State::FirstFunctionCall : State::Error};
     } else if (is_strlit(cur)) {
-      as_list.push_back(
-          Symbol("", cur.substr(1, cur.size() - 2), Type::String));
+      as_list.push_back(Symbol(is_root ? "root" : "",
+                               cur.substr(1, cur.size() - 2), Type::String));
     } else if (auto v = try_convert_num(cur); v != std::nullopt) {
-      as_list.push_back(Symbol("", *v, Type::Number));
-    } else if ((cur == ",") || (cur == ";")) {
-      return {.result = res.result, .end_index = i, .let_level = -1};
-    } else if (cur == "=>") {
-      // pop the last list we got and make it the arguments of our lambda
-      // throw an exception if there's no such list
-      // then we can recurse on the rest of the tokens, using the fact that
-      // lambdas are terminated by ';', so we can safely stop recursion when
-      // we find this token (see the base case above this branch)
-      if (as_list.empty() || (as_list.back().type != Type::List)) {
-        throw std::logic_error{"Parser error: Found a lambda token ('=>') with "
-                               "no list before it."};
-      }
-      lambda_parameters = as_list.back();
-      as_list.pop_back();
-      RecInfo info = get_ast_aux(tokens, i + 1, ei, true, false, -1, PATH);
-      // now info.result should contain the entirety of our lambda's body
-      auto wrapped = Symbol("", std::list<Symbol>{info.result}, Type::List);
-      std::string id = "__re_lambda" + std::to_string(lambda_id);
-      if (user_defined_procedures.empty()) {
-	user_defined_procedures.push_back({});
-      }
-      user_defined_procedures[user_defined_procedures.size() - 1]
-          .insert_or_assign(id, std::make_pair(lambda_parameters, wrapped));
-      lambda_id++;
-      i = info.end_index;
-      as_list.push_back(Symbol("", id, Type::Identifier));
-    } else if (cur == "?=>") {
-      // exact same considerations as above, but we also require a second list
-      // to act as the condition
-      if (as_list.size() < 2) {
-        throw std::logic_error{"Parser error: too few (< 2) nodes in the AST "
-                               "before a conditional lambda."};
-      }
-      if (as_list.back().type != Type::List) {
-        throw std::logic_error{
-            "Parser error: The lambda condition is not a list."};
-      }
-      auto cond = as_list.back();
-      as_list.pop_back();
-      if (as_list.back().type != Type::List) {
-        throw std::logic_error{
-            "Parser error: The lambda parameters are not a list."};
-      }
-      auto params = as_list.back();
-      as_list.pop_back();
-      std::string id = "__re_clambda" + std::to_string(lambda_id);
-      RecInfo info = get_ast_aux(tokens, i + 1, ei, true, false, -1, PATH);
-      user_defined_procedures[user_defined_procedures.size() - 1]
-          .insert_or_assign(
-              id, std::make_pair(
-                      Symbol("", std::list<Symbol>{params, cond}, Type::List),
-                      info.result));
-      i = info.end_index;
+      as_list.push_back(Symbol(is_root ? "root" : "", *v, Type::Number));
     } else {
-      if (cur[0] == '$') {
-        Symbol sym;
-        Symbol varname = Symbol("", cur.substr(1), Type::Identifier);
-        if (auto vs = variable_lookup(varname); vs != std::nullopt) {
-          sym = *vs;
-        } else
-          throw std::logic_error{"Unbound variable " + cur.substr(1) + ".\n"};
-        as_list.push_back(sym);
-      } else {
-	if (res.let_level > -1) {
-	  ++res.let_level;
-	}
-	if (res.let_level > 1) {
-          // found a function call with or without the 'let' having any args
-          RecInfo info = get_ast_aux(tokens, i + 1, ei, true, false, -1, PATH);
-          i = info.end_index;
-          auto sym = info.result;
-          auto op = Symbol("", cur,
+      // identifiers are complicated, but we can somehow get around it
+      // by having a fuckton of states to keep track of where we are
+      if ((cur_state == State::FirstFunctionCall) ||
+          (cur_state == State::None)) {
+        RecInfo info = get_ast_aux(tokens, i + 1, ei, false, PATH, level + 1,
+                                   cur == "let" ? State::Identifier
+                                                : State::InFunCallArguments);
+        Symbol op = Symbol(is_root ? "root" : "", cur,
                            procedures.contains(cur) ? Type::Operator
                                                     : Type::Identifier);
-          auto l = std::get<std::list<Symbol>>(sym.value);
-          l.push_front(op);
-          sym.value = l;
-          as_list.push_back(sym);
-          res.let_level = -1;
-        } else {
-          if (cur == "let") {
-            if (res.let_level > 0) {
-              throw std::logic_error{"Parser error: Found a 'let' special form "
-                                     "inside another 'let'...?"};
-            }
-            res.let_level++;
-          }
-          as_list.push_back(Symbol(
-              (i == 0) ? "root" : "", cur,
-              procedures.contains(cur) ? Type::Operator : Type::Identifier));
-        }
+        auto l = std::get<std::list<Symbol>>(info.result.value);
+        l.push_front(op);
+	if (as_list.empty()) {
+	  as_list = l;
+	} else 
+	  as_list.push_back(Symbol(is_root ? "root" : "", l, Type::List));
+	i = info.end_index;
+        cur_state = info.st;
+        res.st = cur_state;
+	if (level > 0) {
+	  // early return to completely exit a function call when we're done collecting
+	  // all its arguments
+	  res.result.value = as_list;
+	  return {.result = res.result, .end_index = i, .st = State::FirstFunctionCall};
+	}
+      } else if ((cur_state == State::InFunCallArguments) ||
+                 (cur_state == State::InArgumentList) ||
+                 (cur_state == State::List)) {
+        as_list.push_back(Symbol("", cur,
+                                 procedures.contains(cur) ? Type::Operator
+                                                          : Type::Identifier));
+      } else {
+        as_list.push_back(Symbol("", cur,
+                                 procedures.contains(cur) ? Type::Operator
+                                                          : Type::Identifier));
+      }
+      if (cur_state == State::Identifier) {
+        cur_state = State::FirstFunctionCall;
       }
     }
-    res.result = Symbol((i == 0) ? "root" : "", as_list, Type::List);
+    res.result.value = as_list;
   }
-  return {.result = res.result, .end_index = ei};
+  return {.result = res.result, .end_index = ei, .st = State::None};
 }
 
 Symbol get_ast(std::vector<std::string> tokens, path PATH) {
-  auto fexpr = get_ast_aux(tokens, 0, tokens.size(), false, false, -1, PATH);
+  auto fexpr =
+      get_ast_aux(tokens, 0, tokens.size(), true, PATH, 0, State::None);
   if (fexpr.result.type == Type::List) {
     if (auto l = std::get<std::list<Symbol>>(fexpr.result.value);
         l.size() == 1) {

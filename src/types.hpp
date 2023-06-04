@@ -20,7 +20,7 @@
 #include <variant>
 #include <vector>
 
-enum Type {
+enum class Type {
   String,
   Number,
   Boolean,

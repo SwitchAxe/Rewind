@@ -55,11 +55,11 @@ std::vector<std::pair<int, std::string>> rewind_split_file(std::string content) 
   std::string temp;
   bool in_string = false;
   for (int i = 0; i < content.size(); ++i) {
-    if (content[i] == '\n') {
+    if ((!in_string) && (content[i] == '\n')) {
       current_line++;
     }
     if (content[i] == '"') {
-      temp += '"';
+      temp += content[i];
       in_string = !in_string;
       continue;
     }
@@ -67,13 +67,13 @@ std::vector<std::pair<int, std::string>> rewind_split_file(std::string content) 
       temp += content[i];
       continue;
     }
-    if ((content[i] == '(') || (content[i] == '[')) {
+    if ((!in_string) && ((content[i] == '(') || (content[i] == ']'))) {
       bracket_balance++;
       temp += content[i];
-    } else if ((content[i] == ')') || (content[i] == ']')) {
+    } else if ((!in_string) && ((content[i] == ')') || (content[i] == ']'))) {
       bracket_balance--;
       temp += content[i];
-    } else if ((content[i] == ';') || ((!bracket_balance) && (content[i] == ','))) {
+    } else if ((!in_string) && (content[i] == ';')) {
       ret.push_back({current_line, temp + std::string{content[i]}});
       temp = "";
     }

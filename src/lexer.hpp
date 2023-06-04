@@ -121,7 +121,8 @@ std::vector<std::string> get_tokens(std::string stream) {
           std::string tmp = stream.substr(i, e - i + 1);
           i = e;
           tokens.push_back(tmp);
-          temp = "";
+          tmp = "";
+	  temp = "";
         }
       } else if (in_identifier) {
         if (std::find(special_tokens.begin(), special_tokens.end(),
