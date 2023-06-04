@@ -43,7 +43,8 @@ enum class State {
   InFunCallArguments,
   List,
   LambdaFunction,
-  ConditionalLambdaFunction,
+  LambdaFunctionFirstFunctionCall,
+  LambdaFunctionInArgumentList,
   End,
   Error,
 };
@@ -61,8 +62,6 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
   std::list<Symbol> as_list;
   res.result = Symbol(is_root ? "root" : "", as_list, Type::List);
   State cur_state = st;
-  Symbol lambda_parameters;
-  Symbol lambda_body;
   static int lambda_id = 0;
   for (int i = si; i < ei; ++i) {
     auto cur = tokens[i];
@@ -91,9 +90,21 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
           .result = res.result, .end_index = i, .st = State::FirstFunctionCall};
     } else if (cur == ",") {
       res.result.value = as_list;
+      if (cur_state == State::LambdaFunctionFirstFunctionCall) {
+        continue;
+      }
+      if (cur_state == State::LambdaFunctionInArgumentList) {
+        continue;
+      }
       return {.result = res.result,
               .end_index = i,
-              .st = (level > 0) ? State::FirstFunctionCall : State::Error};
+              .st =
+                  (level > 0)
+                      ? (((cur_state == State::LambdaFunctionInArgumentList) ||
+                          (cur_state == State::LambdaFunctionFirstFunctionCall))
+                             ? State::LambdaFunctionFirstFunctionCall
+                             : State::FirstFunctionCall)
+                      : State::Error};
     } else if (is_strlit(cur)) {
       as_list.push_back(Symbol(is_root ? "root" : "",
                                cur.substr(1, cur.size() - 2), Type::String));
@@ -106,40 +117,92 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
       }
       std::string id = "__re_lambda" + std::to_string(lambda_id);
       RecInfo info = get_ast_aux(tokens, i + 1, ei, false, PATH, level + 1,
-                                 State::LambdaFunction);
-      auto l = std::list<Symbol>{info.result};
-      lambda_body = Symbol("", l, Type::List);
+                                 State::LambdaFunctionFirstFunctionCall);
+      cur_state = State::None;
+      auto body = info.result;
       i = info.end_index;
-      lambda_parameters = as_list.back();
+      auto parameters = as_list.back();
       as_list.pop_back();
       if (user_defined_procedures.empty()) {
         user_defined_procedures.push_back({});
       }
       user_defined_procedures[user_defined_procedures.size() - 1]
-          .insert_or_assign(id, std::make_pair(lambda_parameters, lambda_body));
+          .insert_or_assign(id, std::make_pair(parameters, body));
       as_list.push_back(Symbol("", id, Type::Identifier));
       lambda_id++;
+    } else if (cur == "?=>") {
+      if (as_list.size() < 2) {
+        throw std::logic_error{
+            "Parser error: Found a conditional lambda token ('?=>') with "
+            "missing condition and/or parameters before it!"};
+      }
+      auto cond = as_list.back();
+      if (cond.type != Type::List) {
+        throw std::logic_error{
+            "Parser error: Condition for the lambda is not a list.\n"};
+      }
+      as_list.pop_back();
+      auto params = as_list.back();
+      if (params.type != Type::List) {
+        throw std::logic_error{"Parser error: Parameters for the conditional "
+                               "lambda are not a list.\n"};
+      }
+      as_list.pop_back();
+      RecInfo info = get_ast_aux(tokens, i + 1, ei, false, PATH, level + 1,
+                                 State::LambdaFunctionFirstFunctionCall);
+      auto body = info.result;
+      auto l = std::get<std::list<Symbol>>(body.value);
+      if (l.size() != 2) {
+        throw std::logic_error{"Parser error: A conditional lambda expects "
+                               "only two comma-separated statements!\n"};
+      }
+      std::string id = "__re_clambda" + std::to_string(lambda_id);
+      if (user_defined_procedures.empty()) {
+        user_defined_procedures.push_back({});
+      }
+      user_defined_procedures[user_defined_procedures.size() - 1]
+          .insert_or_assign(
+              id, std::make_pair(
+                      Symbol("", std::list<Symbol>{params, cond}, Type::List),
+                      body));
+      as_list.push_back(Symbol("", id, Type::Identifier));
+      lambda_id++;
+      i = info.end_index;
     } else {
       // identifiers are complicated, but we can somehow get around it
       // by having a fuckton of states to keep track of where we are
       if ((cur_state == State::FirstFunctionCall) ||
-          (cur_state == State::None) || (cur_state == State::LambdaFunction)) {
-        RecInfo info = get_ast_aux(tokens, i + 1, ei, false, PATH, level + 1,
-                                   cur == "let" ? State::Identifier
-                                                : State::InFunCallArguments);
+          (cur_state == State::None) ||
+          (cur_state == State::LambdaFunctionFirstFunctionCall)) {
+        RecInfo info = get_ast_aux(
+            tokens, i + 1, ei, false, PATH, level + 1,
+            cur == "let" ? State::Identifier
+                         : (cur_state == State::LambdaFunctionFirstFunctionCall
+                                ? State::LambdaFunctionInArgumentList
+                                : State::InFunCallArguments));
         Symbol op = Symbol(is_root ? "root" : "", cur,
                            procedures.contains(cur) ? Type::Operator
                                                     : Type::Identifier);
         auto l = std::get<std::list<Symbol>>(info.result.value);
         l.push_front(op);
-        if (as_list.empty()) {
-          as_list = l;
-        } else
-          as_list.push_back(Symbol(is_root ? "root" : "", l, Type::List));
+        if (cur_state == State::LambdaFunctionFirstFunctionCall) {
+          auto sym = Symbol("", std::list<Symbol>{Symbol("", l, Type::List)},
+                            Type::List);
+          if (as_list.empty())
+            as_list = std::get<std::list<Symbol>>(sym.value);
+          else
+            as_list.push_back(std::get<std::list<Symbol>>(sym.value).back());
+        } else {
+          if (as_list.empty()) {
+            as_list = l;
+          } else
+            as_list.push_back(Symbol(is_root ? "root" : "", l, Type::List));
+        }
         i = info.end_index;
         cur_state = info.st;
         res.st = cur_state;
-        if (level > 0) {
+        if ((level > 0) &&
+            (cur_state != State::LambdaFunctionFirstFunctionCall)) {
           // early return to completely exit a function call when we're done
           // collecting all its arguments
           res.result.value = as_list;

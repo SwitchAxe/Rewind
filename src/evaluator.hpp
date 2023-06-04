@@ -227,7 +227,7 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line) {
   // results of intermediate nodes (i.e. nodes below the root)
   // this is the data on which the actual computation takes place,
   // as we copy every intermediate result we get into this as a "leaf"
-  // to get compute the value for each node, including the root.
+  // to compute the value for each node, including the root.
   std::vector<std::list<Symbol>> leaves;
   current_node = root;
   do {
@@ -366,7 +366,8 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line) {
         }
       } else if (current_node.type == Type::Identifier) {
         if (auto s = std::get<std::string>(current_node.value); s[0] == '$') {
-          if (auto var_opt = variable_lookup(Symbol("", s.substr(1), Type::Identifier));
+          if (auto var_opt =
+                  variable_lookup(Symbol("", s.substr(1), Type::Identifier));
               var_opt != std::nullopt) {
             if (!leaves.empty()) {
               leaves[leaves.size() - 1].push_back(*var_opt);
@@ -376,10 +377,18 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line) {
           } else
             throw std::logic_error{"Unbound variable " + s.substr(1) + "!"};
         } else {
-          if (!leaves.empty()) {
-            leaves[leaves.size() - 1].push_back(current_node);
+          auto cs_opt = callstack_variable_lookup(current_node);
+          if (cs_opt != std::nullopt) {
+            if (!leaves.empty()) {
+              leaves[leaves.size() - 1].push_back(*cs_opt);
+            } else
+              leaves.push_back(std::list<Symbol>{*cs_opt});
           } else {
-            leaves.push_back(std::list<Symbol>{current_node});
+            if (!leaves.empty()) {
+              leaves[leaves.size() - 1].push_back(current_node);
+            } else {
+              leaves.push_back(std::list<Symbol>{current_node});
+            }
           }
         }
       } else {
