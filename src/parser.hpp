@@ -98,7 +98,13 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
     } else if (cur == ",") {
       res.result.value = as_list;
       if (cur_state == State::LambdaFunctionLiteral) {
-        continue;
+        cur_state = State::LambdaFunctionFirstFunctionCall;
+      }
+      if (cur_state == State::LambdaFunctionIdentifier) {
+        cur_state = State::LambdaFunctionFirstFunctionCall;
+      }
+      if (cur_state == State::LambdaFunctionInArgumentList) {
+	cur_state = State::LambdaFunctionFirstFunctionCall;
       }
       return {.result = res.result,
               .end_index = i,
@@ -114,6 +120,8 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
                                cur.substr(1, cur.size() - 2), Type::String));
       if (cur_state == State::LambdaFunctionFirstFunctionCall) {
         cur_state = State::LambdaFunctionLiteral;
+      } else if (cur_state == State::LambdaFunctionIdentifier) {
+	cur_state = State::LambdaFunctionFirstFunctionCall;
       }
     } else if (auto v = try_convert_num(cur); v != std::nullopt) {
       as_list.push_back(Symbol(is_root ? "root" : "", *v, Type::Number));
@@ -235,7 +243,7 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
           res.result.value = as_list;
           return {.result = res.result,
                   .end_index = i,
-                  .st = State::FirstFunctionCall};
+                  .st = cur_state};
         }
       } else {
         as_list.push_back(Symbol("", cur,
