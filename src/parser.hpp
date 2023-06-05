@@ -104,24 +104,22 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
         cur_state = State::LambdaFunctionFirstFunctionCall;
       }
       if (cur_state == State::LambdaFunctionInArgumentList) {
-	cur_state = State::LambdaFunctionFirstFunctionCall;
+        cur_state = State::LambdaFunctionFirstFunctionCall;
       }
       return {.result = res.result,
               .end_index = i,
-              .st =
-                  (level > 0)
-                      ? (((cur_state == State::LambdaFunctionInArgumentList) ||
-                          (cur_state == State::LambdaFunctionFirstFunctionCall))
-                             ? State::LambdaFunctionFirstFunctionCall
-                             : State::Comma)
-                      : State::Error};
+              .st = (level > 0)
+                        ? ((cur_state == State::LambdaFunctionFirstFunctionCall)
+                               ? State::LambdaFunctionFirstFunctionCall
+                               : State::Comma)
+                        : State::Error};
     } else if (is_strlit(cur)) {
       as_list.push_back(Symbol(is_root ? "root" : "",
                                cur.substr(1, cur.size() - 2), Type::String));
       if (cur_state == State::LambdaFunctionFirstFunctionCall) {
         cur_state = State::LambdaFunctionLiteral;
       } else if (cur_state == State::LambdaFunctionIdentifier) {
-	cur_state = State::LambdaFunctionFirstFunctionCall;
+        cur_state = State::LambdaFunctionFirstFunctionCall;
       }
     } else if (auto v = try_convert_num(cur); v != std::nullopt) {
       as_list.push_back(Symbol(is_root ? "root" : "", *v, Type::Number));
@@ -181,8 +179,13 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
       as_list.pop_back();
       RecInfo info = get_ast_aux(tokens, i + 1, ei, false, PATH, level + 1,
                                  State::LambdaFunctionFirstFunctionCall);
+      i = info.end_index;
       auto body = info.result;
       auto l = std::get<std::list<Symbol>>(body.value);
+      info = get_ast_aux(tokens, i + 1, ei, false, PATH, level + 1, State::LambdaFunctionFirstFunctionCall);
+      i = info.end_index;
+      l.push_back(info.result);
+      body.value = l;
       if (l.size() != 2) {
         throw std::logic_error{"Parser error: A conditional lambda expects "
                                "only two comma-separated statements!\n"};
@@ -198,7 +201,6 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
                       body));
       as_list.push_back(Symbol("", id, Type::Identifier));
       lambda_id++;
-      i = info.end_index;
     } else {
       // identifiers are complicated, but we can somehow get around it
       // by having a fuckton of states to keep track of where we are
@@ -220,9 +222,9 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
         l.push_front(op);
         i = info.end_index;
         cur_state = info.st;
-	if (cur_state == State::Comma) {
-	  cur_state = State::FirstFunctionCall;
-	}
+        if (cur_state == State::Comma) {
+          cur_state = State::FirstFunctionCall;
+        }
         if (cur_state == State::LambdaFunctionFirstFunctionCall) {
           auto sym = Symbol("", std::list<Symbol>{Symbol("", l, Type::List)},
                             Type::List);
@@ -241,9 +243,7 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
           // early return to completely exit a function call when we're done
           // collecting all its arguments
           res.result.value = as_list;
-          return {.result = res.result,
-                  .end_index = i,
-                  .st = cur_state};
+          return {.result = res.result, .end_index = i, .st = cur_state};
         }
       } else {
         as_list.push_back(Symbol("", cur,
@@ -256,6 +256,7 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
     }
     res.result.value = as_list;
   }
+  res.result.value = as_list;
   return {.result = res.result, .end_index = ei, .st = State::None};
 }
 
