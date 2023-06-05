@@ -42,6 +42,8 @@ enum class State {
   FirstFunctionCall,
   InFunCallArguments,
   List,
+  Comma,
+  Semicolon,
   LambdaFunction,
   LambdaFunctionFirstFunctionCall,
   LambdaFunctionInArgumentList,
@@ -89,8 +91,10 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
 
     else if (cur == ";") {
       res.result.value = as_list;
-      return {
-          .result = res.result, .end_index = i, .st = State::FirstFunctionCall};
+      if (level > 0) {
+        return {.result = res.result, .end_index = i, .st = State::Semicolon};
+      }
+      return {.result = res.result, .end_index = i, .st = State::End};
     } else if (cur == ",") {
       res.result.value = as_list;
       if (cur_state == State::LambdaFunctionLiteral) {
@@ -103,7 +107,7 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
                       ? (((cur_state == State::LambdaFunctionInArgumentList) ||
                           (cur_state == State::LambdaFunctionFirstFunctionCall))
                              ? State::LambdaFunctionFirstFunctionCall
-                             : State::FirstFunctionCall)
+                             : State::Comma)
                       : State::Error};
     } else if (is_strlit(cur)) {
       as_list.push_back(Symbol(is_root ? "root" : "",
@@ -116,7 +120,7 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
       if (cur_state == State::LambdaFunctionFirstFunctionCall) {
         cur_state = State::LambdaFunctionLiteral;
       } else if (cur_state == State::LambdaFunctionIdentifier) {
-	cur_state = State::LambdaFunctionFirstFunctionCall;
+        cur_state = State::LambdaFunctionFirstFunctionCall;
       }
     } else if (cur == "=>") {
       if (as_list.empty() || as_list.back().type != Type::List) {
@@ -206,6 +210,11 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
                                                     : Type::Identifier);
         auto l = std::get<std::list<Symbol>>(info.result.value);
         l.push_front(op);
+        i = info.end_index;
+        cur_state = info.st;
+	if (cur_state == State::Comma) {
+	  cur_state = State::FirstFunctionCall;
+	}
         if (cur_state == State::LambdaFunctionFirstFunctionCall) {
           auto sym = Symbol("", std::list<Symbol>{Symbol("", l, Type::List)},
                             Type::List);
@@ -219,12 +228,8 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
           } else
             as_list.push_back(Symbol(is_root ? "root" : "", l, Type::List));
         }
-        i = info.end_index;
-        cur_state = info.st;
         res.st = cur_state;
-        if ((level > 0) &&
-            (cur_state != State::LambdaFunctionFirstFunctionCall) &&
-            (cur_state != State::LambdaFunctionInArgumentList)) {
+        if ((level > 0) || (cur_state == State::Semicolon)) {
           // early return to completely exit a function call when we're done
           // collecting all its arguments
           res.result.value = as_list;
