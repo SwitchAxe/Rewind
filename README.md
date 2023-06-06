@@ -25,10 +25,10 @@ returns a string, or it's a string literal, that will be chosen as the interacti
 an example of a valid prompt snippet: (in your ~/.config/config.re)
 
 ```
-(let prompt ()
-  (s+ (get PWD) " λ" " "))
+let prompt ()
+  s+ (get PWD) " λ ";
 
-(prompt)
+prompt
 ```
 Unsurprisingly, the resulting Rewind prompt will be like this (if you're in the root directory of Rewind):
 
