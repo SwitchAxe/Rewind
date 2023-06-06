@@ -145,6 +145,7 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
       RecInfo info = get_ast_aux(tokens, i + 1, ei, false, PATH, level + 1,
                                  State::LambdaFunctionFirstFunctionCall);
       auto l = std::list<Symbol>();
+      Symbol m;
       if (std::holds_alternative<std::list<Symbol>>(info.result.value)) {
         if (auto l = std::get<std::list<Symbol>>(info.result.value);
             l.size() == 1) {
@@ -158,7 +159,6 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
           m = Symbol("", l, Type::List);
       } else
         m = info.result;
-      Symbol m;
       auto body = info.result;
       // keep iterating until we finish the statements composing the lambda
       // function
