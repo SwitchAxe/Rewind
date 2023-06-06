@@ -92,11 +92,6 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
       if (level > 0) {
         return {.result = res.result, .end_index = i, .st = State::Semicolon};
       }
-      if ((as_list.size() == 1) && ((as_list.back().type == Type::Number) ||
-                                    (as_list.back().type == Type::String) ||
-                                    (as_list.back().type == Type::List))) {
-        res.result = as_list.back();
-      }
       return {.result = res.result, .end_index = i, .st = State::End};
     } else if (cur == ",") {
       res.result.value = as_list;
@@ -108,11 +103,6 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
       }
       if (cur_state == State::LambdaFunctionInArgumentList) {
         cur_state = State::LambdaFunctionFirstFunctionCall;
-      }
-      if ((as_list.size() == 1) && ((as_list.back().type == Type::Number) ||
-                                    (as_list.back().type == Type::String) ||
-                                    (as_list.back().type == Type::List))) {
-        res.result = as_list.back();
       }
       return {.result = res.result,
               .end_index = i,
@@ -320,11 +310,6 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
     res.result.value = as_list;
   }
   res.result.value = as_list;
-  if ((as_list.size() == 1) && ((as_list.back().type == Type::Number) ||
-                                (as_list.back().type == Type::String) ||
-                                (as_list.back().type == Type::List))) {
-    res.result = as_list.back();
-  }
   return {.result = res.result, .end_index = ei, .st = State::None};
 }
 
