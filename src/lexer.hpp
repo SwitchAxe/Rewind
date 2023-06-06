@@ -18,9 +18,9 @@
 #include "types.hpp"
 #include <cctype>
 #include <exception>
+#include <ios>
 #include <stdexcept>
 #include <vector>
-
 std::string process_escapes(const std::string &s) {
   std::string r;
   for (int i = 0; i < s.length(); ++i) {
@@ -56,6 +56,17 @@ std::string process_escapes(const std::string &s) {
     case 't':
       r += '\t';
       break;
+    case '0': {
+      // 3 digits of octal numerical code must follow
+      std::stringstream ss{s.substr(i + 2, 3)};
+      std::stringstream as_oct;
+      as_oct << std::oct << ss.str();
+      int n;
+      auto [ptr, ec] = std::from_chars(as_oct.str().data(), as_oct.str().data() + as_oct.str().size(), n);
+      r += static_cast<char>(n);
+      i += 3;
+      break;
+    }
     default:
       r += s[i];
       r += s[i + 1];
@@ -122,7 +133,7 @@ std::vector<std::string> get_tokens(std::string stream) {
           i = e;
           tokens.push_back(tmp);
           tmp = "";
-	  temp = "";
+          temp = "";
         }
       } else if (in_identifier) {
         if (std::find(special_tokens.begin(), special_tokens.end(),
@@ -155,7 +166,7 @@ std::vector<std::string> get_tokens(std::string stream) {
   if (temp != "") {
     tokens.push_back(temp);
   }
-  for (auto& tk: tokens) {
+  for (auto &tk : tokens) {
     if (tk[0] == '"') {
       tk = process_escapes(tk);
     }
