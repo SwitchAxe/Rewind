@@ -50,6 +50,9 @@ enum class State {
   LambdaFunctionLiteral,
   LambdaFunctionIdentifier,
   LambdaFunctionArgumentList,
+  QuestionOperator,
+  PipeOperator,
+  ComposeOperator,
   End,
   Error,
 };
@@ -148,6 +151,13 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
       } else if (cur_state == State::LambdaFunctionIdentifier) {
         cur_state = State::LambdaFunctionFirstFunctionCall;
       }
+    } else if (cur == "<<") {
+      RecInfo info = get_ast_aux(tokens, i + 1, ei, false, PATH, level + 1,
+                                 State::Identifier);
+      i = info.end_index;
+      as_list.push_back(info.result);
+      res.result.value = as_list;
+      return {.result = res.result, .end_index = i, .st = State::None};
     } else if (cur == "=>") {
       if (as_list.empty() || as_list.back().type != Type::List) {
         throw std::logic_error{"Parser error: Found a lambda token ('=>') with "
@@ -172,10 +182,11 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
           } else
             m = Symbol("", l, Type::List);
         } else
-          m = Symbol("", l, Type::List);
+          m = info.result;
       } else
         m = info.result;
-      auto body = info.result;
+      l.push_back(m);
+      Symbol body = Symbol("", l, Type::List);
       // keep iterating until we finish the statements composing the lambda
       // function
       while ((info.st == State::LambdaFunctionInArgumentList) ||
@@ -197,7 +208,7 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
             } else
               m = Symbol("", l, Type::List);
           } else
-            m = Symbol("", l, Type::List);
+            m = info.result;
         } else
           m = info.result;
         l.push_back(m);

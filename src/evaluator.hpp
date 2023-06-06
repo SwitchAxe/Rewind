@@ -215,7 +215,8 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH,
       return result;
     }
     auto result = rewind_call_ext_program(pipel, PATH, false);
-    while (waitpid(result.pid, nullptr, 0) > 0);
+    while (waitpid(result.pid, nullptr, 0) > 0)
+      ;
     active_pids = {};
     return result.s;
   }
