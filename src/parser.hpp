@@ -87,12 +87,15 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
               .st = (cur_state == State::InArgumentList)
                         ? State::FirstFunctionCall
                         : State::InFunCallArguments};
-    }
-
-    else if (cur == ";") {
+    } else if (cur == ";") {
       res.result.value = as_list;
       if (level > 0) {
         return {.result = res.result, .end_index = i, .st = State::Semicolon};
+      }
+      if ((as_list.size() == 1) && ((as_list.back().type == Type::Number) ||
+                                    (as_list.back().type == Type::String) ||
+                                    (as_list.back().type == Type::List))) {
+        res.result = as_list.back();
       }
       return {.result = res.result, .end_index = i, .st = State::End};
     } else if (cur == ",") {
@@ -105,6 +108,11 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
       }
       if (cur_state == State::LambdaFunctionInArgumentList) {
         cur_state = State::LambdaFunctionFirstFunctionCall;
+      }
+      if ((as_list.size() == 1) && ((as_list.back().type == Type::Number) ||
+                                    (as_list.back().type == Type::String) ||
+                                    (as_list.back().type == Type::List))) {
+        res.result = as_list.back();
       }
       return {.result = res.result,
               .end_index = i,
@@ -136,7 +144,21 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
       std::string id = "__re_lambda" + std::to_string(lambda_id);
       RecInfo info = get_ast_aux(tokens, i + 1, ei, false, PATH, level + 1,
                                  State::LambdaFunctionFirstFunctionCall);
-      cur_state = State::None;
+      auto l = std::list<Symbol>();
+      if (std::holds_alternative<std::list<Symbol>>(info.result.value)) {
+        if (auto l = std::get<std::list<Symbol>>(info.result.value);
+            l.size() == 1) {
+          if ((l.back().type == Type::String) ||
+              (l.back().type == Type::Number) ||
+              (l.back().type == Type::List)) {
+            m = l.back();
+          } else
+            m = Symbol("", l, Type::List);
+        } else
+          m = Symbol("", l, Type::List);
+      } else
+        m = info.result;
+      Symbol m;
       auto body = info.result;
       // keep iterating until we finish the statements composing the lambda
       // function
@@ -145,10 +167,22 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
         i = info.end_index;
         info = get_ast_aux(tokens, i + 1, ei, false, PATH, level + 1,
                            State::LambdaFunctionFirstFunctionCall);
-        auto l = std::get<std::list<Symbol>>(body.value);
-        l.push_back(info.result);
-        body.value = l;
+        if (std::holds_alternative<std::list<Symbol>>(info.result.value)) {
+          if (auto l = std::get<std::list<Symbol>>(info.result.value);
+              l.size() == 1) {
+            if ((l.back().type == Type::String) ||
+                (l.back().type == Type::Number) ||
+                (l.back().type == Type::List)) {
+              m = l.back();
+            } else
+              m = Symbol("", l, Type::List);
+          } else
+            m = Symbol("", l, Type::List);
+        } else
+          m = info.result;
+        l.push_back(m);
       }
+      body.value = l;
       i = info.end_index;
       auto parameters = as_list.back();
       as_list.pop_back();
@@ -181,10 +215,39 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
                                  State::LambdaFunctionFirstFunctionCall);
       i = info.end_index;
       auto body = info.result;
-      auto l = std::get<std::list<Symbol>>(body.value);
-      info = get_ast_aux(tokens, i + 1, ei, false, PATH, level + 1, State::LambdaFunctionFirstFunctionCall);
+      std::list<Symbol> l;
+      Symbol m;
+      if (std::holds_alternative<std::list<Symbol>>(info.result.value)) {
+        if (auto l = std::get<std::list<Symbol>>(info.result.value);
+            l.size() == 1) {
+          if ((l.back().type == Type::String) ||
+              (l.back().type == Type::Number) ||
+              (l.back().type == Type::List)) {
+            m = l.back();
+          } else
+            m = Symbol("", l, Type::List);
+        } else
+          m = Symbol("", l, Type::List);
+      } else
+        m = info.result;
+      l.push_back(m);
+      info = get_ast_aux(tokens, i + 1, ei, false, PATH, level + 1,
+                         State::LambdaFunctionFirstFunctionCall);
       i = info.end_index;
-      l.push_back(info.result);
+      if (std::holds_alternative<std::list<Symbol>>(info.result.value)) {
+        if (auto l = std::get<std::list<Symbol>>(info.result.value);
+            l.size() == 1) {
+          if ((l.back().type == Type::String) ||
+              (l.back().type == Type::Number) ||
+              (l.back().type == Type::List)) {
+            m = l.back();
+          } else
+            m = Symbol("", l, Type::List);
+        } else
+          m = Symbol("", l, Type::List);
+      } else
+        m = info.result;
+      l.push_back(m);
       body.value = l;
       if (l.size() != 2) {
         throw std::logic_error{"Parser error: A conditional lambda expects "
@@ -257,6 +320,11 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
     res.result.value = as_list;
   }
   res.result.value = as_list;
+  if ((as_list.size() == 1) && ((as_list.back().type == Type::Number) ||
+                                (as_list.back().type == Type::String) ||
+                                (as_list.back().type == Type::List))) {
+    res.result = as_list.back();
+  }
   return {.result = res.result, .end_index = ei, .st = State::None};
 }
 
