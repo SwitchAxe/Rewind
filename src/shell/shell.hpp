@@ -84,7 +84,7 @@ rewind_split_file(std::string content) {
     } else
       temp += content[i];
   }
-  if (temp != "")
+  if (temp.size() > 1)
     ret.push_back({current_line, temp});
   return ret;
 }
@@ -119,9 +119,12 @@ std::optional<Symbol> rewind_read_config(const path &PATH) {
   auto expr_vec = rewind_split_file(content);
   Symbol last_evaluated;
   Symbol last_expr;
+  std::vector<std::string> last_expr_as_tokens;
   for (auto expr : expr_vec) {
     try {
-      last_expr = get_ast(get_tokens(expr.second), PATH);
+      last_expr_as_tokens = get_tokens(expr.second);
+      if (last_expr_as_tokens.empty()) continue;
+      last_expr = get_ast(last_expr_as_tokens, PATH);
       last_evaluated = eval(last_expr, PATH);
     } catch (std::logic_error e) {
       throw std::logic_error{"(line " + std::to_string(expr.first) +
