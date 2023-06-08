@@ -51,7 +51,10 @@ enum class State {
   LambdaFunctionIdentifier,
   LambdaFunctionArgumentList,
   QuestionOperator,
+  QuestionOperatorFirstFunctionCall,
+  QuestionOperatorInArgumentList,
   PipeOperator,
+  PipeOperatorStart,
   ComposeOperator,
   End,
   Error,
@@ -71,6 +74,8 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
   res.result = Symbol(is_root ? "root" : "", as_list, Type::List);
   State cur_state = st;
   static int lambda_id = 0;
+  std::list<Symbol> maybe_cond{Symbol("", "cond", Type::Operator)};
+  std::list<Symbol> maybe_match{};
   for (int i = si; i < ei; ++i) {
     auto cur = tokens[i];
     if ((cur == "(") || (cur == "[")) {
@@ -158,6 +163,105 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
       as_list.push_back(info.result);
       res.result.value = as_list;
       return {.result = res.result, .end_index = i, .st = State::None};
+    } else if (cur == "|") {
+      int idx;
+      for (idx = i + 1; idx < ei; ++idx) {
+        if (tokens[idx] == "=>")
+          break;
+      }
+      auto cond = get_ast_aux(tokens, i + 1, idx, false, PATH, level + 1,
+                              State::FirstFunctionCall);
+      auto l = std::list<Symbol>{};
+      auto as_l = std::list<Symbol>{};
+      if (cond.result.type == Type::List)
+        as_l = std::get<std::list<Symbol>>(cond.result.value);
+      else
+        as_l.push_back(cond.result);
+      if (as_l.size() == 1) {
+        l.push_back(as_l.back());
+      } else
+        l.push_back(cond.result);
+      int to_other_pipe;
+      for (to_other_pipe = idx + 1; to_other_pipe < ei; ++to_other_pipe) {
+        if (tokens[to_other_pipe] == "|") {
+          break;
+        }
+      }
+      auto branch = get_ast_aux(tokens, idx + 1, to_other_pipe, false, PATH,
+                                level + 1, State::FirstFunctionCall);
+      if (branch.result.type == Type::List)
+        as_l = std::get<std::list<Symbol>>(branch.result.value);
+      else
+        as_l = {branch.result};
+      if (as_l.size() == 1) {
+        l.push_back(as_l.back());
+      } else
+        l.push_back(branch.result);
+      if (to_other_pipe == ei) {
+        if (cur_state == State::QuestionOperator) {
+          if (l.size() == 1)
+            maybe_match.push_back(l.back());
+          else
+            maybe_match.push_back(Symbol("", l, Type::List));
+        } else
+          maybe_cond.push_back(Symbol("", l, Type::List));
+        if (cur_state == State::QuestionOperator) {
+          if (maybe_match.size() == 1)
+            as_list.push_back(maybe_match.back());
+          else
+            as_list.push_back(Symbol("", maybe_match, Type::List));
+        } else
+          as_list.push_back(Symbol("", maybe_cond, Type::List));
+        res.result.value = as_list;
+        return {.result = res.result, .end_index = ei, .st = State::None};
+      }
+      i = branch.end_index;
+      if (cur_state != State::QuestionOperator)
+        cur_state = State::PipeOperator;
+      if (cur_state == State::QuestionOperator) {
+	if (l.size() == 1)
+	  maybe_match.push_back(l.back());
+	else maybe_match.push_back(Symbol("", l, Type::List));
+      } else
+        maybe_cond.push_back(Symbol("", l, Type::List));
+    } else if (cur == "?") {
+      int to_first_pipe;
+      auto match_full_body =
+          std::list<Symbol>{Symbol("", "match", Type::Operator)};
+      for (to_first_pipe = i; to_first_pipe < ei; ++to_first_pipe) {
+        if (tokens[to_first_pipe] == "|") {
+          break;
+        }
+      }
+      auto to_be_matched = get_ast_aux(tokens, i + 1, to_first_pipe, false,
+                                       PATH, level + 1, State::FirstFunctionCall);
+      std::list<Symbol> as_l;
+      std::list<Symbol> l = std::get<std::list<Symbol>>(to_be_matched.result.value);
+      if (l.size() == 1) {
+	if ((l.back().type == Type::Number) || (l.back().type == Type::String)) {
+	  as_l.push_back(l.back());
+	} else if ((l.back().type == Type::Identifier) && (std::get<std::string>(l.back().value)[0] == '@')) {
+	  as_l.push_back(Symbol("", std::get<std::string>(l.back().value).substr(1), Type::String));
+	} else as_l = {to_be_matched.result};
+      } else as_l = {to_be_matched.result};
+      if (as_l.size() == 1) {
+        match_full_body.push_back(as_l.back());
+      } else
+        match_full_body.push_back(to_be_matched.result);
+      RecInfo info = get_ast_aux(tokens, to_first_pipe, ei, false, PATH,
+                                 level + 1, State::QuestionOperator);
+      as_l = std::get<std::list<Symbol>>(info.result.value);
+      if (as_l.size() == 1) {
+	for (auto e : std::get<std::list<Symbol>>(as_l.back().value)) {
+	  // this is a dirty hack i am NOT proud of, but it will do
+	  // for now until i fix this for good
+	  match_full_body.push_back(e);
+	}
+      }
+      else
+	match_full_body.push_back(info.result);
+      as_list.push_back(Symbol("", match_full_body, Type::List));
+      i = info.end_index;
     } else if (cur == "=>") {
       if (as_list.empty() || as_list.back().type != Type::List) {
         throw std::logic_error{"Parser error: Found a lambda token ('=>') with "
@@ -320,7 +424,11 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
         Symbol op = Symbol(is_root ? "root" : "", cur,
                            procedures.contains(cur) ? Type::Operator
                                                     : Type::Identifier);
-        auto l = std::get<std::list<Symbol>>(info.result.value);
+        auto l = std::list<Symbol>();
+        if (info.result.type == Type::List) {
+          l = std::get<std::list<Symbol>>(info.result.value);
+        } else
+          l.push_back(info.result);
         l.push_front(op);
         i = info.end_index;
         cur_state = info.st;
@@ -353,6 +461,9 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
                                                           : Type::Identifier));
       }
       if (cur_state == State::Identifier) {
+        cur_state = State::FirstFunctionCall;
+      }
+      if (cur_state == State::PipeOperator) {
         cur_state = State::FirstFunctionCall;
       }
     }

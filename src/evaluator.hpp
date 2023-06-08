@@ -360,6 +360,15 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line) {
         dummy = Symbol(node_stk.top().name, std::list<Symbol>(), Type::List);
         node_stk.pop();
         node_stk.push(dummy);
+      } else if ((current_node.type == Type::Identifier) &&
+                 (!user_defined_procedures.empty()) &&
+                 (user_defined_procedures.back().contains(
+                     std::get<std::string>(current_node.value)))) {
+        if (!leaves.empty()) {
+          leaves[leaves.size() - 1].push_back(current_node);
+        } else {
+          leaves.push_back(std::list<Symbol>{current_node});
+        }
       } else if (auto p_opt = callstack_variable_lookup(current_node);
                  p_opt != std::nullopt) {
         if (!leaves.empty()) {
