@@ -219,9 +219,10 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
       if (cur_state != State::QuestionOperator)
         cur_state = State::PipeOperator;
       if (cur_state == State::QuestionOperator) {
-	if (l.size() == 1)
-	  maybe_match.push_back(l.back());
-	else maybe_match.push_back(Symbol("", l, Type::List));
+        if (l.size() == 1)
+          maybe_match.push_back(l.back());
+        else
+          maybe_match.push_back(Symbol("", l, Type::List));
       } else
         maybe_cond.push_back(Symbol("", l, Type::List));
     } else if (cur == "?") {
@@ -233,17 +234,25 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
           break;
         }
       }
-      auto to_be_matched = get_ast_aux(tokens, i + 1, to_first_pipe, false,
-                                       PATH, level + 1, State::FirstFunctionCall);
+      auto to_be_matched =
+          get_ast_aux(tokens, i + 1, to_first_pipe, false, PATH, level + 1,
+                      State::FirstFunctionCall);
       std::list<Symbol> as_l;
-      std::list<Symbol> l = std::get<std::list<Symbol>>(to_be_matched.result.value);
+      std::list<Symbol> l =
+          std::get<std::list<Symbol>>(to_be_matched.result.value);
       if (l.size() == 1) {
-	if ((l.back().type == Type::Number) || (l.back().type == Type::String)) {
-	  as_l.push_back(l.back());
-	} else if ((l.back().type == Type::Identifier) && (std::get<std::string>(l.back().value)[0] == '@')) {
-	  as_l.push_back(Symbol("", std::get<std::string>(l.back().value).substr(1), Type::String));
-	} else as_l = {to_be_matched.result};
-      } else as_l = {to_be_matched.result};
+        if ((l.back().type == Type::Number) ||
+            (l.back().type == Type::String)) {
+          as_l.push_back(l.back());
+        } else if ((l.back().type == Type::Identifier) &&
+                   (std::get<std::string>(l.back().value)[0] == '@')) {
+          as_l.push_back(Symbol("",
+                                std::get<std::string>(l.back().value).substr(1),
+                                Type::Identifier));
+        } else
+          as_l = {to_be_matched.result};
+      } else
+        as_l = {to_be_matched.result};
       if (as_l.size() == 1) {
         match_full_body.push_back(as_l.back());
       } else
@@ -252,14 +261,13 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
                                  level + 1, State::QuestionOperator);
       as_l = std::get<std::list<Symbol>>(info.result.value);
       if (as_l.size() == 1) {
-	for (auto e : std::get<std::list<Symbol>>(as_l.back().value)) {
-	  // this is a dirty hack i am NOT proud of, but it will do
-	  // for now until i fix this for good
-	  match_full_body.push_back(e);
-	}
-      }
-      else
-	match_full_body.push_back(info.result);
+        for (auto e : std::get<std::list<Symbol>>(as_l.back().value)) {
+          // this is a dirty hack i am NOT proud of, but it will do
+          // for now until i fix this for good
+          match_full_body.push_back(e);
+        }
+      } else
+        match_full_body.push_back(info.result);
       as_list.push_back(Symbol("", match_full_body, Type::List));
       i = info.end_index;
     } else if (cur == "=>") {
@@ -528,7 +536,9 @@ std::string rec_print_ast(Symbol root, bool debug) {
                                               std::list<Symbol>>) {
           } else if constexpr (std::is_same_v<std::decay_t<T>, std::string>) {
             if (debug)
-              res += ((root.type == Type::String) ? "(Str) " : "(Id) ") +
+              res += ((root.type == Type::String)
+                          ? "(Str) "
+                          : (root.type == Type::Operator ? "(Op) " : "(Id) ")) +
                      process_escapes(v);
             else
               res += process_escapes(v);
