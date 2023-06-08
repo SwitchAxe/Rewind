@@ -370,7 +370,7 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line) {
           leaves.push_back(std::list<Symbol>{current_node});
         }
       } else if (auto p_opt = callstack_variable_lookup(current_node);
-                 p_opt != std::nullopt) {
+                 (p_opt != std::nullopt) && (current_node.type == Type::Identifier)) {
         if (!leaves.empty()) {
           leaves[leaves.size() - 1].push_back(*p_opt);
         } else {
