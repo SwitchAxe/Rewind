@@ -1605,6 +1605,17 @@ std::map<std::string, Functor> procedures = {
        }
        return lst.front();
      }}},
+    {"rest", {[](std::list<Symbol> args) -> Symbol {
+      if (args.size() != 1)
+	throw std::logic_error {"'rest' expects only one argument (a list)!\n"};
+      auto sym = args.front();
+      if (!std::holds_alternative<std::list<Symbol>>(sym.value)) {
+	throw std::logic_error {"'rest' expects a single list of which to return all elements but the first!\n"};
+      }
+      auto l = std::get<std::list<Symbol>>(sym.value);
+      l.pop_front();
+      return Symbol("", l, sym.type);
+    }}},
     {"delete", {[](std::list<Symbol> args) -> Symbol {
        if ((args.size() != 2) ||
            (!std::holds_alternative<std::list<Symbol>>(args.front().value)) ||
