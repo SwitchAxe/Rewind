@@ -103,7 +103,7 @@ Symbol eval_function(Symbol node, const std::vector<std::string> &PATH,
     frame.insert_or_assign(std::get<std::string>(p.first.value),
                            (p.second.type == Type::RawAst)
                                ? p.second
-                               : eval_dispatch(p.second, PATH, line));
+                               : eval(p.second, PATH, line));
   }
   if (node.type != Type::RecFunCall)
     call_stack.push_back(std::make_pair(op, frame));
@@ -125,12 +125,12 @@ Symbol eval_function(Symbol node, const std::vector<std::string> &PATH,
   Symbol last = body_list.back();
   body_list.pop_back();
   for (auto e : body_list) {
-    result = eval_dispatch(e, PATH, line);
+    result = eval(e, PATH, line);
   }
   if (auto last_call = check_for_tail_recursion(op, last, PATH);
       last_call.first == "no") {
     if (result.type != Type::RawAst)
-      result = eval_dispatch(last_call.second, PATH, line);
+      result = eval(last_call.second, PATH, line);
     else
       result = last_call.second;
   } else {
@@ -304,14 +304,14 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line) {
         } else {
           node_stk.push(current_node);
           current_node = child;
-          if (leaves.empty() ||
-              ((child.type == Type::List) &&
-               !(std::get<std::list<Symbol>>(child.value).empty())))
+          std::list<Symbol> l;
+          if (child.type == Type::List)
+            l = std::get<std::list<Symbol>>(child.value);
+          if (leaves.empty() || ((child.type == Type::List) && !l.empty()))
             leaves.push_back(std::list<Symbol>{});
-          else if ((child.type == Type::List) &&
-                   (std::get<std::list<Symbol>>(child.value).empty())) {
+          else if ((child.type == Type::List) && l.empty()) {
             if (leaves.empty()) {
-              leaves.push_back(std::list<Symbol>{child});
+              leaves.push_back(l);
             } else {
               leaves[leaves.size() - 1].push_back(child);
             }
@@ -324,9 +324,13 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line) {
       if (current_node.type == Type::RawAst) {
         return current_node;
       }
+      std::string op;
+      if ((current_node.type == Type::Identifier) ||
+          (current_node.type == Type::Operator)) {
+        op = std::get<std::string>(current_node.value);
+      }
       if ((current_node.type == Type::Operator) &&
-          (std::find(special_forms.begin(), special_forms.end(),
-                     std::get<std::string>(current_node.value)) !=
+          (std::find(special_forms.begin(), special_forms.end(), op) !=
            special_forms.end()) &&
           (!node_stk.empty())) {
         // delay the evaluation of special forms
@@ -347,9 +351,8 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line) {
                  (current_node.type == Type::Identifier) &&
                  (!user_defined_procedures.empty()) &&
                  (!user_defined_procedures[user_defined_procedures.size() - 1]
-                       .contains(std::get<std::string>(current_node.value))) &&
-                 (get_absolute_path(std::get<std::string>(current_node.value),
-                                    PATH) != std::nullopt) &&
+                       .contains(op)) &&
+                 (get_absolute_path(op, PATH) != std::nullopt) &&
                  (!node_stk.empty())) {
         if (leaves.empty())
           leaves.push_back(std::list<Symbol>());
@@ -363,35 +366,28 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line) {
       } else if (auto p_opt = callstack_variable_lookup(current_node);
                  (p_opt != std::nullopt) &&
                  (current_node.type == Type::Identifier)) {
-        if (!leaves.empty()) {
-          leaves[leaves.size() - 1].push_back(*p_opt);
-        } else {
-          leaves.push_back(std::list<Symbol>{*p_opt});
-        }
+        if (leaves.empty())
+          leaves.push_back(std::list<Symbol>{});
+        leaves[leaves.size() - 1].push_back(*p_opt);
       } else if (current_node.type == Type::Identifier) {
-        if (auto s = std::get<std::string>(current_node.value); s[0] == '$') {
+        if (op[0] == '$') {
           if (auto var_opt =
-                  variable_lookup(Symbol("", s.substr(1), Type::Identifier));
+                  variable_lookup(Symbol("", op.substr(1), Type::Identifier));
               var_opt != std::nullopt) {
-            if (!leaves.empty()) {
-              leaves[leaves.size() - 1].push_back(*var_opt);
-            } else {
-              leaves.push_back(std::list<Symbol>{*var_opt});
-            }
+            if (leaves.empty())
+              leaves.push_back(std::list<Symbol>{});
+            leaves[leaves.size() - 1].push_back(*var_opt);
           } else
-            throw std::logic_error{"Unbound variable " + s.substr(1) + "!"};
+            throw std::logic_error{"Unbound variable " + op.substr(1) + "!"};
         } else {
-          if (!leaves.empty()) {
-            leaves[leaves.size() - 1].push_back(current_node);
-          } else {
-            leaves.push_back(std::list<Symbol>{current_node});
-          }
+          if (leaves.empty())
+            leaves.push_back(std::list<Symbol>{});
+          leaves[leaves.size() - 1].push_back(current_node);
         }
       } else {
-        if (!leaves.empty())
-          leaves[leaves.size() - 1].push_back(current_node);
-        else
-          leaves.push_back(std::list<Symbol>{current_node});
+        if (leaves.empty())
+          leaves.push_back(std::list<Symbol>{});
+        leaves[leaves.size() - 1].push_back(current_node);
       }
       if (node_stk.empty())
         return leaves[leaves.size() - 1].front();
@@ -400,10 +396,4 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line) {
     }
   } while (1);
   return result;
-}
-
-Symbol eval_dispatch(Symbol node, path PATH, int line) {
-  if (node.type == Type::Funcall)
-    return eval_function(node, PATH, line);
-  return eval(node, PATH, line);
 }

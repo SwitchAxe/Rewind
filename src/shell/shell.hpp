@@ -199,7 +199,7 @@ void rewind_sh_loop() {
     if (line.empty())
       continue;
     try {
-      Symbol ast = eval_dispatch(get_ast(get_tokens(line), *PATH), *PATH, 0);
+      Symbol ast = eval(get_ast(get_tokens(line), *PATH), *PATH, 0);
       if ((ast.type != Type::Command) && (ast.type != Type::Defunc)) {
         std::cout << rec_print_ast(ast) << "\n";
       }

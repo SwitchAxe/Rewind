@@ -106,11 +106,6 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
           res.result =
               Symbol("", std::get<std::string>(as_list.back().value).substr(1),
                      Type::Identifier);
-        } else if (as_list.front().type == Type::Identifier &&
-                   (!user_defined_procedures.empty()) &&
-                   (user_defined_procedures.back().contains(
-                       std::get<std::string>(as_list.front().value)))) {
-          res.result.type = Type::Funcall;
         }
       }
       if (level > 0) {
@@ -128,11 +123,6 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
           res.result =
               Symbol("", std::get<std::string>(as_list.back().value).substr(1),
                      Type::Identifier);
-        } else if (as_list.front().type == Type::Identifier &&
-                   (!user_defined_procedures.empty()) &&
-                   (user_defined_procedures.back().contains(
-                       std::get<std::string>(as_list.front().value)))) {
-          res.result.type = Type::Funcall;
         }
       }
       if (cur_state == State::LambdaFunctionLiteral) {
@@ -497,12 +487,7 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
       res.result =
           Symbol("", std::get<std::string>(as_list.back().value).substr(1),
                  Type::Identifier);
-    } else if (as_list.front().type == Type::Identifier &&
-               (!user_defined_procedures.empty()) &&
-               (user_defined_procedures.back().contains(
-                   std::get<std::string>(as_list.front().value)))) {
-      res.result.type = Type::Funcall;
-    }
+    } 
   }
   return {.result = res.result, .end_index = ei, .st = State::None};
 }

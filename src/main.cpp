@@ -98,7 +98,7 @@ int main(int argc, char **argv) {
                     << filename << "; " << ex.what() << "\n";
           break;
         }
-        ast = eval_dispatch(ast, *PATH, s.first);
+        ast = eval(ast, *PATH, s.first);
         if ((ast.type != Type::Command) && (ast.type != Type::Defunc)) {
           std::cout << rec_print_ast(ast);
           std::cout << "\n";
@@ -114,7 +114,7 @@ int main(int argc, char **argv) {
                     << filename << "; " << ex.what() << "\n";
           break;
         }
-        ast = eval_dispatch(ast, {}, s.first);
+        ast = eval(ast, {}, s.first);
         if ((ast.type != Type::Command) && (ast.type != Type::Defunc)) {
           std::cout << rec_print_ast(ast);
           std::cout << "\n";
@@ -137,7 +137,7 @@ int main(int argc, char **argv) {
                     << filename << "; " << ex.what() << "\n";
           break;
         }
-        ast = eval_dispatch(ast, *PATH, s.first);
+        ast = eval(ast, *PATH, s.first);
         if ((ast.type != Type::Command) && (ast.type != Type::Defunc)) {
           std::cout << rec_print_ast(ast);
           std::cout << "\n";
@@ -153,7 +153,7 @@ int main(int argc, char **argv) {
                     << filename << "; " << ex.what() << "\n";
           break;
         }
-        ast = eval_dispatch(ast, {}, s.first);
+        ast = eval(ast, {}, s.first);
         if ((ast.type != Type::Command) && (ast.type != Type::Defunc)) {
           std::cout << rec_print_ast(ast);
           std::cout << "\n";
