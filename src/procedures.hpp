@@ -599,9 +599,9 @@ std::map<std::string, Functor> procedures = {
              if (cnt == -1) {
                throw std::logic_error{"failed read in '<<<'!\n"};
              }
-	     if (cnt == 0) {
-	       break;
-	     }
+             if (cnt == 0) {
+               break;
+             }
              buf[cnt] = '\0';
              std::string tmp{buf};
              result += tmp;
@@ -635,9 +635,9 @@ std::map<std::string, Functor> procedures = {
          char buf[1024];
          while ((cnt = read(readfd[0], buf, 1023))) {
            buf[cnt] = '\0';
-	   if (cnt == 0) {
-	     break;
-	   }
+           if (cnt == 0) {
+             break;
+           }
            std::string tmp{buf};
            result += tmp;
          }
@@ -682,9 +682,9 @@ std::map<std::string, Functor> procedures = {
          if (cnt == -1) {
            throw std::logic_error{"Read failed in '<<<' (here-string!)\n"};
          }
-	 if (cnt == 0) {
-	   break;
-	 }
+         if (cnt == 0) {
+           break;
+         }
          buf[cnt] = '\0';
          std::string tmp{buf};
          result += tmp;
@@ -1606,16 +1606,37 @@ std::map<std::string, Functor> procedures = {
        return lst.front();
      }}},
     {"rest", {[](std::list<Symbol> args) -> Symbol {
-      if (args.size() != 1)
-	throw std::logic_error {"'rest' expects only one argument (a list)!\n"};
-      auto sym = args.front();
-      if (!std::holds_alternative<std::list<Symbol>>(sym.value)) {
-	throw std::logic_error {"'rest' expects a single list of which to return all elements but the first!\n"};
-      }
-      auto l = std::get<std::list<Symbol>>(sym.value);
-      l.pop_front();
-      return Symbol("", l, sym.type);
-    }}},
+       int n = 0;
+       if (args.empty())
+         throw std::logic_error{
+             "'rest' expects only two arguments (a list, which is obligatory, "
+             "and an integer, optionally)!\n"};
+       if (args.size() > 2)
+         throw std::logic_error{
+             "'rest' expects only two arguments (a list, which is obligatory, "
+             "and an integer, optionally)!\n"};
+
+       auto sym = args.front();
+       args.pop_front();
+       if (!std::holds_alternative<std::list<Symbol>>(sym.value)) {
+         throw std::logic_error{"'rest' expects a single list of which to "
+                                "return all elements but the first!\n"};
+       }
+       auto l = std::get<std::list<Symbol>>(sym.value);
+       if (args.size() == 1) {
+         if (args.front().type != Type::Number) {
+           throw std::logic_error{
+               "The optional second argument to 'rest' must be an integer!\n"};
+         }
+         n = std::visit([](auto num) -> int { return num; },
+                        get_int(args.front().value));
+	 for (int i = 0; i < n; ++i)
+	   l.pop_front();
+	 return Symbol("", l, sym.type);
+       }
+       l.pop_front();
+       return Symbol("", l, sym.type);
+     }}},
     {"delete", {[](std::list<Symbol> args) -> Symbol {
        if ((args.size() != 2) ||
            (!std::holds_alternative<std::list<Symbol>>(args.front().value)) ||
