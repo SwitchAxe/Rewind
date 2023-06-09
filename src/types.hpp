@@ -28,6 +28,7 @@ enum class Type {
   Operator,
   Defunc,
   Funcall,
+  RecFunCall,
   Binary,
   Identifier,
   Command,

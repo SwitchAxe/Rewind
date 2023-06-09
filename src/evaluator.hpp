@@ -105,7 +105,7 @@ Symbol eval_function(Symbol node, const std::vector<std::string> &PATH,
                                ? p.second
                                : eval_dispatch(p.second, PATH, line));
   }
-  if (node.type != Type::Funcall)
+  if (node.type != Type::RecFunCall)
     call_stack.push_back(std::make_pair(op, frame));
   else {
     if (!call_stack.empty())
@@ -135,7 +135,7 @@ Symbol eval_function(Symbol node, const std::vector<std::string> &PATH,
       result = last_call.second;
   } else {
     last = last_call.second;
-    last.type = Type::Funcall;
+    last.type = Type::RecFunCall;
     return last;
   }
   call_stack.pop_back();
@@ -260,8 +260,8 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line) {
         leaves.pop_back();
 
         // main trampoline
-        if (result.type == Type::Funcall) {
-          while (result.type == Type::Funcall) {
+        if (result.type == Type::RecFunCall) {
+          while (result.type == Type::RecFunCall) {
             result = eval_function(result, PATH, line);
           }
         }
@@ -360,17 +360,9 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line) {
         dummy = Symbol(node_stk.top().name, std::list<Symbol>(), Type::List);
         node_stk.pop();
         node_stk.push(dummy);
-      } else if ((current_node.type == Type::Identifier) &&
-                 (!user_defined_procedures.empty()) &&
-                 (user_defined_procedures.back().contains(
-                     std::get<std::string>(current_node.value)))) {
-        if (!leaves.empty()) {
-          leaves[leaves.size() - 1].push_back(current_node);
-        } else {
-          leaves.push_back(std::list<Symbol>{current_node});
-        }
       } else if (auto p_opt = callstack_variable_lookup(current_node);
-                 (p_opt != std::nullopt) && (current_node.type == Type::Identifier)) {
+                 (p_opt != std::nullopt) &&
+                 (current_node.type == Type::Identifier)) {
         if (!leaves.empty()) {
           leaves[leaves.size() - 1].push_back(*p_opt);
         } else {
@@ -411,5 +403,7 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line) {
 }
 
 Symbol eval_dispatch(Symbol node, path PATH, int line) {
+  if (node.type == Type::Funcall)
+    return eval_function(node, PATH, line);
   return eval(node, PATH, line);
 }
