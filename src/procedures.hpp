@@ -1238,7 +1238,29 @@ std::map<std::string, Functor> procedures = {
              return result;
            }
            variables.pop_back();
-         } else if (weak_compare(match_in_list, pattern)) {
+         } else if (weak_compare(match_neq, pattern)) {
+	   Symbol value = std::get<std::list<Symbol>>(pattern.value).back();
+           bool is_true = false;
+           if ((element.type != Type::Number) || (value.type != Type::Number)) {
+             is_true = element.value != value.value;
+           } else if (element.type == value.type) {
+             is_true = std::visit(
+                 []<class T, class U>(T t, U u) -> bool {
+                   return std::cmp_not_equal(t, u);
+                 },
+                 get_int(element.value), get_int(value.value));
+           }
+
+           if (is_true) {
+             Symbol result;
+             for (auto expr : branchl) {
+               result = eval(expr, PATH);
+             }
+             return result;
+           }
+	 }
+
+	 else if (weak_compare(match_in_list, pattern)) {
            if (element.type == Type::List) {
              throw std::logic_error{
                  "The pattern matching 'in' operator doesn't accept lists as "

@@ -101,7 +101,8 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
         if ((as_list.back().type == Type::String) ||
             (as_list.back().type == Type::Number)) {
           res.result = as_list.back();
-        } else if ((as_list.back().type == Type::Identifier) &&
+        } else if ((std::holds_alternative<std::string>(
+                       as_list.back().value)) &&
                    std::get<std::string>(as_list.back().value)[0] == '@') {
           res.result =
               Symbol("", std::get<std::string>(as_list.back().value).substr(1),
@@ -118,7 +119,8 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
         if ((as_list.back().type == Type::String) ||
             (as_list.back().type == Type::Number)) {
           res.result = as_list.back();
-        } else if ((as_list.back().type == Type::Identifier) &&
+        } else if ((std::holds_alternative<std::string>(
+                       as_list.back().value)) &&
                    std::get<std::string>(as_list.back().value)[0] == '@') {
           res.result =
               Symbol("", std::get<std::string>(as_list.back().value).substr(1),
@@ -244,13 +246,13 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
         if ((l.back().type == Type::Number) ||
             (l.back().type == Type::String)) {
           as_l.push_back(l.back());
-        } else if ((l.back().type == Type::Identifier) &&
+        } else if ((std::holds_alternative<std::string>(l.back().value)) &&
                    (std::get<std::string>(l.back().value)[0] == '@')) {
           as_l.push_back(Symbol("",
                                 std::get<std::string>(l.back().value).substr(1),
                                 Type::Identifier));
         } else
-          as_l = {to_be_matched.result};
+          as_l.push_back(l.back());
       } else
         as_l = {to_be_matched.result};
       if (as_l.size() == 1) {
@@ -287,7 +289,7 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
               (l.back().type == Type::Number) ||
               (l.back().type == Type::List)) {
             m = l.back();
-          } else if ((l.back().type == Type::Identifier) &&
+          } else if ((std::holds_alternative<std::string>(l.back().value)) &&
                      std::get<std::string>(l.back().value)[0] == '@') {
             m = Symbol("", std::get<std::string>(l.back().value).substr(1),
                        Type::Identifier);
@@ -313,7 +315,7 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
                 (l.back().type == Type::Number) ||
                 (l.back().type == Type::List)) {
               m = l.back();
-            } else if ((l.back().type == Type::Identifier) &&
+            } else if ((std::holds_alternative<std::string>(l.back().value)) &&
                        std::get<std::string>(l.back().value)[0] == '@') {
               m = Symbol("", std::get<std::string>(l.back().value).substr(1),
                          Type::Identifier);
@@ -367,7 +369,7 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
               (l.back().type == Type::Number) ||
               (l.back().type == Type::List)) {
             m = l.back();
-          } else if ((l.back().type == Type::Identifier) &&
+          } else if ((std::holds_alternative<std::string>(l.back().value)) &&
                      std::get<std::string>(l.back().value)[0] == '@') {
             m = Symbol("", std::get<std::string>(l.back().value).substr(1),
                        Type::Identifier);
@@ -388,7 +390,7 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
               (l.back().type == Type::Number) ||
               (l.back().type == Type::List)) {
             m = l.back();
-          } else if ((l.back().type == Type::Identifier) &&
+          } else if ((std::holds_alternative<std::string>(l.back().value)) &&
                      std::get<std::string>(l.back().value)[0] == '@') {
             m = Symbol("", std::get<std::string>(l.back().value).substr(1),
                        Type::Identifier);
@@ -418,9 +420,9 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
     } else {
       // identifiers are complicated, but we can somehow get around it
       // by having a fuckton of states to keep track of where we are
-      if ((cur_state == State::FirstFunctionCall) ||
+      if ((cur[0] != '@') && ((cur_state == State::FirstFunctionCall) ||
           (cur_state == State::None) ||
-          (cur_state == State::LambdaFunctionFirstFunctionCall)) {
+          (cur_state == State::LambdaFunctionFirstFunctionCall))) {
         RecInfo info = get_ast_aux(
             tokens, i + 1, ei, false, PATH, level + 1,
             cur == "let" ? (cur_state == State::LambdaFunctionFirstFunctionCall
@@ -464,6 +466,8 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
           return {.result = res.result, .end_index = i, .st = cur_state};
         }
       } else {
+        if (cur[0] == '@')
+          cur = cur.substr(1);
         as_list.push_back(Symbol("", cur,
                                  procedures.contains(cur) ? Type::Operator
                                                           : Type::Identifier));
@@ -482,12 +486,12 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
     if ((as_list.back().type == Type::String) ||
         (as_list.back().type == Type::Number)) {
       res.result = as_list.back();
-    } else if ((as_list.back().type == Type::Identifier) &&
+    } else if ((std::holds_alternative<std::string>(as_list.back().value)) &&
                std::get<std::string>(as_list.back().value)[0] == '@') {
       res.result =
           Symbol("", std::get<std::string>(as_list.back().value).substr(1),
                  Type::Identifier);
-    } 
+    }
   }
   return {.result = res.result, .end_index = ei, .st = State::None};
 }
