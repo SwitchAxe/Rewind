@@ -163,6 +163,14 @@ bool compare_list_structure(Symbol l, Symbol r) {
       });
   bool is_structure_equal = true;
   for (auto p : zipped) {
+    if (std::holds_alternative<std::string>(p.first.value) &&
+        std::get<std::string>(p.first.value) == ".") {
+      continue;
+    }
+    if (std::holds_alternative<std::string>(p.second.value) &&
+        std::get<std::string>(p.second.value) == ".") {
+      continue;
+    }
     if (p.first.type == Type::List) {
       if (p.second.type == Type::List) {
         is_structure_equal =
@@ -1139,6 +1147,7 @@ std::map<std::string, Functor> procedures = {
            for (auto expr : branchl) {
              result = eval(expr, PATH);
            }
+	   variables.pop_back();
            return result;
          } else if (weak_compare(match_less_than, pattern)) {
            Symbol value = std::get<std::list<Symbol>>(pattern.value).back();
@@ -1239,7 +1248,7 @@ std::map<std::string, Functor> procedures = {
            }
            variables.pop_back();
          } else if (weak_compare(match_neq, pattern)) {
-	   Symbol value = std::get<std::list<Symbol>>(pattern.value).back();
+           Symbol value = std::get<std::list<Symbol>>(pattern.value).back();
            bool is_true = false;
            if ((element.type != Type::Number) || (value.type != Type::Number)) {
              is_true = element.value != value.value;
@@ -1258,9 +1267,9 @@ std::map<std::string, Functor> procedures = {
              }
              return result;
            }
-	 }
+         }
 
-	 else if (weak_compare(match_in_list, pattern)) {
+         else if (weak_compare(match_in_list, pattern)) {
            if (element.type == Type::List) {
              throw std::logic_error{
                  "The pattern matching 'in' operator doesn't accept lists as "
@@ -1368,7 +1377,7 @@ std::map<std::string, Functor> procedures = {
            variables.pop_back();
          } else if (pattern.type == Type::List) {
            if (!std::holds_alternative<std::list<Symbol>>(element.value)) {
-             throw std::logic_error{"List destructuring requests a list!\n"};
+             continue;
            }
            bool same_structure = compare_list_structure(pattern, element);
            if (same_structure) {
@@ -1652,9 +1661,9 @@ std::map<std::string, Functor> procedures = {
          }
          n = std::visit([](auto num) -> int { return num; },
                         get_int(args.front().value));
-	 for (int i = 0; i < n; ++i)
-	   l.pop_front();
-	 return Symbol("", l, sym.type);
+         for (int i = 0; i < n; ++i)
+           l.pop_front();
+         return Symbol("", l, sym.type);
        }
        l.pop_front();
        return Symbol("", l, sym.type);
@@ -1890,7 +1899,24 @@ std::map<std::string, Functor> procedures = {
        } catch (std::logic_error ex) {
          return Symbol("", std::string(ex.what()), Type::Error);
        };
-     }}}};
+     }}},
+    {"tokens", {[](std::list<Symbol> args) -> Symbol {
+      // returns a list of tokens from a single string given as argument,
+      // as if it went throught the ordinary lexing of some Rewind input
+      // (because this is exactly what we're doing here)
+      if (args.size() != 1) {
+	throw std::logic_error {"The 'tokens' function only accepts a single string!\n"};
+      }
+      if (args.front().type != Type::String) {
+	throw std::logic_error {"The 'tokens' function only accepts a single string!\n"};
+      }
+      std::vector<std::string> tks = get_tokens(std::get<std::string>(args.front().value));
+      auto ret = std::list<Symbol>();
+      for (auto tk : tks) {
+	ret.push_back(Symbol("", tk, Type::String));
+      }
+      return Symbol("", ret, Type::List);
+    }}}};
 
 std::array<std::string, 10> special_forms = {
     "->", "let", "if", "$", "cond", "match", "<<<", "defined", "and", "or"};
