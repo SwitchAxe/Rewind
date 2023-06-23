@@ -68,7 +68,8 @@ struct RecInfo {
 };
 
 RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
-                    bool is_root, path PATH, int level, State st) {
+                    bool is_root, path PATH, int level, State st,
+                    int list_balance = 0) {
   RecInfo res;
   std::list<Symbol> as_list;
   res.result = Symbol(is_root ? "root" : "", as_list, Type::List);
@@ -83,7 +84,8 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
                                  ((cur_state == State::FirstFunctionCall) ||
                                   (cur_state == State::Identifier))
                                      ? State::InArgumentList
-                                     : State::List);
+                                     : State::List,
+                                 list_balance + 1);
       i = info.end_index;
       as_list.push_back(info.result);
       cur_state = info.st;
@@ -153,6 +155,14 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
       }
     } else if (auto v = try_convert_num(cur); v != std::nullopt) {
       as_list.push_back(Symbol(is_root ? "root" : "", *v, Type::Number));
+      if (cur_state == State::LambdaFunctionFirstFunctionCall) {
+        cur_state = State::LambdaFunctionLiteral;
+      } else if (cur_state == State::LambdaFunctionIdentifier) {
+        cur_state = State::LambdaFunctionFirstFunctionCall;
+      }
+    } else if ((cur == "false") || (cur == "true")) {
+      as_list.push_back(Symbol(is_root ? "root" : "",
+                               cur == "false" ? false : true, Type::Boolean));
       if (cur_state == State::LambdaFunctionFirstFunctionCall) {
         cur_state = State::LambdaFunctionLiteral;
       } else if (cur_state == State::LambdaFunctionIdentifier) {
@@ -420,9 +430,10 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
     } else {
       // identifiers are complicated, but we can somehow get around it
       // by having a fuckton of states to keep track of where we are
-      if ((cur[0] != '@') && ((cur_state == State::FirstFunctionCall) ||
-          (cur_state == State::None) ||
-          (cur_state == State::LambdaFunctionFirstFunctionCall))) {
+      if ((cur[0] != '@') && (list_balance == 0) &&
+          ((cur_state == State::FirstFunctionCall) ||
+           (cur_state == State::None) ||
+           (cur_state == State::LambdaFunctionFirstFunctionCall))) {
         RecInfo info = get_ast_aux(
             tokens, i + 1, ei, false, PATH, level + 1,
             cur == "let" ? (cur_state == State::LambdaFunctionFirstFunctionCall
