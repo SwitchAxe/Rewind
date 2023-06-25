@@ -182,12 +182,15 @@ Symbol rewind_pipe(Symbol node, const std::vector<std::string> &PATH,
   close(fd[1]);
   for (auto cur : nodel) {
     old_read_end = dup(fd[0]);
+    close(fd[0]);
     pipe(fd);
     status = rewind_call_ext_program(cur, PATH, true, fd[1], old_read_end);
+    close(old_read_end);
   }
   if (must_read) {
     int cnt;
     old_read_end = dup(fd[0]);
+    close(fd[0]);
     pipe(fd);
     status = rewind_call_ext_program(last, PATH, true, fd[1], old_read_end);
     close(fd[1]);
