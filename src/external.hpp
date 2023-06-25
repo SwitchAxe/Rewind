@@ -179,6 +179,7 @@ Symbol rewind_pipe(Symbol node, const std::vector<std::string> &PATH,
   nodel.pop_front();
   int old_read_end;
   status = rewind_call_ext_program(first, PATH, true, fd[1], 0);
+  close(fd[1]);
   for (auto cur : nodel) {
     old_read_end = dup(fd[0]);
     pipe(fd);
