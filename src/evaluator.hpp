@@ -31,16 +31,16 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH,
                            int line = 0);
 Symbol eval_dispatch(Symbol node, const std::vector<std::string> &PATH,
                      int line);
-std::pair<std::string, Symbol>
-check_for_tail_recursion(std::string name, Symbol funcall, path &PATH) {
+std::pair<bool, Symbol> check_for_tail_recursion(std::string name,
+                                                 Symbol funcall, path &PATH) {
   if (funcall.type != Type::List)
     return {"no", funcall};
   auto lst = std::get<std::list<Symbol>>(funcall.value);
   if (lst.empty())
-    return {"no", funcall};
+    return {false, funcall};
   auto fstnode = lst.front();
   if ((fstnode.type != Type::Identifier) && (fstnode.type != Type::Operator)) {
-    return {"no", funcall};
+    return {false, funcall};
   }
   auto nodename = std::get<std::string>(fstnode.value);
   if ((nodename == "if") || (nodename == "cond")) {
@@ -49,9 +49,9 @@ check_for_tail_recursion(std::string name, Symbol funcall, path &PATH) {
     return check_for_tail_recursion(name, branch, PATH);
   }
   if (nodename == name) {
-    return {"yes", funcall};
+    return {true, funcall};
   }
-  return {"no", funcall};
+  return {false, funcall};
 }
 
 Symbol eval_function(Symbol node, const std::vector<std::string> &PATH,
@@ -107,9 +107,12 @@ Symbol eval_function(Symbol node, const std::vector<std::string> &PATH,
   }
   if (node.type != Type::RecFunCall)
     call_stack.push_back(std::make_pair(op, frame));
-  else {
+  else if (op.substr(0, 6) != "__re_l") {
+    variables.push_back(frame);
+  } else {
     if (!call_stack.empty())
       call_stack.pop_back();
+
     call_stack.push_back(std::make_pair(op, frame));
   }
   std::list<Symbol> body_list = std::get<std::list<Symbol>>(body.value);
@@ -127,9 +130,13 @@ Symbol eval_function(Symbol node, const std::vector<std::string> &PATH,
   for (auto e : body_list) {
     result = eval(e, PATH, line);
   }
-  if (auto last_call = check_for_tail_recursion(op, last, PATH);
-      last_call.first == "no") {
-    if (result.type != Type::RawAst)
+  std::string last_true_fun;
+  if (!call_stack.empty())
+    last_true_fun = call_stack.back().first;
+  else last_true_fun = op;
+  if (auto last_call = check_for_tail_recursion(last_true_fun, last, PATH);
+      last_call.first == false) {
+    if (last_call.second.type != Type::RawAst)
       result = eval(last_call.second, PATH, line);
     else
       result = last_call.second;
