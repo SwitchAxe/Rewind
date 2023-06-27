@@ -380,8 +380,7 @@ std::optional<std::pair<Symbol, Symbol>> procedure_lookup(Symbol id) {
 std::optional<Symbol> callstack_variable_lookup(Symbol id) {
   if (!std::holds_alternative<std::string>(id.value))
     return std::nullopt;
-  if (call_stack.empty()) return std::nullopt;
-  if (!call_stack[call_stack.size() - 1].second.contains(
+  if (call_stack.empty() || !call_stack[call_stack.size() - 1].second.contains(
                                 std::get<std::string>(id.value))) {
     return std::nullopt;
   }
