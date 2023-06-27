@@ -201,6 +201,7 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
       }
       auto branch = get_ast_aux(tokens, idx + 1, to_other_pipe, false, PATH,
                                 level + 1, State::FirstFunctionCall);
+
       if (branch.result.type == Type::List)
         as_l = std::get<std::list<Symbol>>(branch.result.value);
       else
@@ -209,6 +210,18 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
         l.push_back(as_l.back());
       } else
         l.push_back(branch.result);
+      while (branch.end_index < (to_other_pipe - 1)) {
+        branch = get_ast_aux(tokens, branch.end_index + 1, to_other_pipe, false,
+                             PATH, level + 1, State::FirstFunctionCall);
+        if (branch.result.type == Type::List)
+          as_l = std::get<std::list<Symbol>>(branch.result.value);
+        else
+          as_l = {branch.result};
+        if (as_l.size() == 1) {
+          l.push_back(as_l.back());
+        } else
+          l.push_back(branch.result);
+      }
       if (to_other_pipe == ei) {
         if (cur_state == State::QuestionOperator) {
           if (l.size() == 1)
