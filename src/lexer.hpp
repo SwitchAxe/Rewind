@@ -82,7 +82,7 @@ std::vector<std::string> get_tokens(std::string stream) {
   bool crossed_lparen = false;
   bool crossed_rparen = false;
   std::vector<std::string> tokens;
-  std::vector<char> special_tokens = {'[', ']', '(', ')', ',', ';'};
+  std::vector<char> special_tokens = {'[', ']', '(', ')', ',', ';', '.'};
   std::string temp;
   bool in_singles = false;
   for (int i = 0; i < stream.length(); ++i) {

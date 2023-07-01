@@ -44,6 +44,7 @@ enum class State {
   List,
   Comma,
   Semicolon,
+  Dot,
   LambdaFunction,
   LambdaFunctionFirstFunctionCall,
   LambdaFunctionInArgumentList,
@@ -145,7 +146,41 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
                                ? State::LambdaFunctionFirstFunctionCall
                                : State::Comma)
                         : State::Error};
-    } else if (is_strlit(cur)) {
+    } else if (cur == ".") {
+      res.result.value = as_list;
+      if (as_list.size() == 1) {
+        if ((as_list.back().type == Type::String) ||
+            (as_list.back().type == Type::Number)) {
+          res.result = as_list.back();
+        } else if ((std::holds_alternative<std::string>(
+                       as_list.back().value)) &&
+                   std::get<std::string>(as_list.back().value)[0] == '@') {
+          res.result =
+              Symbol("", std::get<std::string>(as_list.back().value).substr(1),
+                     Type::Identifier);
+        }
+      }
+      if (cur_state == State::LambdaFunctionIdentifier) {
+        cur_state = State::LambdaFunctionFirstFunctionCall;
+      }
+      if (cur_state == State::LambdaFunctionIdentifier) {
+        cur_state = State::LambdaFunctionFirstFunctionCall;
+      }
+      if (cur_state == State::LambdaFunctionLiteral) {
+        cur_state = State::LambdaFunctionFirstFunctionCall;
+      }
+
+      return {.result = res.result,
+              .end_index = i,
+              .st = (level > 0)
+                        ? ((cur_state == State::LambdaFunctionFirstFunctionCall
+                                ? cur_state
+                                : State::Dot))
+                        : State::Error};
+
+    }
+
+    else if (is_strlit(cur)) {
       as_list.push_back(Symbol(is_root ? "root" : "",
                                cur.substr(1, cur.size() - 2), Type::String));
       if (cur_state == State::LambdaFunctionFirstFunctionCall) {
@@ -199,20 +234,11 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
           break;
         }
       }
-      auto branch = get_ast_aux(tokens, idx + 1, to_other_pipe, false, PATH,
-                                level + 1, State::FirstFunctionCall);
-
-      if (branch.result.type == Type::List)
-        as_l = std::get<std::list<Symbol>>(branch.result.value);
-      else
-        as_l = {branch.result};
-      if (as_l.size() == 1) {
-        l.push_back(as_l.back());
-      } else
-        l.push_back(branch.result);
-      while (branch.end_index < (to_other_pipe - 1)) {
-        branch = get_ast_aux(tokens, branch.end_index + 1, to_other_pipe, false,
-                             PATH, level + 1, State::FirstFunctionCall);
+      RecInfo branch;
+      do {
+        branch = get_ast_aux(tokens, idx + 1, to_other_pipe, false, PATH,
+                             level + 1, State::FirstFunctionCall);
+        idx = branch.end_index;
         if (branch.result.type == Type::List)
           as_l = std::get<std::list<Symbol>>(branch.result.value);
         else
@@ -221,7 +247,8 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
           l.push_back(as_l.back());
         } else
           l.push_back(branch.result);
-      }
+      } while ((branch.st != State::Semicolon) && (branch.st != State::End) &&
+               (branch.st != State::Dot) && (idx < (to_other_pipe - 1)));
       if (to_other_pipe == ei) {
         if (cur_state == State::QuestionOperator) {
           if (l.size() == 1)
@@ -238,7 +265,6 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
         } else
           as_list.push_back(Symbol("", maybe_cond, Type::List));
         res.result.value = as_list;
-        return {.result = res.result, .end_index = ei, .st = State::None};
       }
       i = branch.end_index;
       if (cur_state != State::QuestionOperator)
@@ -443,6 +469,9 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
     } else {
       // identifiers are complicated, but we can somehow get around it
       // by having a fuckton of states to keep track of where we are
+      if (cur_state == State::PipeOperator) {
+        cur_state = State::FirstFunctionCall;
+      }
       if ((cur[0] != '@') && (list_balance == 0) &&
           ((cur_state == State::FirstFunctionCall) ||
            (cur_state == State::None) ||
@@ -497,9 +526,6 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
                                                           : Type::Identifier));
       }
       if (cur_state == State::Identifier) {
-        cur_state = State::FirstFunctionCall;
-      }
-      if (cur_state == State::PipeOperator) {
         cur_state = State::FirstFunctionCall;
       }
     }
