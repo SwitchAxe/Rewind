@@ -164,11 +164,11 @@ bool compare_list_structure(Symbol l, Symbol r) {
   bool is_structure_equal = true;
   for (auto p : zipped) {
     if (std::holds_alternative<std::string>(p.first.value) &&
-        std::get<std::string>(p.first.value) == ".") {
+        std::get<std::string>(p.first.value) == "*") {
       continue;
     }
     if (std::holds_alternative<std::string>(p.second.value) &&
-        std::get<std::string>(p.second.value) == ".") {
+        std::get<std::string>(p.second.value) == "*") {
       continue;
     }
     if (p.first.type == Type::List) {
@@ -1000,6 +1000,21 @@ std::map<std::string, Functor> procedures = {
        }
        return Symbol("", l, Type::List);
      }}},
+    {"stoid", {[](std::list<Symbol> args) -> Symbol {
+       if ((args.size() != 1) || (args.front().type != Type::String)) {
+         throw std::logic_error{
+             "The 'stoid' function accepts a single string!\n"};
+       }
+       auto s = std::get<std::string>(args.front().value);
+       const auto is_strlit = [](std::string s) -> bool {
+         return (s.size() > 1) && (s[0] == '"') && (s.back() == '"');
+       };
+       if (is_strlit(s)) {
+         s = s.substr(1, s.size() - 2);
+       }
+       return Symbol(
+           "", s, procedures.contains(s) ? Type::Operator : Type::Identifier);
+     }}},
     {"ltos", {[](std::list<Symbol> args) -> Symbol {
        if ((args.size() != 1) ||
            (!std::holds_alternative<std::list<Symbol>>(args.front().value))) {
@@ -1019,7 +1034,8 @@ std::map<std::string, Functor> procedures = {
        return Symbol("", ret, Type::String);
      }}},
     {"let", {[](std::list<Symbol> args, path PATH) -> Symbol {
-       if (args.front().type != Type::Identifier) {
+       if ((args.front().type != Type::Operator) &&
+           (args.front().type != Type::Identifier)) {
          if (args.front().type != Type::List) {
            throw std::logic_error{
                "First argument to 'let' must be an identifier!\n"};
@@ -1147,7 +1163,7 @@ std::map<std::string, Functor> procedures = {
            for (auto expr : branchl) {
              result = eval(expr, PATH);
            }
-	   variables.pop_back();
+           variables.pop_back();
            return result;
          } else if (weak_compare(match_less_than, pattern)) {
            Symbol value = std::get<std::list<Symbol>>(pattern.value).back();
@@ -1901,22 +1917,25 @@ std::map<std::string, Functor> procedures = {
        };
      }}},
     {"tokens", {[](std::list<Symbol> args) -> Symbol {
-      // returns a list of tokens from a single string given as argument,
-      // as if it went throught the ordinary lexing of some Rewind input
-      // (because this is exactly what we're doing here)
-      if (args.size() != 1) {
-	throw std::logic_error {"The 'tokens' function only accepts a single string!\n"};
-      }
-      if (args.front().type != Type::String) {
-	throw std::logic_error {"The 'tokens' function only accepts a single string!\n"};
-      }
-      std::vector<std::string> tks = get_tokens(std::get<std::string>(args.front().value));
-      auto ret = std::list<Symbol>();
-      for (auto tk : tks) {
-	ret.push_back(Symbol("", tk, Type::String));
-      }
-      return Symbol("", ret, Type::List);
-    }}}};
+       // returns a list of tokens from a single string given as argument,
+       // as if it went throught the ordinary lexing of some Rewind input
+       // (because this is exactly what we're doing here)
+       if (args.size() != 1) {
+         throw std::logic_error{
+             "The 'tokens' function only accepts a single string!\n"};
+       }
+       if (args.front().type != Type::String) {
+         throw std::logic_error{
+             "The 'tokens' function only accepts a single string!\n"};
+       }
+       std::vector<std::string> tks =
+           get_tokens(std::get<std::string>(args.front().value));
+       auto ret = std::list<Symbol>();
+       for (auto tk : tks) {
+         ret.push_back(Symbol("", tk, Type::String));
+       }
+       return Symbol("", ret, Type::List);
+     }}}};
 
 std::array<std::string, 10> special_forms = {
     "->", "let", "if", "$", "cond", "match", "<<<", "defined", "and", "or"};

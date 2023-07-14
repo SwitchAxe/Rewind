@@ -158,7 +158,13 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH,
   if (node.type == Type::RawAst) {
     return node;
   }
-  if (op.type == Type::Operator) {
+  if (((op.type == Type::Identifier) || (op.type == Type::Operator)) &&
+      !user_defined_procedures.empty() &&
+      user_defined_procedures[user_defined_procedures.size() - 1].contains(
+          std::get<std::string>(op.value))) {
+    result = eval_function(node, PATH, line);
+    return result;
+  } else if (op.type == Type::Operator) {
     l.pop_front();
     node.value = l;
     if (procedures.contains(std::get<std::string>(op.value))) {
@@ -180,12 +186,6 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH,
     } else
       throw std::logic_error{"Rewind (line" + std::to_string(line) +
                              "): Unbound procedure!\n"};
-  } else if ((op.type == Type::Identifier) &&
-             !user_defined_procedures.empty() &&
-             user_defined_procedures[user_defined_procedures.size() - 1]
-                 .contains(std::get<std::string>(op.value))) {
-    result = eval_function(node, PATH, line);
-    return result;
   } else if (auto lit = std::find_if(
                  l.begin(), l.end(),
                  [&](Symbol &s) -> bool {

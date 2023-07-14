@@ -23,7 +23,8 @@
 #include <type_traits>
 
 bool is_strlit(std::string s) {
-  return (s.size() > 1) && (s[0] == '"') && (s.back() == '"');
+  return (s.size() > 1) && (((s[0] == '\'') && (s.back() == '\'')) ||
+                            ((s[0] == '"') && (s.back() == '"')));
 }
 
 std::optional<long long signed int> try_convert_num(std::string n) {
@@ -66,6 +67,7 @@ struct RecInfo {
   Symbol result;
   int end_index;
   State st;
+  bool is_return_value = false;
 };
 
 RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
@@ -78,6 +80,7 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
   static int lambda_id = 0;
   std::list<Symbol> maybe_cond{Symbol("", "cond", Type::Operator)};
   std::list<Symbol> maybe_match{};
+  bool is_return = false;
   for (int i = si; i < ei; ++i) {
     auto cur = tokens[i];
     if ((cur == "(") || (cur == "[")) {
@@ -110,10 +113,14 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
           res.result =
               Symbol("", std::get<std::string>(as_list.back().value).substr(1),
                      Type::Identifier);
+          is_return = true;
         }
       }
       if (level > 0) {
-        return {.result = res.result, .end_index = i, .st = State::Semicolon};
+        return {.result = res.result,
+                .end_index = i,
+                .st = State::Semicolon,
+                .is_return_value = is_return};
       }
       return {.result = res.result, .end_index = i, .st = State::End};
     } else if (cur == ",") {
@@ -128,6 +135,7 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
           res.result =
               Symbol("", std::get<std::string>(as_list.back().value).substr(1),
                      Type::Identifier);
+          is_return = true;
         }
       }
       if (cur_state == State::LambdaFunctionLiteral) {
@@ -145,7 +153,8 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
                         ? ((cur_state == State::LambdaFunctionFirstFunctionCall)
                                ? State::LambdaFunctionFirstFunctionCall
                                : State::Comma)
-                        : State::Error};
+                        : State::Error,
+              .is_return_value = is_return};
     } else if (cur == ".") {
       res.result.value = as_list;
       if (as_list.size() == 1) {
@@ -158,6 +167,7 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
           res.result =
               Symbol("", std::get<std::string>(as_list.back().value).substr(1),
                      Type::Identifier);
+          is_return = true;
         }
       }
       if (cur_state == State::LambdaFunctionIdentifier) {
@@ -176,7 +186,8 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
                         ? ((cur_state == State::LambdaFunctionFirstFunctionCall
                                 ? cur_state
                                 : State::Dot))
-                        : State::Error};
+                        : State::Error,
+              .is_return_value = is_return};
 
     }
 
@@ -239,14 +250,22 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
         branch = get_ast_aux(tokens, idx + 1, to_other_pipe, false, PATH,
                              level + 1, State::FirstFunctionCall);
         idx = branch.end_index;
-        if (branch.result.type == Type::List)
+        if (std::holds_alternative<std::list<Symbol>>(branch.result.value)) {
           as_l = std::get<std::list<Symbol>>(branch.result.value);
-        else
+        } else
           as_l = {branch.result};
         if (as_l.size() == 1) {
-          l.push_back(as_l.back());
+          if ((as_l.back().type == Type::String) ||
+              (as_l.back().type == Type::Number) ||
+              (as_l.back().type == Type::Boolean)) {
+            l.push_back(as_l.back());
+          } else if (branch.is_return_value) {
+            l.push_back(Symbol("", std::get<std::string>(as_l.back().value),
+                               as_l.back().type));
+          } else
+            l.push_back(Symbol("", as_l, Type::List));
         } else
-          l.push_back(branch.result);
+          l.push_back(Symbol("", as_l, Type::List));
       } while ((branch.st != State::Semicolon) && (branch.st != State::End) &&
                (branch.st != State::Dot) && (idx < (to_other_pipe - 1)));
       if (to_other_pipe == ei) {
@@ -524,6 +543,7 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
         as_list.push_back(Symbol("", cur,
                                  procedures.contains(cur) ? Type::Operator
                                                           : Type::Identifier));
+        is_return = true;
       }
       if (cur_state == State::Identifier) {
         cur_state = State::FirstFunctionCall;
@@ -541,9 +561,13 @@ RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
       res.result =
           Symbol("", std::get<std::string>(as_list.back().value).substr(1),
                  Type::Identifier);
+      is_return = true;
     }
   }
-  return {.result = res.result, .end_index = ei, .st = State::None};
+  return {.result = res.result,
+          .end_index = ei,
+          .st = State::None,
+          .is_return_value = is_return};
 }
 
 Symbol get_ast(std::vector<std::string> tokens, path PATH) {

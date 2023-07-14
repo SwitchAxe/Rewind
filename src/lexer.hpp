@@ -62,7 +62,8 @@ std::string process_escapes(const std::string &s) {
       std::stringstream as_oct;
       as_oct << std::oct << ss.str();
       int n;
-      auto [ptr, ec] = std::from_chars(as_oct.str().data(), as_oct.str().data() + as_oct.str().size(), n);
+      auto [ptr, ec] = std::from_chars(
+          as_oct.str().data(), as_oct.str().data() + as_oct.str().size(), n);
       r += static_cast<char>(n);
       i += 3;
       break;
@@ -82,9 +83,8 @@ std::vector<std::string> get_tokens(std::string stream) {
   bool crossed_lparen = false;
   bool crossed_rparen = false;
   std::vector<std::string> tokens;
-  std::vector<char> special_tokens = {'[', ']', '(', ')', ',', ';', '.'};
+  std::vector<char> special_tokens = {'[', ']', '(', ')', ',', ';'};
   std::string temp;
-  bool in_singles = false;
   for (int i = 0; i < stream.length(); ++i) {
     if ((stream[i] == ' ') || (stream[i] == '\t') || (stream[i] == '\n')) {
       if (in_identifier || in_numlit) {
@@ -92,28 +92,20 @@ std::vector<std::string> get_tokens(std::string stream) {
         in_numlit = false;
         tokens.push_back(temp);
         temp = "";
-      } else if (in_singles) {
-        temp += stream[i];
       }
     } else if (isgraph(stream[i])) {
-      if (stream[i] == '\'') {
-        if (in_singles) {
-          in_singles = false;
-          tokens.push_back(temp);
-          temp = "";
-        } else if (in_numlit) {
-          throw std::logic_error{"Found single quotes in a numeric literal!\n"};
-        } else if (in_identifier) {
-          throw std::logic_error{"Found single quotes in an identifier!\n"};
-        } else {
-          in_identifier = false;
-          in_numlit = false;
-          in_singles = true;
-        }
-      } else if (stream[i] == '"') {
-        if (in_singles) {
-          temp += stream[i];
-        } else if (in_numlit) {
+      if (stream[i] == '.') {
+        if (in_identifier || in_numlit || (temp.empty())) {
+          if (((i + 1) >= stream.length()) || (stream[i + 1] == ' ') ||
+              (stream[i + 1] == '\t') || (stream[i + 1] == '\n')) {
+            tokens.push_back(temp);
+            tokens.push_back(".");
+          } else
+            temp += stream[i];
+        } else
+          tokens.push_back(".");
+      } else if ((stream[i] == '"') || (stream[i] == '\'')) {
+        if (in_numlit) {
           throw std::logic_error{"Failed to parse the input stream!\n"
                                  "Found double quotes in a numeric literal!\n"};
         } else if (in_identifier) {
@@ -124,7 +116,9 @@ std::vector<std::string> get_tokens(std::string stream) {
           in_identifier = false;
           in_numlit = false;
           int e = 0;
-          for (e = i + 1; (e < stream.length()) && (stream[e] != '"'); ++e) {
+          for (e = i + 1; (e < stream.length()) &&
+                          (stream[e] != (stream[i] == '"' ? '"' : '\''));
+               ++e) {
             if (stream[e] == '\\') {
               e++;
             }
@@ -150,8 +144,6 @@ std::vector<std::string> get_tokens(std::string stream) {
           throw std::logic_error{"Failed to parse the input stream!\n"
                                  "Found a character in a numeric literal!\n"};
         temp += stream[i];
-      } else if (in_singles) {
-        temp += stream[i];
       } else {
         if (std::find(special_tokens.begin(), special_tokens.end(),
                       stream[i]) != special_tokens.end()) {
@@ -170,9 +162,6 @@ std::vector<std::string> get_tokens(std::string stream) {
     if (tk[0] == '"') {
       tk = process_escapes(tk);
     }
-  }
-  if (in_singles) {
-    throw std::logic_error{"Unclosed string!\n"};
   }
   return tokens;
 }
