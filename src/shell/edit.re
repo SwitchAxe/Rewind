@@ -1,216 +1,193 @@
-(let re_color_black "\e[0;30m")
-(let re_color_red "\e[0;31m")
-(let re_color_green "\e[0;32m")
-(let re_color_orange "\e[0;33m")
-(let re_color_blue "\e[0;34m")
-(let re_color_purple "\e[0;35m")
-(let re_color_cyan "\e[0;36m")
-(let re_color_lgray "\e[0;37m")
-(let re_color_dgray "\e[1;30m")
-(let re_color_lred "\e[1;31m")
-(let re_color_lgreen "\e[1;32m")
-(let re_color_yellow "\e[1;33m")
-(let re_color_lblue "\e[1;34m")
-(let re_color_lpurple "\e[1;35m")
-(let re_color_lcyan "\e[1;36m")
-(let re_color_white "\e[1;37m")
-(let re_color_blank "\e[0m")
-(let re_color_attr_bold "\e[1m")
+let re_color_black "\e[0;30m";
+let re_color_red "\e[0;31m";
+let re_color_green "\e[0;32m";
+let re_color_orange "\e[0;33m";
+let re_color_blue "\e[0;34m";
+let re_color_purple "\e[0;35m";
+let re_color_cyan "\e[0;36m";
+let re_color_lgray "\e[0;37m";
+let re_color_dgray "\e[1;30m";
+let re_color_lred "\e[1;31m";
+let re_color_lgreen "\e[1;32m";
+let re_color_yellow "\e[1;33m";
+let re_color_lblue "\e[1;34m";
+let re_color_lpurple "\e[1;35m";
+let re_color_lcyan "\e[1;36m";
+let re_color_white "\e[1;37m";
+let re_color_blank "\e[0m";
+let re_color_attr_bold "\e[1m";
 
 # cursor movement forward/backwards
-(let curs_fwd "\e[1C")
-(let curs_bwd "\e[1D")
+let curs_fwd "\e[1C";
+let curs_bwd "\e[1D";
 
 # erase the current line, starting from the cursor
-(let curs_erase "\e[0K")
-
-# arrow key codes to be caught by readch
-(let arr_up "\e[A")
-(let arr_down "\e[B")
-(let arr_right "\e[C")
-(let arr_left "\e[D")
-
-(let rest (l)
-     (tl (length l) (tl (- (length l) 1) l)))
-
-(let restn (l n)
-     (tl (length l) (tl (- (length l) n) l)))
+let curs_erase "\e[0K";
 
 #map that takes a procedure which in turn doesn't take arguments
 #used only for side effects, see below.
 
 #note: tail recursive
-(let map-noargs (f l dummy)
-     (if (= l [])
-     	 true
-	 (map-noargs f (rest l) (f))))
+let map-noargs (f l dummy)
+    | = l [] => true,
+    | _ => map-noargs f (rest l) (f);
 
-(let range (inf sup)
-     (cond [(< sup inf) []]
-     	   [(< inf sup) (++ inf (range (+ inf 1) sup))]
-	   [else []]))
 
-(let escape_sequences [["cursor up" 91 65]
-     		       ["cursor down" 91 66]
-		       ["cursor right" 91 67]
-		       ["cursor left" 91 68]])
+let parse_arrow_key (ch)
+    | = ch "A" => "up",
+    | = ch "B" => "down",
+    | = ch "C" => "right",
+    | = ch "D" => "left",
+    | _ => "undefined";
 
-(let getch ()
-     (let fst_b (readch))
-     (if (!= (chtoi fst_b) 27)
-     	 fst_b
-	 (match (chtoi (readch))
-	     	[(= 91) (match (chtoi (readch))
-	     		       [(= 65) "up"]
-	     	    	       [(= 66) "down"]
-		    	       [(= 67) "right"]
-		    	       [(= 68) "left"]
-		    	       [_ "undefined"])]
-		[(_) "undefined"])))
+let getch ()
+    let fst_b (readch),
+    | != (chtoi $fst_b) 27 => @$fst_b,
+    | != (chtoi (readch)) 91 => "undefined",
+    | _ => parse_arrow_key (readch);
 
-(let overwrite (word color)
-     (print color word re_color_blank))
+let overwrite (word color)
+    print color word $re_color_blank,
+    @word;
 
-(let kind (x) (typeof (ast x)))
+let kind (x) typeof (ast x);
 
-(let map-aux (f l app)
-     (cond [(= l []) app]
-     	   [else (map-aux f (rest l) (++ app (f (first l))))]))
 
-(let map (f l)
-     (map-aux f l []))
+let if_then (p f)
+    | = (p) true => f;
 
-(let accumulate (f l app)
-     (cond [(= l []) app]
-     	   [else (accumulate f (rest l) (f (first l) app))]))
 
-(let min (a b) (if (< a b) a b))
-(let max (a b) (if (< a b) b a))
+let map-aux (f l app)
+    | = l [] => @app,
+    | _ => map-aux f (rest l) (++ app (f (first l)));
 
-(let number? (x) (= (typeof (ast x)) "number"))
-(let list? (x) (= (typeof (ast x)) "list"))
-(let string? (x) (= (typeof (ast x)) "string"))
-(let paren? (x) (or (= x "[") (= x "]")
-     	    	    (= x "(") (= x ")")))
+let map (f l)
+    map-aux f l [];
 
-(let space? (x) (or (= x " ") (= x "\t")))
+let number? (x) = (kind x) "number";
+let list? (x) = (typeof x) "list";
+let space? (x) or (= x " ") (= x "\t");
+let string? (x) = (kind x) "string";
+let paren? (x) ? @x | in ["[" "]" "(" ")"] => true, | _ => false;
+let operator? (x) = (typeof (stoid x)) "operator";
 
-(let ws_split-aux (l acc app)
-     (cond [(= l []) (if (= acc "") app (++ app acc))]
-     	   [(space? (first l)) (if (= acc "")
-	   	    	       	   (ws_split-aux (rest l) "" app)
-				   (ws_split-aux (rest l) "" (++ app acc)))]
-	   [else (ws_split-aux (rest l) (s+ acc (first l)) app)]))
 
-(let ws_split (s)
-     (ws_split-aux (stol s) "" []))
+let visit_dispatch (sentence)
+    | space? sentence => overwrite sentence $re_color_blank,
+    | number? sentence => overwrite sentence $re_color_green,
+    | string? sentence => overwrite sentence $re_color_cyan,
+    | paren? sentence => overwrite sentence $re_color_yellow,
+    | operator? sentence => overwrite sentence $re_color_purple,
+    | _ => overwrite sentence $re_color_blank;
 
-(let format_list-aux (l)
-     (cond [(= l []) []]
-	   [(= (rest l) []) (first l)]
-	   [(= (typeof (first l)) "list")
-	    (format_list (first l))]
-     	   [else (++ (first l) " " (format_list-aux (rest l)))]))
 
-(let format_list (s)
-     (++ "[" (format_list-aux (ast s)) "]"))
+let tokens+spaces-aux (l tks app in_s sl)
+    | and (= l []) (!= sl []) => ++ app (ltos sl),
+    | = tks [] => ++ app l,
+    | and (= (first l) '"') in_s => tokens+spaces-aux (rest l)
+                                                      (rest tks)
+                                                      (++ app
+                                                       (s+ (ltos sl)
+                                                           '"'))
+                                                      false
+                                                      [],
+    | = (first l) '"' => tokens+spaces-aux (rest l)
+                                           tks
+                                           app
+                                           true
+                                           ['"'],
+    | @in_s => tokens+spaces-aux (rest l) tks app in_s (++ sl (first l)),
+    | space? (first l) => tokens+spaces-aux (rest l)
+                                            tks
+                                            (++ app (first l))
+                                            false
+                                            [],
+    | _ => tokens+spaces-aux (rest l (length (stol (first tks))))
+      	   		             (rest tks)
+			                 (++ app (first tks))
+                             false
+                             [];
 
-# visits the AST of 'sentence' and highlights it
-(let visit (sentence)
-     (cond [(or (= sentence "(") (= sentence "["))
-            (overwrite sentence re_color_yellow)
-	    sentence]
-	   [(or (= sentence ")") (= sentence "]"))
-	    (overwrite sentence re_color_yellow)
-	    sentence]
-	   [(or (= sentence " ") (= sentence "\t"))
-	    (print sentence)
-	    sentence]
-	   [(= (kind sentence) "operator")
-     	    (overwrite sentence re_color_blue)
-	    sentence]
-	   [(= (kind sentence) "list")
-	    (let as_l (stol sentence))
-	    (ltos (map (let (e) (visit (tos e))) as_l))]
-	   [(= (kind sentence) "number")
-	    (overwrite sentence re_color_green)
-	    sentence]
-	   [(= (kind sentence) "error")
-	    (overwrite sentence re_color_red)
-	    sentence]
-	   [(= (kind sentence) "identifier")
-	    (overwrite sentence re_color_purple)
-	    sentence]
-	   [else
-	    (overwrite sentence re_color_blank)
-	    sentence]))
+let tokens+spaces (s tks)
+    tokens+spaces-aux (stol s) tks [] false [];
 
-(let find (l i)
-     (cond [(< i 0) []]
-     	   [else (first (tl 1 (hd (+ i 1) l)))]))
+let visit (s)
+    ltos (map visit_dispatch (tokens+spaces s (tokens s)));
 
-(let gus_aux (app as_list len inspos)
-     (flush)
-     (let cur (getch))
-     (cond [(= cur "left")
-	    (cond [(< 0 inspos)
-	    	   (print curs_bwd)
-		   (flush)
-		   (gus_aux app as_list len (- inspos 1))]
-		  [else (gus_aux app as_list len inspos)])]
-	   [(= cur "right")
-	    (cond [(< inspos len)
-	    	   (print curs_fwd)
-		   (flush)
-		   (gus_aux app as_list len (+ inspos 1))]
-		  [else (gus_aux app as_list len inspos)])]
-	   [(or (= cur "up") (= cur "down") (= cur "undefined"))
-	    (gus_aux app as_list len inspos)]
-	   [(= (chtoi cur) 10) (print "\n") app]
-	   [(or (= (chtoi cur) 127) (= (chtoi cur) 8))
-	    (cond [(< 0 inspos)
-		   (let del (delete as_list (- inspos 1)))
-		   (let new_app (ltos del))
-		   (print "\e[" inspos "D" curs_erase)
-		   (let formatted (visit new_app))
-	    	   (let diff (- (- len 1) (- inspos 1)))
-	    	   (cond [(< 0 diff) (print "\e[" diff "D")])
-	    	   (flush)
-		   (gus_aux new_app
-		  	    del
-		  	    (- len 1)
-			    (- inspos 1))]
-		  [else (gus_aux app
-		  		 as_list
-				 len
-				 0)])]
-	   [else
-	    (let new_app (ltos (insert as_list cur inspos)))
-	    (if (< 0 inspos) (print "\e[" inspos "D" curs_erase) false)
-	    (let formatted (visit new_app))
-	    (let new_as_list (stol new_app))
-	    (let diff (- (+ len 1) inspos))
-	    (cond [(< 1 diff) (print "\e[" diff "D" curs_fwd)])
-	    (flush)
-	    (gus_aux formatted new_as_list (+ len 1)
-		     (+ 1 inspos))]))
 
-(let get_user_string ()
-     (rawmode)
-     (let res (gus_aux "" [] 0 0))
-     (cookedmode)
-     res)
+let handle_backspace_keypress (app as_l len ins cur)
+    | < 0 ins => let del delete as_l (- ins 1),
+      	      	 let new_app ltos $del,
+		         print "\e[" ins "D" $curs_erase,
+		         let formatted visit $new_app,
+		         let diff - len ins,
+		         if_then () => < 0 $diff; () => print "\e[" $diff "D";,
+		         flush,
+		         $new_app $del (- len 1) (- ins 1), 
+    | _ => app as_l len ins;
 
-(let get_input (p)
-     (cond [(!= p false)
-     	    (print p)
-	    (flush)
-     	    (get_user_string)]
-	   [else (print (s+ (get PWD) "> "))
-	   	 (get_user_string)]))
+let handle_printable_keypress (app as_l len ins cur)
+    let new_app ltos (insert as_l cur ins),
+    let ins @ins,
+    if_then () => < 0 $ins; () => print "\e[" $ins "D" $curs_erase;,
+    visit $new_app,
+    let new_as_l stol $new_app,
+    let diff - (+ len 1) ins,
+    if_then () => < 1 $diff; () => print "\e[" $diff "D" $curs_fwd;,
+    flush,
+    [$new_app $new_as_l (+ len 1) (+ ins 1)];
 
-(let evloop (fun) (fun) (evloop fun))
+let handle_left_arrow_keypress (app as_l len ins cur)
+    | < 0 ins => print $curs_bwd, flush, app as_l len (- ins 1),
+    | _ => app as_l len ins;
 
-(if (defined prompt)
-    (evloop (let () (print (eval (get_input (prompt))))))
-    (evloop (let () (print (eval (get_input false))))))
+let handle_right_arrow_keypress (app as_l len ins cur)
+    | < ins len => print $curs_fwd, flush, app as_l len (+ ins 1),
+    | _ => app as_l len ins;
+
+# unused
+let handle_undefined_keypress (app as_l len ins cur)
+    ;
+
+# unused
+let handle_down_arrow_keypress (app as_l len ins cur)
+    ;
+
+# unused
+let handle_up_arrow_keypress (app as_l len ins cur)
+    ;
+
+let handle_newline_keypress (app as_l len ins cur)
+    @app;
+
+let keypress_dispatch_function (ch)
+    | = ch "\n" => @handle_newline_keypress,
+    | = ch "left" => @handle_left_arrow_keypress,
+    | = ch "right" => @handle_right_arrow_keypress,
+    | = ch "up" => @handle_up_arrow_keypress,
+    | = ch "down" => @handle_down_arrow_keypress,
+    | = ch "undefined" => @handle_undefined_keypress,
+    | or (= (chtoi ch) 8) (= (chtoi ch) 127) => @handle_backspace_keypress,
+    | _ => @handle_printable_keypress;
+
+let get_user_string_aux (app as_l len ins)
+    let ch getch,
+    let fun keypress_dispatch_function $ch,
+    ? $fun app as_l len ins $ch
+    | [a * c d] => get_user_string_aux $a $* $c $d,
+    | _ => @$_;
+
+let get_user_string ()
+    rawmode,
+    let res get_user_string_aux "" [] 0 0,
+    cookedmode,
+    @$res;
+
+let get_input (p)
+    | @p => print p, flush, get_user_string,
+    | _ => print (s+ (get PWD) "> "), get_user_string;
+
+let evloop (fun) fun, evloop fun;
+
+| defined prompt => evloop () => print "\n" (eval << get_input << prompt) "\n";,
+| _ => evloop () => print "\n" (eval << get_input false) "\n";
