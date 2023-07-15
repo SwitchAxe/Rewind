@@ -19,6 +19,7 @@
 #include "src/external.hpp"
 #include "src/types.hpp"
 #include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <iostream>
 #include <iterator>
@@ -100,11 +101,25 @@ Symbol eval_function(Symbol node, const std::vector<std::string> &PATH,
         return std::make_pair(lhs, rhs);
       });
   for (auto p : zipped) {
-    frame.insert_or_assign(std::get<std::string>(p.first.value),
-                           (p.second.type == Type::RawAst)
-                               ? p.second
-                               : eval(p.second, PATH, line));
+    if (p.second.is_lit) {
+      frame.insert_or_assign(std::get<std::string>(p.first.value), p.second);
+    } else if ((p.second.type == Type::RawAst) ||
+               (p.second.type == Type::Number) ||
+               (p.second.type == Type::String) ||
+               (p.second.type == Type::Boolean)) {
+      frame.insert_or_assign(std::get<std::string>(p.first.value), p.second);
+    } else if (p.second.type == Type::Identifier) {
+      if (auto csopt = callstack_variable_lookup(p.second);
+          csopt != std::nullopt) {
+        frame.insert_or_assign(std::get<std::string>(p.first.value), *csopt);
+      } else
+        frame.insert_or_assign(std::get<std::string>(p.first.value),
+                               eval(p.second, PATH, line));
+    } else
+      frame.insert_or_assign(std::get<std::string>(p.first.value),
+                             eval(p.second, PATH, line));
   }
+
   if (node.type != Type::RecFunCall)
     call_stack.push_back(std::make_pair(op, frame));
   else {
@@ -181,6 +196,8 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH,
       if (result.type == Type::RawAst) {
         return result;
       }
+      if (result.is_lit)
+        return result;
       result = eval(result, PATH, line);
       return result;
     } else
@@ -233,10 +250,21 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line) {
   // to compute the value for each node, including the root.
   std::vector<std::list<Symbol>> leaves;
   current_node = root;
+  if (root.is_lit)
+    return root;
   do {
     // for each node, visit each child and backtrack to the last parent node
     // when the last child is null, and continue with the second last node and
     // so on
+    if (current_node.is_lit) {
+      if (node_stk.empty())
+        return current_node;
+      if (leaves.empty())
+        leaves.push_back({});
+      leaves[leaves.size() - 1].push_back(current_node);
+      current_node = node_stk.top();
+      node_stk.pop();
+    }
     if (current_node.type == Type::List) {
       if (std::get<std::list<Symbol>>(current_node.value).empty()) {
         // if we're back to the root node, and we don't have any
@@ -377,22 +405,6 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line) {
           node_stk.pop();
           node_stk.push(dummy);
         }
-      } else if ((leaves.empty() || leaves[leaves.size() - 1].empty()) &&
-                 (current_node.type == Type::Identifier) &&
-                 (!user_defined_procedures.empty()) &&
-                 (!user_defined_procedures[user_defined_procedures.size() - 1]
-                       .contains(op)) &&
-                 (get_absolute_path(op, PATH) != std::nullopt) &&
-                 (!node_stk.empty())) {
-        if (leaves.empty())
-          leaves.push_back(std::list<Symbol>());
-        auto extcall = std::get<std::list<Symbol>>(node_stk.top().value);
-        leaves[leaves.size() - 1] = extcall;
-        leaves[leaves.size() - 1].push_front(current_node);
-        Symbol dummy;
-        dummy = Symbol(node_stk.top().name, std::list<Symbol>(), Type::List);
-        node_stk.pop();
-        node_stk.push(dummy);
       } else if (auto p_opt = callstack_variable_lookup(current_node);
                  (p_opt != std::nullopt) &&
                  (current_node.type == Type::Identifier)) {

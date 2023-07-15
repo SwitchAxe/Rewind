@@ -998,7 +998,7 @@ std::map<std::string, Functor> procedures = {
        for (auto ch : s) {
          l.push_back(Symbol("", std::string{ch}, Type::String));
        }
-       return Symbol("", l, Type::List);
+       return Symbol("", l, Type::List, true);
      }}},
     {"stoid", {[](std::list<Symbol> args) -> Symbol {
        if ((args.size() != 1) || (args.front().type != Type::String)) {
@@ -1607,7 +1607,7 @@ std::map<std::string, Functor> procedures = {
          ret.push_back(lst.front());
          lst.pop_front();
        }
-       return Symbol("", ret, args.front().type);
+       return Symbol("", ret, args.front().type, true);
      }}},
     {"tl", {[](std::list<Symbol> args) -> Symbol {
        if (args.front().type != Type::Number) {
@@ -1634,7 +1634,7 @@ std::map<std::string, Functor> procedures = {
          ret.push_back(lst.front());
          lst.pop_front();
        }
-       Symbol rets = Symbol("", ret, args.front().type);
+       Symbol rets = Symbol("", ret, args.front().type, true);
        return rets;
      }}},
     {"first", {[](std::list<Symbol> args) -> Symbol {
@@ -1682,7 +1682,7 @@ std::map<std::string, Functor> procedures = {
          return Symbol("", l, sym.type);
        }
        l.pop_front();
-       return Symbol("", l, sym.type);
+       return Symbol("", l, sym.type, true);
      }}},
     {"delete", {[](std::list<Symbol> args) -> Symbol {
        if ((args.size() != 2) ||
@@ -1706,7 +1706,7 @@ std::map<std::string, Functor> procedures = {
            }
            i++;
          }
-         return Symbol("", l, Type::List);
+         return Symbol("", l, Type::List, true);
        } else {
          uidx = std::get<long long unsigned int>(args.front().value);
          long long unsigned int i = 0;
@@ -1746,7 +1746,7 @@ std::map<std::string, Functor> procedures = {
            }
            i++;
          }
-         return Symbol("", l, new_t);
+         return Symbol("", l, new_t, true);
        } else {
          uidx = std::get<long long unsigned int>(args.back().value);
          long long unsigned int i = 0;
@@ -1805,7 +1805,7 @@ std::map<std::string, Functor> procedures = {
            l.push_back(e);
          }
        }
-       return Symbol("", l, (must_ret_ast) ? Type::RawAst : Type::List);
+       return Symbol("", l, (must_ret_ast) ? Type::RawAst : Type::List, true);
      }}},
     {"load", {[](std::list<Symbol> args, path PATH) -> Symbol {
        Symbol last_evaluated;
@@ -1934,7 +1934,7 @@ std::map<std::string, Functor> procedures = {
        for (auto tk : tks) {
          ret.push_back(Symbol("", tk, Type::String));
        }
-       return Symbol("", ret, Type::List);
+       return Symbol("", ret, Type::List, true);
      }}}};
 
 std::array<std::string, 10> special_forms = {

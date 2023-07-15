@@ -49,10 +49,18 @@ struct Symbol {
     name = _n;
     value = _v;
     type = _t;
+    is_lit = false;
+  }
+  Symbol(std::string _n, _Type _v, Type _t, bool _b) {
+    name = _n;
+    value = _v;
+    type = _t;
+    is_lit = _b;
   }
   std::string name; // empty string if not present
   _Type value;
   Type type;
+  bool is_lit;
 };
 
 // function signature for the builtins
