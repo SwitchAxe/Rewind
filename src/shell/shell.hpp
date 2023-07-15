@@ -34,9 +34,10 @@ std::string rewind_read_file(std::string filename) {
   bool is_comment = false;
   while (std::getline(in, temp)) {
     // comments are skipped
+    is_comment = false;
     for (auto ch : temp) {
       if ((ch != ' ') && (ch != '\t')) {
-        if (ch == '#') {
+        if ((ch == '#') || is_comment) {
           is_comment = true;
         } else
           is_comment = false;
@@ -57,9 +58,17 @@ rewind_split_file(std::string content) {
   int current_line = 0;
   std::string temp;
   bool in_string = false;
+  bool in_singles = false;
   for (int i = 0; i < content.size(); ++i) {
     if ((!in_string) && (content[i] == '\n')) {
       current_line++;
+    }
+    if (content[i] == '\'') {
+      in_singles = !in_singles;
+    }
+    if (in_singles) {
+      temp += content[i];
+      continue;
     }
     if (content[i] == '"') {
       temp += content[i];

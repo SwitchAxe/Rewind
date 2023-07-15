@@ -285,7 +285,23 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line) {
         auto templ = std::get<std::list<Symbol>>(current_node.value);
         templ.pop_front();
         current_node.value = templ;
-
+        if (child.type == Type::List) {
+          auto l = std::get<std::list<Symbol>>(child.value);
+          if (l.empty()) {
+            if (leaves.empty())
+              leaves.push_back({});
+            leaves[leaves.size() - 1].push_back(child);
+            continue;
+          }
+          auto frnt = l.front();
+          if ((frnt.type == Type::Number) || (frnt.type == Type::String) ||
+              (frnt.type == Type::Boolean)) {
+            if (leaves.empty())
+              leaves.push_back({});
+            leaves[leaves.size() - 1].push_back(child);
+            continue;
+          }
+        }
         // if the first element of the 'templ' list is another list then
         // we might have an external program call with env vars, so we must
         // act carefully and delay the evaluation up until 'eval_primitive_node'
@@ -323,6 +339,20 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line) {
     } else {
       if (current_node.type == Type::RawAst) {
         return current_node;
+      }
+      if ((current_node.type == Type::Boolean) ||
+          (current_node.type == Type::Number) ||
+          (current_node.type == Type::String)) {
+
+        if (leaves.empty())
+          leaves.push_back(std::list<Symbol>{});
+        leaves[leaves.size() - 1].push_back(current_node);
+
+        if (node_stk.empty())
+          return leaves[leaves.size() - 1].front();
+        current_node = node_stk.top();
+        node_stk.pop();
+        continue;
       }
       std::string op;
       if ((current_node.type == Type::Identifier) ||
