@@ -54,7 +54,7 @@ let kind (x) typeof (ast x);
 
 
 let if_then (p f)
-    | = (p) true => f;
+    | p => f;
 
 
 let map-aux (f l app)
@@ -114,28 +114,29 @@ let tokens+spaces (s tks)
 let visit (s)
     ltos (map visit_dispatch (tokens+spaces s (tokens s)));
 
-
 let handle_backspace_keypress (app as_l len ins cur)
     | < 0 ins => let del delete as_l (- ins 1),
-      	      	 let new_app ltos $del,
-		         print "\e[" ins "D" $curs_erase,
-		         let formatted visit $new_app,
-		         let diff - len ins,
-		         if_then () => < 0 $diff; () => print "\e[" $diff "D";,
-		         flush,
-		         $new_app $del (- len 1) (- ins 1), 
-    | _ => app as_l len ins;
+      	      	 let new_app_d ltos $del,
+		 print "\e[" ins "D" $curs_erase,
+		 let formatted visit $new_app_d,
+		 let diff - len ins,
+		 if_then () => < 0 $diff; () => print "\e[" $diff "D";,
+		 flush,
+		 $new_app_d $del (- len 1) (- ins 1), 
+    | _ => flush, app as_l len ins;
 
 let handle_printable_keypress (app as_l len ins cur)
-    let new_app ltos (insert as_l cur ins),
+    let new_app_i ltos (insert as_l cur ins),
     let ins @ins,
-    if_then () => < 0 $ins; () => print "\e[" $ins "D" $curs_erase;,
-    visit $new_app,
-    let new_as_l stol $new_app,
-    let diff - (+ len 1) ins,
-    if_then () => < 1 $diff; () => print "\e[" $diff "D" $curs_fwd;,
+    | < 0 ins => print "\e[" $ins "D" $curs_erase.
+    visit $new_app_i,
     flush,
-    [$new_app $new_as_l (+ len 1) (+ ins 1)];
+    let new_as_l stol $new_app_i,
+    let diff - len ins,
+    #print "diff = " $diff "\n",
+    | < 1 $diff  => print "\e[" $diff "D" $curs_fwd.
+    flush,
+    $new_app_i $new_as_l (+ len 1) (+ ins 1);
 
 let handle_left_arrow_keypress (app as_l len ins cur)
     | < 0 ins => print $curs_bwd, flush, app as_l len (- ins 1),
@@ -185,7 +186,7 @@ let get_user_string ()
 
 let get_input (p)
     | @p => print p, flush, get_user_string,
-    | _ => print (s+ (get PWD) "> "), get_user_string;
+    | _ => print (s+ (get PWD) "> "), flush, get_user_string;
 
 let evloop (fun) fun, evloop fun;
 

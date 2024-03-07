@@ -583,9 +583,12 @@ std::map<std::string, Functor> procedures = {
          }
          std::reverse(environment_variables.begin(),
                       environment_variables.end());
-         pipe(fd);
-         pipe(readfd);
-         write(fd[1], str.c_str(), str.size());
+         if (pipe(fd) == -1)
+	   throw std::logic_error{"Pipe error!\n"};
+	 if (pipe(readfd) == -1)
+	   throw std::logic_error{"Pipe error!\n"};
+         if (write(fd[1], str.c_str(), str.size()) == -1)
+	    throw std::logic_error{"Write error!\n"};
          if (ext.empty()) {
            throw std::logic_error{
                "Exception in '<<<' (here-string): Invalid pipe!\n"};
@@ -628,12 +631,14 @@ std::map<std::string, Functor> procedures = {
          int old_read_end;
          for (Symbol cmd : ext) {
            old_read_end = dup(readfd[0]);
-           pipe(readfd);
+           if (pipe(readfd) == -1)
+	      throw std::logic_error{"Pipe error!\n"};
            status = rewind_call_ext_program(cmd, PATH, true, readfd[1],
                                             old_read_end);
          }
          old_read_end = dup(readfd[0]);
-         pipe(readfd);
+         if (pipe(readfd) == -1)
+	    throw std::logic_error{"Pipe error!\n"};
          status =
              rewind_call_ext_program(last, PATH, true, readfd[1], old_read_end);
          close(readfd[1]);
@@ -655,16 +660,19 @@ std::map<std::string, Functor> procedures = {
          return Symbol("", result, Type::String);
        }
        // not a pipe
-       pipe(fd);
-       pipe(readfd);
-       write(fd[1], str.c_str(), str.size());
+       if (pipe(fd) == -1)
+	 throw std::logic_error{"Pipe error!\n"};
+       if (pipe(readfd) == -1)
+	 throw std::logic_error{"Pipe error!\n"};
+       if (write(fd[1], str.c_str(), str.size()))
+	  throw std::logic_error{"Write error!\n"};
        auto lit = std::find_if(ext.begin(), ext.end(), [&](Symbol &s) -> bool {
          bool is_local_executable =
-             std::holds_alternative<std::string>(s.value) &&
-             (std::get<std::string>(s.value).substr(0, 2) == "./");
+	   std::holds_alternative<std::string>(s.value) &&
+	   (std::get<std::string>(s.value).substr(0, 2) == "./");
          bool is_in_path = std::holds_alternative<std::string>(s.value) &&
-                           get_absolute_path(std::get<std::string>(s.value),
-                                             PATH) != std::nullopt;
+	   get_absolute_path(std::get<std::string>(s.value),
+			     PATH) != std::nullopt;
          return is_local_executable || is_in_path;
        });
        if (lit == ext.end()) {
@@ -1526,7 +1534,8 @@ std::map<std::string, Functor> procedures = {
        // read the character
        int ch;
        int tmp[1];
-       read(STDIN_FILENO, tmp, 1);
+       if (read(STDIN_FILENO, tmp, 1) == -1)
+	  throw std::logic_error{"Read error!\n"};
        ch = tmp[0];
        // restore the normal terminal mode
        auto ret = Symbol("", std::string{static_cast<char>(ch)}, Type::String);
@@ -1692,34 +1701,43 @@ std::map<std::string, Functor> procedures = {
                                 "list and an index!\n"};
        }
        auto l = std::get<std::list<Symbol>>(args.front().value);
-       auto new_t = args.front().type;
        args.pop_front();
-       long long signed int sidx = 0;
-       long long unsigned int uidx = 0;
-       if (std::holds_alternative<long long signed int>(args.front().value)) {
-         sidx = std::get<long long signed int>(args.front().value);
-         long long signed int i = 0;
-         for (std::list<Symbol>::iterator it = l.begin(); it != l.end(); ++it) {
-           if (i == sidx) {
-             l.erase(it);
-             break;
-           }
-           i++;
-         }
-         return Symbol("", l, Type::List, true);
-       } else {
-         uidx = std::get<long long unsigned int>(args.front().value);
-         long long unsigned int i = 0;
-         for (std::list<Symbol>::iterator it = l.begin(); it != l.end(); ++it) {
-           if (i == uidx) {
-             l.erase(it);
-             break;
-           }
-           i++;
-         }
-         return Symbol("", l, new_t);
-       }
-     }}},
+       return
+	 std::visit([&]<class T>(T x) -> Symbol {
+	     if constexpr (std::is_same_v<T, long long unsigned int> ||
+			   std::is_same_v<T, long long signed int>) {
+	       if (l.empty()) {
+		 if (x == 0) return Symbol("", std::list<Symbol>{}, Type::List);
+		 throw std::logic_error {"Trying to delete an element at"
+					 " an index > 0, in an empty list!\n"};
+	       }
+
+	       if (x > l.size()) {
+		 throw std::logic_error {
+		   "Trying to delete a list element but "
+		   "the index is > the length of the list!"
+		 };
+	       }
+
+	       if (x == l.size()) {
+		 // delete at the end
+		 l.pop_back();
+		 return Symbol("", l, Type::List);
+	       }
+	       
+	       size_t idx = 0;
+	       for (auto it = l.begin(); it != l.end(); ++it) {
+		 if (idx == x) {
+		   l.erase(it);
+		   break;
+		 }
+		 idx++;
+	       }
+	       return Symbol("", l, Type::List);
+	     }
+	     throw std::logic_error {"Invalid index for list deletion!\n"};
+	   }, args.back().value);
+    }}},
     {"insert", {[](std::list<Symbol> args) -> Symbol {
        if ((args.size() != 3) ||
            (!std::holds_alternative<std::list<Symbol>>(args.front().value)) ||
@@ -1728,41 +1746,39 @@ std::map<std::string, Functor> procedures = {
                                 "list, an element, and an index!\n"};
        }
        auto l = std::get<std::list<Symbol>>(args.front().value);
-       auto new_t = args.front().type;
        args.pop_front();
-       long long signed int sidx = 0;
-       long long unsigned int uidx = 0;
-       if (std::holds_alternative<long long signed int>(args.back().value)) {
-         sidx = std::get<long long signed int>(args.back().value);
-         long long signed int i = 0;
-         if (sidx >= l.size()) {
-           l.insert(l.end(), args.front());
-           return Symbol("", l, Type::List);
-         }
-         for (std::list<Symbol>::iterator it = l.begin(); it != l.end(); ++it) {
-           if (i == sidx) {
-             l.insert(it, args.front());
-             break;
-           }
-           i++;
-         }
-         return Symbol("", l, new_t, true);
-       } else {
-         uidx = std::get<long long unsigned int>(args.back().value);
-         long long unsigned int i = 0;
-         if (uidx >= l.size()) {
-           l.insert(l.end(), args.front());
-           return Symbol("", l, Type::List);
-         }
-         for (std::list<Symbol>::iterator it = l.begin(); it != l.end(); ++it) {
-           if (i == uidx) {
-             l.insert(it, args.front());
-             break;
-           }
-           i++;
-         }
-         return Symbol("", l, Type::List);
-       }
+       return
+	 std::visit([&]<class T>(T x) -> Symbol {
+	     if constexpr (std::is_same_v<T, long long unsigned int> ||
+			   std::is_same_v<T, long long signed int>) {
+	       if (l.empty()) {
+		 if (x == 0) return Symbol("", std::list<Symbol>{args.front()}, Type::List);
+		 throw std::logic_error {"Trying to insert an element at"
+					 " an index > 0, in an empty list!\n"};
+	       }
+	       if (x > l.size()) {
+		 throw std::logic_error {"Trying to insert an element at "
+					 "an index greater than the len(l)!"};
+	       }
+
+	       if (x == l.size()) {
+		 // insert at the end
+		 l.push_back(args.front());
+		 return Symbol("", l, Type::List);
+	       }
+	       
+	       size_t idx = 0;
+	       for (auto it = l.begin(); it != l.end(); ++it) {
+		 if (idx == x) {
+		   l.insert(it, args.front());
+		   break;
+		 }
+		 idx++;
+	       }
+	       return Symbol("", l, Type::List);
+	     }
+	     throw std::logic_error {"Invalid index for list insert!\n"};
+	 }, args.back().value);
      }}},
     {"reverse", {[](std::list<Symbol> args) -> Symbol {
        if ((args.size() != 1) ||

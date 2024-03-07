@@ -150,7 +150,8 @@ Symbol rewind_pipe(Symbol node, const std::vector<std::string> &PATH,
   std::list<Symbol> nodel = std::get<std::list<Symbol>>(node.value);
   auto last = nodel.back();
   nodel.pop_back();
-  pipe(fd);
+  if (pipe(fd) == -1)
+    throw std::logic_error {"Pipe error!\n"};
   if (nodel.empty()) {
     status = rewind_call_ext_program(last, PATH, true, fd[1], 0);
     close(fd[1]);
@@ -183,7 +184,8 @@ Symbol rewind_pipe(Symbol node, const std::vector<std::string> &PATH,
   for (auto cur : nodel) {
     old_read_end = dup(fd[0]);
     close(fd[0]);
-    pipe(fd);
+    if (pipe(fd) == -1)
+      throw std::logic_error{"Pipe error!\n"};
     status = rewind_call_ext_program(cur, PATH, true, fd[1], old_read_end);
     close(old_read_end);
   }
@@ -191,7 +193,8 @@ Symbol rewind_pipe(Symbol node, const std::vector<std::string> &PATH,
     int cnt;
     old_read_end = dup(fd[0]);
     close(fd[0]);
-    pipe(fd);
+    if (pipe(fd) == -1)
+      throw std::logic_error{"Pipe error!\n"};
     status = rewind_call_ext_program(last, PATH, true, fd[1], old_read_end);
     close(fd[1]);
     close(old_read_end);
