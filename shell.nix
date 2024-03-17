@@ -2,5 +2,6 @@
 
 pkgs.mkShell {
   packages = [ pkgs.readline
-               pkgs.libgcc ];
+               pkgs.libgcc
+               pkgs.gdb ];
 }
