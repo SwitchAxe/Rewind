@@ -14,9 +14,8 @@
   You should have received a copy of the GNU General Public License along with
   Rewind. If not, see <https://www.gnu.org/licenses/>.
 */
-#include "matchit.h"
-#include "src/shell/shell.hpp"
 #include "types.hpp"
+#include "parser.hpp"
 #include <algorithm>
 #include <charconv>
 #include <cstdio>
@@ -44,9 +43,10 @@ struct PidSym {
   Symbol s;
   pid_t pid;
 };
+
+
 std::string rec_print_ast(Symbol root, bool debug = false);
-Symbol get_ast(std::vector<std::string> tokens, path PATH);
-std::vector<std::string> get_tokens(std::string stream);
+RecInfo parse(std::vector<Token> tokens, int i);
 std::string rewind_read_file(std::string filename);
 std::vector<std::pair<int, std::string>> rewind_split_file(std::string content);
 std::vector<std::map<std::string, Symbol>> variables;
@@ -248,10 +248,22 @@ bool weak_compare(Symbol fst, Symbol other) {
   }
   return false;
 }
-
-// forward declaration so i can use it in the next function definition
+namespace fs = std::filesystem;
 std::optional<std::string>
-get_absolute_path(std::string progn, const std::vector<std::string> &PATH);
+get_absolute_path(std::string progn, const path &PATH) {
+  std::string full_path;
+  auto it = PATH.begin();
+  it = std::find_if(PATH.begin(), PATH.end(),
+                    [&](const std::string &dir) -> bool {
+                      std::string query = dir + "/" + progn;
+                      return fs::directory_entry(query).exists();
+                    });
+  if (it != PATH.end()) {
+    return std::string{(*it) + "/" + progn};
+  }
+  return std::nullopt;
+}
+
 std::map<std::string, Symbol> cmdline_args;
 void get_env_vars(Symbol node, path PATH) {
   // called for the side effect of modifying the vector above.
@@ -285,24 +297,14 @@ void get_env_vars(Symbol node, path PATH) {
             "Expected a string.\n"};
       }
       std::string key = std::get<std::string>(fst.value);
-      using namespace matchit;
-      Id<std::string> s;
-      Id<long long int> i;
-      Id<long long unsigned int> u;
-      Id<bool> b;
-      Id<std::list<Symbol>> l;
-      std::string value = match(snd.value)(
-          pattern | as<std::string>(s) = [&] { return *s; },
-          pattern | as<long long int>(i) = [&] { return std::to_string(*i); },
-          pattern | as<long long unsigned int>(u) =
-              [&] { return std::to_string(*u); },
-          pattern | as<bool>(b) = [&] { return *b ? "true" : "false"; },
-          pattern | as<std::list<Symbol>>(_) =
-              [&] {
-                throw std::logic_error{
-                    "Unexpected list in key/value pair for an env var!\n"};
-                return "";
-              });
+      std::string value = std::visit(overloaded{
+	[](std::string s) { return s; },
+	[](unsigned long long int x) { return std::to_string(x); },
+	[](signed long long int x) { return std::to_string(x); },
+	[](bool b) -> std::string { return b ? "true" : "false"; },
+	[](std::list<Symbol> l) -> std::string { return ""; },
+	[](std::monostate) -> std::string { return ""; }
+      }, snd.value);
       if (environment_variables.empty()) {
         environment_variables.push_back(
             std::map<std::string, std::string>{{key, value}});
@@ -330,24 +332,8 @@ Symbol rewind_redirect_append(Symbol node,
                               const std::vector<std::string> &PATH);
 Symbol rewind_redirect_overwrite(Symbol node,
                                  const std::vector<std::string> &PATH);
-namespace fs = std::filesystem;
-// just so the compiler doesn't complain about nonexistent PATH
-// later in the 'procedures' map.
-Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line = 0);
-;
-std::optional<std::string> get_absolute_path(std::string progn, path &PATH) {
-  std::string full_path;
-  auto it = PATH.begin();
-  it = std::find_if(PATH.begin(), PATH.end(),
-                    [&](const std::string &dir) -> bool {
-                      std::string query = dir + "/" + progn;
-                      return fs::directory_entry(query).exists();
-                    });
-  if (it != PATH.end()) {
-    return std::string{(*it) + "/" + progn};
-  }
-  return std::nullopt;
-}
+
+Symbol eval(Symbol root, const path &PATH, int line = 0);
 
 std::optional<Symbol> variable_lookup(Symbol id) {
   if (!std::holds_alternative<std::string>(id.value))
@@ -389,18 +375,6 @@ std::optional<Symbol> callstack_variable_lookup(Symbol id) {
 }
 
 bool convert_value_to_bool(Symbol sym) {
-  using namespace matchit;
-#define p pattern
-  auto is_strlit = [](const std::string &s) -> bool {
-    return (s.size() > 1) && s[0] == '"' && s[s.length() - 1] == '"';
-  };
-  using str = std::string;
-  using lst = std::list<Symbol>;
-  Id<str> s;
-  Id<lst> l;
-  Id<long long int> i;
-  Id<long long unsigned int> u;
-  Id<bool> b;
   auto maybe_id = variable_lookup(sym);
   auto maybe_cs_id = callstack_variable_lookup(sym);
   bool clause;
@@ -409,13 +383,14 @@ bool convert_value_to_bool(Symbol sym) {
   } else if (maybe_id != std::nullopt) {
     clause = convert_value_to_bool(*maybe_id);
   } else
-    clause = match(sym.value)(
-        p | as<long long int>(i) = [&] { return *i != 0; },
-        p | as<long long unsigned int>(u) = [&] { return *i != 0; },
-        p | as<str>(s) = [&] { return !(*s).empty(); },
-        p | as<bool>(b) = [&] { return *b; },
-        p | as<lst>(l) = [&] { return (!(*l).empty()); });
-#undef p
+    clause = std::visit(overloaded {
+      [](std::string s) { return !s.empty(); },
+      [](signed long long int x) { return x != 0; },
+      [](unsigned long long int x) { return x != 0; },
+      [](bool b) { return b; },
+      [](std::list<Symbol> l) { return !l.empty(); },
+      [](std::monostate) { return false; }
+    }, sym.value);
   return clause;
 }
 
@@ -714,7 +689,7 @@ std::map<std::string, Functor> procedures = {
     {"+", {[](std::list<Symbol> args) -> Symbol {
        int r = 0;
        for (auto e : args) {
-         if (e.type == Type::Defunc)
+	 if (e.type == Type::Defunc)
            continue;
          if (e.type != Type::Number) {
            throw std::logic_error{"Unexpected operand to the '+' procedure!\n"};
@@ -1042,53 +1017,8 @@ std::map<std::string, Functor> procedures = {
        return Symbol("", ret, Type::String);
      }}},
     {"let", {[](std::list<Symbol> args, path PATH) -> Symbol {
-       if ((args.front().type != Type::Operator) &&
-           (args.front().type != Type::Identifier)) {
-         if (args.front().type != Type::List) {
-           throw std::logic_error{
-               "First argument to 'let' must be an identifier!\n"};
-         }
-         static int lambda_id = 0;
-         std::string name = "__re_lambda_" + std::to_string(lambda_id);
-         lambda_id++;
-         Symbol arguments = args.front();
-         args.pop_front();
-         Symbol stmts = Symbol("", args, Type::List);
-         if (user_defined_procedures.empty()) {
-           user_defined_procedures.push_back(
-               std::map<std::string, std::pair<Symbol, Symbol>>{
-                   {name, std::make_pair(arguments, stmts)}});
-         } else {
-           user_defined_procedures[user_defined_procedures.size() - 1]
-               .insert_or_assign(name, std::make_pair(arguments, stmts));
-         }
-         // return the name of the lambda. this is used to assign the name
-         // of the "anonymous" (user-side) function to something that can
-         // be called by the interpreter when the user calls a parameter
-         // that represents a lambda. i really hope this makes sense to you
-         // as it does to me
-         return Symbol("", name, Type::Identifier);
-       }
-       if (args.size() > 2) {
-         // function definition
-         std::string name = std::get<std::string>(args.front().value);
-         args.pop_front();
-         Symbol arguments = args.front();
-         args.pop_front();
-         Symbol stmts = Symbol("", args, Type::List);
-         if (user_defined_procedures.empty()) {
-           user_defined_procedures.push_back(
-               std::map<std::string, std::pair<Symbol, Symbol>>{
-                   {name, std::make_pair(arguments, stmts)}});
-         } else {
-           user_defined_procedures[user_defined_procedures.size() - 1]
-               .insert_or_assign(name, std::make_pair(arguments, stmts));
-         }
-         return Symbol("", true, Type::Defunc);
-       }
        Symbol id = args.front();
        args.pop_front();
-
        Symbol result = eval(args.front(), PATH);
        if (variables.empty()) {
          variables.push_back(std::map<std::string, Symbol>());
@@ -1824,84 +1754,92 @@ std::map<std::string, Functor> procedures = {
        return Symbol("", l, (must_ret_ast) ? Type::RawAst : Type::List, true);
      }}},
     {"load", {[](std::list<Symbol> args, path PATH) -> Symbol {
-       Symbol last_evaluated;
-       for (auto e : args) {
-         if ((e.type != Type::Identifier) && (e.type != Type::String)) {
-           throw std::logic_error{"Arguments to 'load' must be either string "
-                                  "literals or barewords!"};
-         }
-         std::string filename = std::get<std::string>(e.value);
-         std::vector<std::pair<int, std::string>> expr_list =
-             rewind_split_file(rewind_read_file(filename));
-         for (auto expr : expr_list) {
-           try {
-             Symbol ast = get_ast(get_tokens(expr.second), PATH);
-             last_evaluated = eval(ast, PATH);
-           } catch (std::logic_error e) {
-             std::cout << "Rewind: Exception in included file " << filename
-                       << "at line " << expr.first << ": " << e.what() << "\n";
-           }
-         }
-       }
-       return last_evaluated;
+      Symbol last_evaluated;
+      Symbol last_expr;
+      for (auto e : args) {
+        if ((e.type != Type::Identifier) && (e.type != Type::String)) {
+          throw std::logic_error{"Arguments to 'load' must be either string "
+                                 "literals or barewords!"};
+        }
+        std::string filename = std::get<std::string>(e.value);
+
+	std::vector<Token> tks = get_tokens(rewind_read_file(filename));
+	RecInfo ast;
+	do {
+	  try {
+	    ast = parse(tks);
+	    last_expr = ast.result;
+	    last_evaluated = eval(last_expr, PATH);
+	  } catch (std::logic_error ex) {
+	    std::string linum = format_line(ast.line);
+	    throw std::logic_error {"(file " + filename + "), " +
+				    linum + ": " + ex.what()};
+	  }
+	} while (ast.end_index < tks.size());
+      }
+      return last_evaluated;
      }}},
     {"eval", {[](std::list<Symbol> args, path PATH) -> Symbol {
-       if ((args.size() != 1) || (args.front().type != Type::String)) {
-         throw std::logic_error{
-             "'eval' expects exactly one string to evaluate!\n"};
-       }
-       Symbol last_evaluated;
-       std::string line = std::get<std::string>(args.front().value);
-       if ((line == "exit") || (line == "(exit)")) {
-         exit(EXIT_SUCCESS);
-         return Symbol("", false, Type::Command);
-       }
-       try {
-         Symbol ast = get_ast(get_tokens(line), PATH);
-         last_evaluated = eval(ast, PATH);
-         if ((last_evaluated.type != Type::Command) &&
-             (last_evaluated.type != Type::CommandResult))
-           rec_print_ast(last_evaluated);
-       } catch (std::logic_error ex) {
-         return Symbol("", ex.what(), Type::Error);
-       }
-       return last_evaluated;
+      if ((args.size() != 1) || (args.front().type != Type::String)) {
+        throw std::logic_error{
+          "'eval' expects exactly one string to evaluate!\n"};
+      }
+      Symbol last_evaluated;
+      Symbol last_expr;
+      std::string line = std::get<std::string>(args.front().value);
+      if ((line == "exit") || (line == "(exit)")) {
+        exit(EXIT_SUCCESS);
+        return Symbol("", false, Type::Command);
+      }
+      try {
+        RecInfo ast = parse(get_tokens(line));
+	last_expr = ast.result;
+        last_evaluated = eval(last_expr, PATH);
+        if ((last_evaluated.type != Type::Command) &&
+            (last_evaluated.type != Type::CommandResult))
+          std::cout << rec_print_ast(last_evaluated);
+      } catch (std::logic_error ex) {
+        return Symbol("", ex.what(), Type::Error);
+      }
+      return last_evaluated;
      }}},
     {"typeof", {[](std::list<Symbol> args, path PATH) -> Symbol {
-       if (args.size() != 1) {
-         throw std::logic_error{
-             "The 'typeof' procedure expects exactly one symbol!\n"};
-       }
+      if (args.size() != 1) {
+        throw std::logic_error{
+          "The 'typeof' procedure expects exactly one symbol!\n"};
+      }
 
-       Symbol sym;
-       if (args.front().type == Type::RawAst) {
-         sym = get_ast(get_tokens(rec_print_ast(args.front())), PATH);
-       } else
-         sym = args.front();
-       switch (sym.type) {
-       case Type::List:
-         return Symbol("", "list", Type::String);
-         break;
-       case Type::Number:
-         return Symbol("", "number", Type::String);
-         break;
-       case Type::Identifier:
-         return Symbol("", "identifier", Type::String);
-         break;
-       case Type::String:
-         return Symbol("", "string", Type::String);
-         break;
-       case Type::Boolean:
-         return Symbol("", "boolean", Type::String);
-         break;
-       case Type::Operator:
-         return Symbol("", "operator", Type::String);
-         break;
-       case Type::Error:
-         return Symbol("", "error", Type::String);
-       default:
-         return Symbol("", "undefined", Type::String);
-       }
+      RecInfo sym;
+      Symbol ast;
+      if (args.front().type == Type::RawAst) {
+        sym = parse(get_tokens(rec_print_ast(args.front())));
+	ast = sym.result;
+      } else
+        ast = args.front();
+      switch (ast.type) {
+      case Type::List:
+        return Symbol("", "list", Type::String);
+        break;
+      case Type::Number:
+        return Symbol("", "number", Type::String);
+        break;
+      case Type::Identifier:
+        return Symbol("", "identifier", Type::String);
+        break;
+      case Type::String:
+        return Symbol("", "string", Type::String);
+        break;
+      case Type::Boolean:
+        return Symbol("", "boolean", Type::String);
+        break;
+      case Type::Operator:
+        return Symbol("", "operator", Type::String);
+        break;
+      case Type::Error:
+        return Symbol("", "error", Type::String);
+      default:
+        return Symbol("", "undefined", Type::String);
+      }
      }}},
     {"ast", {[](std::list<Symbol> args, path PATH) -> Symbol {
        // what this function  does is, it takes a single string as input,
@@ -1918,16 +1856,16 @@ std::map<std::string, Functor> procedures = {
        }
        input = std::get<std::string>(args.front().value);
        try {
-         auto ast = get_ast(get_tokens(input), PATH);
-         if (ast.type == Type::List) {
-           ast.type = Type::RawAst;
-           auto l = std::get<std::list<Symbol>>(ast.value);
+         auto ast = parse(get_tokens(input));
+         if (ast.result.type == Type::List) {
+           ast.result.type = Type::RawAst;
+           auto l = std::get<std::list<Symbol>>(ast.result.value);
            for (auto &e : l) {
              e.type = Type::RawAst;
            }
-           ast.value = l;
+           ast.result.value = l;
          }
-         return ast;
+         return ast.result;
        } catch (std::logic_error ex) {
          return Symbol("", std::string(ex.what()), Type::Error);
        };
@@ -1944,11 +1882,11 @@ std::map<std::string, Functor> procedures = {
          throw std::logic_error{
              "The 'tokens' function only accepts a single string!\n"};
        }
-       std::vector<std::string> tks =
+       std::vector<Token> tks =
            get_tokens(std::get<std::string>(args.front().value));
        auto ret = std::list<Symbol>();
        for (auto tk : tks) {
-         ret.push_back(Symbol("", tk, Type::String));
+         ret.push_back(Symbol("", tk.tk, Type::String));
        }
        return Symbol("", ret, Type::List, true);
      }}}};

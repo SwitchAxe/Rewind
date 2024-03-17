@@ -25,25 +25,15 @@
 #include <unistd.h>
 
 std::string to_str(Symbol sym) {
-  const auto is_strlit = [](std::string s) -> bool {
-    return (s.size() > 1) && (s[0] == '"') && (s[s.size() - 1] == '"');
-  };
-  using namespace matchit;
-  Id<std::string> s;
-  Id<long long int> in;
-  Id<long long unsigned int> un;
-  Id<bool> b;
-#define p pattern
-  std::string arg = match(sym.value)(
-      p | as<std::string>(s) = [&] { return *s; },
-      p | as<long long int>(in) = [&] { return std::to_string(*in); },
-      p | as<long long unsigned int>(un) = [&] { return std::to_string(*un); },
-      p | as<bool>(b) = [&] { return (*b == true) ? "true" : "false"; });
-  if (is_strlit(arg)) {
-    arg = arg.substr(1, arg.size() - 2);
-  }
-
-#undef p
+  std::string arg = std::visit(overloaded{
+    [](std::string s) { return is_strlit(s) ? s.substr(1, s.size() - 2) : s; },
+    [](signed long long int x) { return std::to_string(x); },
+    [](unsigned long long int x) { return std::to_string(x); },
+    [](std::list<Symbol> l) -> std::string { return ""; },
+    [](bool b) -> std::string { return b ? "true" : "false"; },
+    [](std::monostate) -> std::string { return ""; }
+  }, sym.value);
+  
   return arg;
 }
 

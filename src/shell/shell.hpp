@@ -51,52 +51,7 @@ std::string rewind_read_file(std::string filename) {
   return expr;
 }
 
-std::vector<std::pair<int, std::string>>
-rewind_split_file(std::string content) {
-  int bracket_balance = 0;
-  std::vector<std::pair<int, std::string>> ret;
-  int current_line = 0;
-  std::string temp;
-  bool in_string = false;
-  bool in_singles = false;
-  for (int i = 0; i < content.size(); ++i) {
-    if ((!in_string) && (content[i] == '\n')) {
-      current_line++;
-    }
-    if (content[i] == '\'') {
-      in_singles = !in_singles;
-    }
-    if (in_singles) {
-      temp += content[i];
-      continue;
-    }
-    if (content[i] == '"') {
-      temp += content[i];
-      in_string = !in_string;
-      continue;
-    }
-    if (in_string) {
-      temp += content[i];
-      continue;
-    }
-    if ((!in_string) && ((content[i] == '(') || (content[i] == ']'))) {
-      bracket_balance++;
-      temp += content[i];
-    } else if ((!in_string) && ((content[i] == ')') || (content[i] == ']'))) {
-      bracket_balance--;
-      temp += content[i];
-    } else if ((!in_string) && (content[i] == ';') &&
-               (((i < (content.size() - 1)) && content[i + 1] == '\n') ||
-                (i == (content.size() - 1)))) {
-      ret.push_back({current_line, temp + std::string{content[i]}});
-      temp = "";
-    } else
-      temp += content[i];
-  }
-  if (temp.size() > 1)
-    ret.push_back({current_line, temp});
-  return ret;
-}
+
 
 std::optional<std::string> rewind_get_env_var(const std::string &query) {
   const char *r = std::getenv(query.c_str());
@@ -114,6 +69,7 @@ std::optional<std::string> rewind_config_file() {
       return std::nullopt;
     }
     home = "/home/" + *user + "/.config/rewind/config.re";
+    return home;
   }
   home = *home + "/.config/rewind/config.re";
   return home;
@@ -125,22 +81,16 @@ std::optional<Symbol> rewind_read_config(const path &PATH) {
     return std::nullopt;
   }
   std::string content = rewind_read_file(*conf);
-  auto expr_vec = rewind_split_file(content);
+  if (content == "") return std::nullopt;
+  auto expr_vec = get_tokens(content);
   Symbol last_evaluated;
   Symbol last_expr;
-  std::vector<std::string> last_expr_as_tokens;
-  for (auto expr : expr_vec) {
-    try {
-      last_expr_as_tokens = get_tokens(expr.second);
-      if (last_expr_as_tokens.empty()) continue;
-      last_expr = get_ast(last_expr_as_tokens, PATH);
-      last_evaluated = eval(last_expr, PATH);
-    } catch (std::logic_error e) {
-      throw std::logic_error{"(line " + std::to_string(expr.first) +
-                             "): error in the Rewind config file!\n" +
-                             e.what() + "\n"};
-    }
-  }
+  RecInfo ast;
+  do {
+    ast = parse(expr_vec);
+    last_expr = ast.result;
+    last_evaluated = eval(ast.result, PATH);
+  } while (ast.end_index < expr_vec.size());
   return last_expr;
 }
 
@@ -208,10 +158,8 @@ void rewind_sh_loop() {
     if (line.empty())
       continue;
     try {
-      Symbol ast = eval(get_ast(get_tokens(line), *PATH), *PATH, 0);
-      if ((ast.type != Type::Command) && (ast.type != Type::Defunc)) {
-        std::cout << rec_print_ast(ast) << "\n";
-      }
+      Symbol ast = eval(parse(get_tokens(line)).result, *PATH, 0);
+      std::cout << rec_print_ast(ast) << "\n";
     } catch (std::logic_error ex) {
       procedures["cookedmode"]({}, {});
       std::cout << ex.what() << "\n";

@@ -15,12 +15,19 @@
   Rewind. If not, see <https://www.gnu.org/licenses/>.
 */
 #include "lexer.hpp"
-#include "procedures.hpp"
 #include "types.hpp"
 #include <charconv>
 #include <iostream>
 #include <stack>
 #include <type_traits>
+#include <optional>
+
+
+template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
+template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
+
+
+std::string rec_print_ast(Symbol root, bool debug);
 
 bool is_strlit(std::string s) {
   return (s.size() > 1) && (((s[0] == '\'') && (s.back() == '\'')) ||
@@ -36,559 +43,364 @@ std::optional<long long signed int> try_convert_num(std::string n) {
   return std::nullopt;
 }
 
-enum class State {
-  None,
-  Identifier,
-  InArgumentList,
-  FirstFunctionCall,
-  InFunCallArguments,
-  List,
-  Comma,
-  Semicolon,
-  Dot,
-  LambdaFunction,
-  LambdaFunctionFirstFunctionCall,
-  LambdaFunctionInArgumentList,
-  LambdaFunctionLiteral,
-  LambdaFunctionIdentifier,
-  LambdaFunctionArgumentList,
-  QuestionOperator,
-  QuestionOperatorFirstFunctionCall,
-  QuestionOperatorInArgumentList,
-  PipeOperator,
-  PipeOperatorStart,
-  ComposeOperator,
-  End,
-  Error,
-};
-
 // information we need to keep track of in get_ast_aux
 struct RecInfo {
   Symbol result;
   int end_index;
-  State st;
-  bool is_return_value = false;
+  int line;
 };
 
-RecInfo get_ast_aux(std::vector<std::string> tokens, int si, int ei,
-                    bool is_root, path PATH, int level, State st,
-                    int list_balance = 0) {
-  RecInfo res;
-  std::list<Symbol> as_list;
-  res.result = Symbol(is_root ? "root" : "", as_list, Type::List);
-  State cur_state = st;
-  static int lambda_id = 0;
-  std::list<Symbol> maybe_cond{Symbol("", "cond", Type::Operator)};
-  std::list<Symbol> maybe_match{};
-  bool is_return = false;
-  for (int i = si; i < ei; ++i) {
-    auto cur = tokens[i];
-    if ((cur == "(") || (cur == "[")) {
-      RecInfo info = get_ast_aux(tokens, i + 1, ei, false, PATH, level + 1,
-                                 ((cur_state == State::FirstFunctionCall) ||
-                                  (cur_state == State::Identifier))
-                                     ? State::InArgumentList
-                                     : State::List,
-                                 list_balance + 1);
-      i = info.end_index;
-      as_list.push_back(info.result);
-      cur_state = info.st;
-      res.st = cur_state;
-    } else if ((cur == ")") || (cur == "]")) {
-      res.result.value = as_list;
-      return {.result = res.result,
-              .end_index = i,
-              .st = (cur_state == State::InArgumentList)
-                        ? State::FirstFunctionCall
-                        : State::InFunCallArguments};
-    } else if (cur == ";") {
-      res.result.value = as_list;
-      if (as_list.size() == 1) {
-        if ((as_list.back().type == Type::String) ||
-            (as_list.back().type == Type::Number)) {
-          res.result = as_list.back();
-        } else if ((std::holds_alternative<std::string>(
-                       as_list.back().value)) &&
-                   std::get<std::string>(as_list.back().value)[0] == '@') {
-          res.result =
-              Symbol("", std::get<std::string>(as_list.back().value).substr(1),
-                     Type::Identifier);
-          is_return = true;
-        }
-      }
-      if (level > 0) {
-        return {.result = res.result,
-                .end_index = i,
-                .st = State::Semicolon,
-                .is_return_value = is_return};
-      }
-      return {.result = res.result, .end_index = i, .st = State::End};
-    } else if (cur == ",") {
-      res.result.value = as_list;
-      if (as_list.size() == 1) {
-        if ((as_list.back().type == Type::String) ||
-            (as_list.back().type == Type::Number)) {
-          res.result = as_list.back();
-        } else if ((std::holds_alternative<std::string>(
-                       as_list.back().value)) &&
-                   std::get<std::string>(as_list.back().value)[0] == '@') {
-          res.result =
-              Symbol("", std::get<std::string>(as_list.back().value).substr(1),
-                     Type::Identifier);
-          is_return = true;
-        }
-      }
-      if (cur_state == State::LambdaFunctionLiteral) {
-        cur_state = State::LambdaFunctionFirstFunctionCall;
-      }
-      if (cur_state == State::LambdaFunctionIdentifier) {
-        cur_state = State::LambdaFunctionFirstFunctionCall;
-      }
-      if (cur_state == State::LambdaFunctionInArgumentList) {
-        cur_state = State::LambdaFunctionFirstFunctionCall;
-      }
-      return {.result = res.result,
-              .end_index = i,
-              .st = (level > 0)
-                        ? ((cur_state == State::LambdaFunctionFirstFunctionCall)
-                               ? State::LambdaFunctionFirstFunctionCall
-                               : State::Comma)
-                        : State::Error,
-              .is_return_value = is_return};
-    } else if (cur == ".") {
-      res.result.value = as_list;
-      if (as_list.size() == 1) {
-        if ((as_list.back().type == Type::String) ||
-            (as_list.back().type == Type::Number)) {
-          res.result = as_list.back();
-        } else if ((std::holds_alternative<std::string>(
-                       as_list.back().value)) &&
-                   std::get<std::string>(as_list.back().value)[0] == '@') {
-          res.result =
-              Symbol("", std::get<std::string>(as_list.back().value).substr(1),
-                     Type::Identifier);
-          is_return = true;
-        }
-      }
-      if (cur_state == State::LambdaFunctionIdentifier) {
-        cur_state = State::LambdaFunctionFirstFunctionCall;
-      }
-      if (cur_state == State::LambdaFunctionIdentifier) {
-        cur_state = State::LambdaFunctionFirstFunctionCall;
-      }
-      if (cur_state == State::LambdaFunctionLiteral) {
-        cur_state = State::LambdaFunctionFirstFunctionCall;
-      }
+std::string format_line(int l) { return "(line " + std::to_string(l) + ")"; }
 
-      return {.result = res.result,
-              .end_index = i,
-              .st = (level > 0)
-                        ? ((cur_state == State::LambdaFunctionFirstFunctionCall
-                                ? cur_state
-                                : State::Dot))
-                        : State::Error,
-              .is_return_value = is_return};
+RecInfo dispatch_parse(std::vector<Token> tokens, int si);
 
-    }
-
-    else if (is_strlit(cur)) {
-      as_list.push_back(Symbol(is_root ? "root" : "",
-                               cur.substr(1, cur.size() - 2), Type::String));
-      if (cur_state == State::LambdaFunctionFirstFunctionCall) {
-        cur_state = State::LambdaFunctionLiteral;
-      } else if (cur_state == State::LambdaFunctionIdentifier) {
-        cur_state = State::LambdaFunctionFirstFunctionCall;
-      }
-    } else if (auto v = try_convert_num(cur); v != std::nullopt) {
-      as_list.push_back(Symbol(is_root ? "root" : "", *v, Type::Number));
-      if (cur_state == State::LambdaFunctionFirstFunctionCall) {
-        cur_state = State::LambdaFunctionLiteral;
-      } else if (cur_state == State::LambdaFunctionIdentifier) {
-        cur_state = State::LambdaFunctionFirstFunctionCall;
-      }
-    } else if ((cur == "false") || (cur == "true")) {
-      as_list.push_back(Symbol(is_root ? "root" : "",
-                               cur == "false" ? false : true, Type::Boolean));
-      if (cur_state == State::LambdaFunctionFirstFunctionCall) {
-        cur_state = State::LambdaFunctionLiteral;
-      } else if (cur_state == State::LambdaFunctionIdentifier) {
-        cur_state = State::LambdaFunctionFirstFunctionCall;
-      }
-    } else if (cur == "<<") {
-      RecInfo info = get_ast_aux(tokens, i + 1, ei, false, PATH, level + 1,
-                                 State::Identifier);
-      i = info.end_index;
-      as_list.push_back(info.result);
-      res.result.value = as_list;
-      return {.result = res.result, .end_index = i, .st = State::None};
-    } else if (cur == "|") {
-      int idx;
-      for (idx = i + 1; idx < ei; ++idx) {
-        if (tokens[idx] == "=>")
-          break;
-      }
-      auto cond = get_ast_aux(tokens, i + 1, idx, false, PATH, level + 1,
-                              State::FirstFunctionCall);
-      auto l = std::list<Symbol>{};
-      auto as_l = std::list<Symbol>{};
-      if (cond.result.type == Type::List)
-        as_l = std::get<std::list<Symbol>>(cond.result.value);
-      else
-        as_l.push_back(cond.result);
-      if (as_l.size() == 1) {
-        l.push_back(as_l.back());
-      } else
-        l.push_back(cond.result);
-      int to_other_pipe;
-      for (to_other_pipe = idx + 1; to_other_pipe < ei; ++to_other_pipe) {
-        if (tokens[to_other_pipe] == "|") {
-          break;
-        }
-      }
-      RecInfo branch;
-      do {
-        branch = get_ast_aux(tokens, idx + 1, to_other_pipe, false, PATH,
-                             level + 1, State::FirstFunctionCall);
-        idx = branch.end_index;
-        if (std::holds_alternative<std::list<Symbol>>(branch.result.value)) {
-          as_l = std::get<std::list<Symbol>>(branch.result.value);
-        } else
-          as_l = {branch.result};
-        if (as_l.size() == 1) {
-          if ((as_l.back().type == Type::String) ||
-              (as_l.back().type == Type::Number) ||
-              (as_l.back().type == Type::Boolean)) {
-            l.push_back(as_l.back());
-          } else if (branch.is_return_value) {
-            l.push_back(Symbol("", std::get<std::string>(as_l.back().value),
-                               as_l.back().type));
-          } else
-            l.push_back(Symbol("", as_l, Type::List));
-        } else
-          l.push_back(Symbol("", as_l, Type::List));
-      } while ((branch.st != State::Semicolon) && (branch.st != State::End) &&
-               (branch.st != State::Dot) && (idx < (to_other_pipe - 1)));
-      if (to_other_pipe == ei) {
-        if (cur_state == State::QuestionOperator) {
-          if (l.size() == 1)
-            maybe_match.push_back(l.back());
-          else
-            maybe_match.push_back(Symbol("", l, Type::List));
-        } else
-          maybe_cond.push_back(Symbol("", l, Type::List));
-        if (cur_state == State::QuestionOperator) {
-          if (maybe_match.size() == 1)
-            as_list.push_back(maybe_match.back());
-          else
-            as_list.push_back(Symbol("", maybe_match, Type::List));
-        } else
-          as_list.push_back(Symbol("", maybe_cond, Type::List));
-        res.result.value = as_list;
-      }
-      i = branch.end_index;
-      if (cur_state != State::QuestionOperator)
-        cur_state = State::PipeOperator;
-      if (cur_state == State::QuestionOperator) {
-        if (l.size() == 1)
-          maybe_match.push_back(l.back());
-        else
-          maybe_match.push_back(Symbol("", l, Type::List));
-      } else
-        maybe_cond.push_back(Symbol("", l, Type::List));
-    } else if (cur == "?") {
-      int to_first_pipe;
-      auto match_full_body =
-          std::list<Symbol>{Symbol("", "match", Type::Operator)};
-      for (to_first_pipe = i; to_first_pipe < ei; ++to_first_pipe) {
-        if (tokens[to_first_pipe] == "|") {
-          break;
-        }
-      }
-      auto to_be_matched =
-          get_ast_aux(tokens, i + 1, to_first_pipe, false, PATH, level + 1,
-                      State::FirstFunctionCall);
-      std::list<Symbol> as_l;
-      std::list<Symbol> l =
-          std::get<std::list<Symbol>>(to_be_matched.result.value);
-      if (l.size() == 1) {
-        if ((l.back().type == Type::Number) ||
-            (l.back().type == Type::String)) {
-          as_l.push_back(l.back());
-        } else if ((std::holds_alternative<std::string>(l.back().value)) &&
-                   (std::get<std::string>(l.back().value)[0] == '@')) {
-          as_l.push_back(Symbol("",
-                                std::get<std::string>(l.back().value).substr(1),
-                                Type::Identifier));
-        } else
-          as_l.push_back(l.back());
-      } else
-        as_l = {to_be_matched.result};
-      if (as_l.size() == 1) {
-        match_full_body.push_back(as_l.back());
-      } else
-        match_full_body.push_back(to_be_matched.result);
-      RecInfo info = get_ast_aux(tokens, to_first_pipe, ei, false, PATH,
-                                 level + 1, State::QuestionOperator);
-      as_l = std::get<std::list<Symbol>>(info.result.value);
-      if (as_l.size() == 1) {
-        for (auto e : std::get<std::list<Symbol>>(as_l.back().value)) {
-          // this is a dirty hack i am NOT proud of, but it will do
-          // for now until i fix this for good
-          match_full_body.push_back(e);
-        }
-      } else
-        match_full_body.push_back(info.result);
-      as_list.push_back(Symbol("", match_full_body, Type::List));
-      i = info.end_index;
-    } else if (cur == "=>") {
-      if (as_list.empty() || as_list.back().type != Type::List) {
-        throw std::logic_error{"Parser error: Found a lambda token ('=>') with "
-                               "no parameter list before it!\n"};
-      }
-      std::string id = "__re_lambda" + std::to_string(lambda_id);
-      RecInfo info = get_ast_aux(tokens, i + 1, ei, false, PATH, level + 1,
-                                 State::LambdaFunctionFirstFunctionCall);
-      auto l = std::list<Symbol>();
-      Symbol m;
-      if (std::holds_alternative<std::list<Symbol>>(info.result.value)) {
-        if (auto l = std::get<std::list<Symbol>>(info.result.value);
-            l.size() == 1) {
-          if ((l.back().type == Type::String) ||
-              (l.back().type == Type::Number) ||
-              (l.back().type == Type::List)) {
-            m = l.back();
-          } else if ((std::holds_alternative<std::string>(l.back().value)) &&
-                     std::get<std::string>(l.back().value)[0] == '@') {
-            m = Symbol("", std::get<std::string>(l.back().value).substr(1),
-                       Type::Identifier);
-          } else
-            m = Symbol("", l, Type::List);
-        } else
-          m = info.result;
-      } else
-        m = info.result;
-      l.push_back(m);
-      Symbol body = Symbol("", l, Type::List);
-      // keep iterating until we finish the statements composing the lambda
-      // function
-      while ((info.st == State::LambdaFunctionInArgumentList) ||
-             (info.st == State::LambdaFunctionFirstFunctionCall)) {
-        i = info.end_index;
-        info = get_ast_aux(tokens, i + 1, ei, false, PATH, level + 1,
-                           State::LambdaFunctionFirstFunctionCall);
-        if (std::holds_alternative<std::list<Symbol>>(info.result.value)) {
-          if (auto l = std::get<std::list<Symbol>>(info.result.value);
-              l.size() == 1) {
-            if ((l.back().type == Type::String) ||
-                (l.back().type == Type::Number) ||
-                (l.back().type == Type::List)) {
-              m = l.back();
-            } else if ((std::holds_alternative<std::string>(l.back().value)) &&
-                       std::get<std::string>(l.back().value)[0] == '@') {
-              m = Symbol("", std::get<std::string>(l.back().value).substr(1),
-                         Type::Identifier);
-            } else
-              m = Symbol("", l, Type::List);
-          } else
-            m = info.result;
-        } else
-          m = info.result;
-        l.push_back(m);
-      }
-      body.value = l;
-      i = info.end_index;
-      auto parameters = as_list.back();
-      as_list.pop_back();
-      if (user_defined_procedures.empty()) {
-        user_defined_procedures.push_back({});
-      }
-      user_defined_procedures[user_defined_procedures.size() - 1]
-          .insert_or_assign(id, std::make_pair(parameters, body));
-      as_list.push_back(Symbol("", id, Type::Identifier));
-      lambda_id++;
-    } else if (cur == "?=>") {
-      if (as_list.size() < 2) {
-        throw std::logic_error{
-            "Parser error: Found a conditional lambda token ('?=>') with "
-            "missing condition and/or parameters before it!"};
-      }
-      auto cond = as_list.back();
-      if (cond.type != Type::List) {
-        throw std::logic_error{
-            "Parser error: Condition for the lambda is not a list.\n"};
-      }
-      as_list.pop_back();
-      auto params = as_list.back();
-      if (params.type != Type::List) {
-        throw std::logic_error{"Parser error: Parameters for the conditional "
-                               "lambda are not a list.\n"};
-      }
-      as_list.pop_back();
-      RecInfo info = get_ast_aux(tokens, i + 1, ei, false, PATH, level + 1,
-                                 State::LambdaFunctionFirstFunctionCall);
-      i = info.end_index;
-      auto body = info.result;
-      std::list<Symbol> l;
-      Symbol m;
-      if (std::holds_alternative<std::list<Symbol>>(info.result.value)) {
-        if (auto l = std::get<std::list<Symbol>>(info.result.value);
-            l.size() == 1) {
-          if ((l.back().type == Type::String) ||
-              (l.back().type == Type::Number) ||
-              (l.back().type == Type::List)) {
-            m = l.back();
-          } else if ((std::holds_alternative<std::string>(l.back().value)) &&
-                     std::get<std::string>(l.back().value)[0] == '@') {
-            m = Symbol("", std::get<std::string>(l.back().value).substr(1),
-                       Type::Identifier);
-          } else
-            m = Symbol("", l, Type::List);
-        } else
-          m = Symbol("", l, Type::List);
-      } else
-        m = info.result;
-      l.push_back(m);
-      info = get_ast_aux(tokens, i + 1, ei, false, PATH, level + 1,
-                         State::LambdaFunctionFirstFunctionCall);
-      i = info.end_index;
-      if (std::holds_alternative<std::list<Symbol>>(info.result.value)) {
-        if (auto l = std::get<std::list<Symbol>>(info.result.value);
-            l.size() == 1) {
-          if ((l.back().type == Type::String) ||
-              (l.back().type == Type::Number) ||
-              (l.back().type == Type::List)) {
-            m = l.back();
-          } else if ((std::holds_alternative<std::string>(l.back().value)) &&
-                     std::get<std::string>(l.back().value)[0] == '@') {
-            m = Symbol("", std::get<std::string>(l.back().value).substr(1),
-                       Type::Identifier);
-          } else
-            m = Symbol("", l, Type::List);
-        } else
-          m = Symbol("", l, Type::List);
-      } else
-        m = info.result;
-      l.push_back(m);
-      body.value = l;
-      if (l.size() != 2) {
-        throw std::logic_error{"Parser error: A conditional lambda expects "
-                               "only two comma-separated statements!\n"};
-      }
-      std::string id = "__re_clambda" + std::to_string(lambda_id);
-      if (user_defined_procedures.empty()) {
-        user_defined_procedures.push_back({});
-      }
-      user_defined_procedures[user_defined_procedures.size() - 1]
-          .insert_or_assign(
-              id, std::make_pair(
-                      Symbol("", std::list<Symbol>{params, cond}, Type::List),
-                      body));
-      as_list.push_back(Symbol("", id, Type::Identifier));
-      lambda_id++;
-    } else {
-      // identifiers are complicated, but we can somehow get around it
-      // by having a fuckton of states to keep track of where we are
-      if (cur_state == State::PipeOperator) {
-        cur_state = State::FirstFunctionCall;
-      }
-      if ((cur[0] != '@') && (list_balance == 0) &&
-          ((cur_state == State::FirstFunctionCall) ||
-           (cur_state == State::None) ||
-           (cur_state == State::LambdaFunctionFirstFunctionCall))) {
-        RecInfo info = get_ast_aux(
-            tokens, i + 1, ei, false, PATH, level + 1,
-            cur == "let" ? (cur_state == State::LambdaFunctionFirstFunctionCall
-                                ? State::LambdaFunctionIdentifier
-                                : State::Identifier)
-                         : (cur_state == State::LambdaFunctionFirstFunctionCall
-                                ? State::LambdaFunctionInArgumentList
-                                : State::InFunCallArguments));
-        Symbol op = Symbol(is_root ? "root" : "", cur,
-                           procedures.contains(cur) ? Type::Operator
-                                                    : Type::Identifier);
-        auto l = std::list<Symbol>();
-        if (info.result.type == Type::List) {
-          l = std::get<std::list<Symbol>>(info.result.value);
-        } else
-          l.push_back(info.result);
-        l.push_front(op);
-        i = info.end_index;
-        cur_state = info.st;
-        if (cur_state == State::Comma) {
-          cur_state = State::FirstFunctionCall;
-        }
-        if (cur_state == State::LambdaFunctionFirstFunctionCall) {
-          auto sym = Symbol("", std::list<Symbol>{Symbol("", l, Type::List)},
-                            Type::List);
-          if (as_list.empty())
-            as_list = std::get<std::list<Symbol>>(sym.value);
-          else
-            as_list.push_back(std::get<std::list<Symbol>>(sym.value).back());
-        } else {
-          if (as_list.empty()) {
-            as_list = l;
-          } else
-            as_list.push_back(Symbol(is_root ? "root" : "", l, Type::List));
-        }
-        res.st = cur_state;
-        if ((level > 0) || (cur_state == State::Semicolon)) {
-          // early return to completely exit a function call when we're done
-          // collecting all its arguments
-          res.result.value = as_list;
-          return {.result = res.result, .end_index = i, .st = cur_state};
-        }
-      } else {
-        if (cur[0] == '@')
-          cur = cur.substr(1);
-        as_list.push_back(Symbol("", cur,
-                                 procedures.contains(cur) ? Type::Operator
-                                                          : Type::Identifier));
-        is_return = true;
-      }
-      if (cur_state == State::Identifier) {
-        cur_state = State::FirstFunctionCall;
-      }
-    }
-    res.result.value = as_list;
-  }
-  res.result.value = as_list;
-  if (as_list.size() == 1) {
-    if ((as_list.back().type == Type::String) ||
-        (as_list.back().type == Type::Number)) {
-      res.result = as_list.back();
-    } else if ((std::holds_alternative<std::string>(as_list.back().value)) &&
-               std::get<std::string>(as_list.back().value)[0] == '@') {
-      res.result =
-          Symbol("", std::get<std::string>(as_list.back().value).substr(1),
-                 Type::Identifier);
-      is_return = true;
-    }
-  }
-  return {.result = res.result,
-          .end_index = ei,
-          .st = State::None,
-          .is_return_value = is_return};
+Symbol parse_identifier(std::string tk) {
+  return Symbol("", tk, Type::Identifier);
 }
 
-Symbol get_ast(std::vector<std::string> tokens, path PATH) {
-  auto fexpr =
-      get_ast_aux(tokens, 0, tokens.size(), true, PATH, 0, State::None);
-  if (fexpr.result.type == Type::List) {
-    if (auto l = std::get<std::list<Symbol>>(fexpr.result.value);
-        l.size() == 1) {
-      if (std::holds_alternative<std::string>(l.front().value)) {
-        if (auto s = std::get<std::string>(l.front().value);
-            !procedures.contains(s) &&
-            (user_defined_procedures.empty() ||
-             !user_defined_procedures.back().contains(s)) &&
-            (get_absolute_path(s, PATH) == std::nullopt)) {
-          return l.back();
-        }
-      } else
-        return l.back();
+Symbol parse_number(signed long long int n) {
+  return Symbol("", n, Type::Number);
+}
+
+Symbol parse_strlit(std::string tk) {
+  return Symbol("", tk.substr(1, tk.size() - 2), Type::String);
+}
+
+Symbol parse_bool(std::string tk) {
+  return Symbol("", tk == "true" ? true : false, Type::Boolean);
+}
+
+RecInfo parse_list_expr(std::vector<Token> tokens, int si);
+RecInfo parse_list(std::vector<Token> tks, int i);
+
+RecInfo parse_list_literal(std::vector<Token> tokens, int si) {
+  // parses a (possibly recursive) list from start to finish, and then
+  // returns.
+  std::list<Symbol> ret;
+  int i = 0;
+  for (i = si+1; i < tokens.size(); ++i) {
+    auto tok = tokens[i];
+    auto tk = tok.tk;
+    if ((tk == "(") || (tk == "[")) {
+      auto got = parse_list_expr(tokens, i);
+      ret.push_back(got.result);
+      i = got.end_index;
+    } else if ((tk == ")") || (tk == "]")) {
+      return RecInfo {
+	.result = Symbol("", ret, Type::List),
+	.end_index = i,
+	.line = tok.line };
+    } else if ((tk == "'(") || (tk == "'[")) {
+      auto got = parse_list_literal(tokens, i);
+      ret.push_back(got.result);
+      i = got.end_index;
+    } else {
+      auto got = dispatch_parse(std::vector<Token>{tokens[i]}, 0);
+      ret.push_back(got.result);
     }
   }
-  return fexpr.result;
+  throw std::logic_error {format_line(tokens[i-1].line) +
+			  " Unclosed list!\n"};
+}
+
+RecInfo parse_list_expr(std::vector<Token> tokens, int si) {
+  auto got = parse_list_literal(tokens, si);
+  auto l = std::get<std::list<Symbol>>(got.result.value);
+  if (l.empty())
+    throw std::logic_error {"Empty function call!\n"};
+  auto op = l.front();
+  if (op.type != Type::Identifier)
+    throw std::logic_error {"Invalid operator in a list-expression!\n"};
+  l.pop_front();
+  op.type = Type::Operator;
+  l.push_front(op);
+  got.result.value = l;
+  return got;
+}
+
+RecInfo parse_block_function(std::vector<Token> tokens, int si) {
+  std::list<Symbol> body;
+  int i = 0;
+  for (int i = si + 1; i < tokens.size(); ++i) {
+    auto tk = tokens[i];
+    if (tk.tk == "}")
+      return RecInfo {
+	.result = Symbol("", body, Type::List),
+	.end_index = i,
+	.line = tk.line };
+    auto got = dispatch_parse(tokens, i);
+    body.push_back(got.result);
+    i = got.end_index;
+  }
+  throw std::logic_error {format_line(tokens[si-1].line) +
+			  " Unclosed '}' in a function definition!\n"};
+}
+
+RecInfo parse_function_call(std::vector<Token> tokens, int si) {
+  std::list<Symbol> fcall;
+
+  if (tokens.size() == 1) {
+    fcall.push_back(Symbol("", tokens[si].tk, Type::Operator));
+    auto sym = Symbol("", fcall, Type::List);
+    return RecInfo {.result = sym, .end_index = si, .line = tokens[si].line};
+  }
+  int i = 0;
+  for (i = si; i < tokens.size(); ++i) {
+    Token tk = tokens[i];
+    if (tk.tk == ";") {
+      if (fcall.size() > 0) {
+	auto op = fcall.front();
+	fcall.pop_front();
+	op.type = Type::Operator;
+	fcall.push_front(op);
+      }
+      return RecInfo {
+	.result = Symbol("", fcall, Type::List),
+	.end_index = i,
+	.line = tk.line };
+    }
+
+    if ((tk.tk == "(") || (tk.tk == "[")) {
+      auto got = parse_list(tokens, i);
+      fcall.push_back(got.result);
+      i = got.end_index;
+    } else if ((tk.tk == "'(") || (tk.tk == "'[")) {
+      auto got = parse_list_literal(tokens, i);
+      fcall.push_back(got.result);
+      i = got.end_index;
+    } else {
+      auto got = dispatch_parse(std::vector<Token>{tk}, 0);
+      fcall.push_back(got.result);
+    }
+  }
+  if (i == tokens.size()) {
+    if (fcall.size() > 0) {
+      auto op = fcall.front();
+      fcall.pop_front();
+      op.type = Type::Operator;
+      fcall.push_front(op);
+    }
+    return RecInfo {
+      .result = Symbol("", fcall, Type::List),
+      .end_index = i,
+      .line = tokens.back().line };
+  }
+  throw std::logic_error {format_line(tokens[i].line) +
+			  " Missing semicolon ';' after a function call!\n"};
+}
+
+RecInfo parse_function_body(std::vector<Token> tokens, int si) {
+  if (tokens[si].tk == "{") {
+    // block function
+    return parse_block_function(tokens, si);
+  }
+  auto got = dispatch_parse(tokens, si);
+  // wrap it inside a list to match the block functions
+  return RecInfo {
+    .result = Symbol("", std::list<Symbol>{got.result}, Type::List),
+    .end_index = got.end_index,
+    .line = got.line
+  };
+}
+
+RecInfo parse_function(std::vector<Token> tokens, int si) {
+  // (args...) => statements...
+  std::list<Symbol> f;
+  RecInfo args = parse_list_literal(tokens, si);
+  si = args.end_index + 1;
+  auto l = std::get<std::list<Symbol>>(args.result.value);
+  f.push_back(Symbol("", l, Type::List));
+  if (tokens[si].tk != "=>")
+    throw std::logic_error {format_line(tokens[si].line) +
+			    " Invalid syntax for a function definition:\n"
+			    "Missing '=>' after the parameter list!\n"};
+  si++;
+  RecInfo body = parse_function_body(tokens, si);
+  auto v = body.result;
+  si = body.end_index;
+  f.push_back(v);
+  return RecInfo {
+    .result = Symbol("", f, Type::Function),
+    .end_index = si,
+    .line = tokens[si-1].line
+  };
+}
+
+// this parses either a list expression or a function definition, depending on
+// what comes after the list
+RecInfo parse_list(std::vector<Token> tks, int i) {
+  auto got = parse_list_expr(tks, i);
+  auto idx = got.end_index;
+  if (tks[idx+1].tk == "=>") {
+    // a function.
+    return parse_function(tks, i);
+  }
+  // otherwise, we just parsed a list expression:
+  return got;
+}
+
+RecInfo parse_let(std::vector<Token> tokens, int si) {
+  // let <name> = <any value, also functions>
+  si++; // skip the "let" keyword
+  Symbol name = parse_identifier(tokens[si].tk);
+  si++;
+  if (tokens[si].tk != "=")
+    throw std::logic_error {format_line(tokens[si].line) +
+			   + " Missing '=' in a let-binding!\n"};
+  si++;
+  RecInfo any_v = dispatch_parse(tokens, si);
+  if (any_v.end_index == si)
+    if (tokens[si+1].tk != ";")
+      throw std::logic_error {"Missing semicolon at the end of a let-binding!\n"};
+    else si++;
+  else si = any_v.end_index;
+  std::list<Symbol> ret = {
+    Symbol("", "let", Type::Operator),
+    name,
+    any_v.result
+  };
+
+  return RecInfo {
+    .result = Symbol("", ret, Type::List),
+    .end_index = si,
+    .line = tokens[si].line };
+}
+
+RecInfo parse_branch_section(std::vector<Token> tokens, int i, bool expr = false) {
+  RecInfo part;
+  if ((tokens[i].tk == "(") || (tokens[i].tk == "[")) {
+    part = parse_list_expr(tokens, i);
+    part.end_index++;
+  }
+  else if ((tokens[i].tk == "'(") || (tokens[i].tk == "'[")) {
+    part = parse_list_literal(tokens, i);
+    part.end_index++;
+  } else if (tokens[i].tk == "{") {
+    part = parse_block_function(tokens, i);
+    part.end_index++;
+  }
+  else {
+    // if it's not a list, we assume that it's not a function call!
+    part = dispatch_parse(std::vector<Token>{tokens[i]}, 0);
+    i++;
+    part.end_index = i;
+    part.result = Symbol("", std::list<Symbol>{part.result}, Type::List);
+    if (expr)
+      if ((tokens[i].tk != ",") && (tokens[i].tk != ";"))
+	throw std::logic_error {"Missing end-or-branch (',' or ';') token!\n"};
+  }
+  return part;
+}
+
+RecInfo parse_branch(std::vector<Token> tokens, int i) {
+  std::list<Symbol> l = {};
+  i++; // skip the "|"
+
+  RecInfo cond = parse_branch_section(tokens, i);
+  i = cond.end_index;
+  
+  if (tokens[i].tk != "=>")
+    throw std::logic_error {"Missing '=>' token in a branch!\n"};
+  i++;
+  RecInfo body = parse_branch_section(tokens, i, true);
+  i = body.end_index;
+  l = {cond.result, body.result};
+  return RecInfo {
+    .result = Symbol("", l, Type::List),
+    .end_index = i,
+    .line = tokens[i].line
+  };
+}
+
+RecInfo parse_match(std::vector<Token> tokens, int i) {
+  // we parse a value, and branches afterwards.
+  i++; // skip the "match" keyword
+  RecInfo matched = dispatch_parse(tokens, i);
+  i = matched.end_index;
+
+  std::list<Symbol> l = {
+    Symbol("", "match", Type::Operator),
+    matched.result
+  };
+  RecInfo got;
+  do {
+    got = parse_branch(tokens, i + 1);
+    i = got.end_index;
+    l.push_back(got.result);
+  } while (tokens[i].tk != ";");
+
+  return RecInfo {
+    .result = Symbol("", l, Type::List),
+    .end_index = i,
+    .line = tokens[i].line
+  };
+}
+
+RecInfo parse_cond(std::vector<Token> tokens, int i) {
+  auto l = std::list<Symbol>{Symbol("", "cond", Type::Operator)};
+  RecInfo got;
+  do {
+    got = parse_branch(tokens, i + 1);
+    i = got.end_index;
+    l.push_back(got.result);
+  } while (tokens[i].tk != ";");
+  return RecInfo {
+    .result = Symbol("", l, Type::List),
+    .end_index = i,
+    .line = tokens[i].line
+  };
+}
+
+RecInfo dispatch_parse(std::vector<Token> tks, int i) {
+  if (auto n = try_convert_num(tks[i].tk); n != std::nullopt)
+    return RecInfo {
+      .result = parse_number(*n),
+      .end_index = i,
+      .line = tks[i].line };
+  if (is_strlit(tks[i].tk))
+    return RecInfo {
+      .result = parse_strlit(tks[i].tk),
+      .end_index = i,
+      .line = tks[i].line };
+
+  if (tks[i].tk[0] == '@')
+    return RecInfo {
+      .result = parse_identifier(tks[i].tk.substr(1)),
+      .end_index = i,
+      .line = tks[i].line};
+  
+  if (tks.size() == 1)
+    return RecInfo {
+      .result = parse_identifier(tks[i].tk),
+      .end_index = i,
+      .line = tks[i].line };
+  
+  if ((tks[i].tk == "(") || (tks[i].tk == "[")) {
+    return parse_list(tks, i);
+  }
+  if ((tks[i].tk == "'(") || (tks[i].tk == "'[")) {
+    return parse_list_literal(tks, i);
+  }
+  if (tks[i].tk == "let")
+    return parse_let(tks, i);
+  if (tks[i].tk == "match")
+    return parse_match(tks, i);
+  if (tks[i].tk == "cond")
+    return parse_cond(tks, i);
+
+  if (tks[i].tk == "{")
+    return parse_block_function(tks, i);
+  
+  if (tks.size() > 1)
+    return parse_function_call(tks, i);
+  throw std::logic_error {"Doesn't reach here!\n"};
+}
+
+// .result contains the result of the parsing.
+// .end_index is needed if we plan to parse multiple consecutive
+// expressions, so that we know where we left off the last time.
+RecInfo parse(std::vector<Token> tokens, int i = 0) {
+  return dispatch_parse(tokens, i);
 }
 
 // DEBUG PURPOSES ONLY and for printing the final result until i
@@ -607,31 +419,25 @@ std::string rec_print_ast(Symbol root, bool debug) {
     }
     res += "]";
   } else {
-    std::visit(
-        [&]<class T>(T &&v) -> void {
-          if constexpr (std::is_same_v<std::decay_t<T>, std::monostate>) {
-          } else if constexpr (std::is_same_v<std::decay_t<T>,
-                                              std::list<Symbol>>) {
-          } else if constexpr (std::is_same_v<std::decay_t<T>, std::string>) {
-            if (debug)
-              res += ((root.type == Type::String)
-                          ? "(Str) "
-                          : (root.type == Type::Operator ? "(Op) " : "(Id) ")) +
-                     process_escapes(v);
-            else
-              res += process_escapes(v);
-          } else if (std::is_same_v<std::decay_t<T>, bool>) {
-            if (debug)
-              res += std::string{(v ? "(Bool) true" : "(Bool) false")};
-            else
-              res += v ? "true" : "false";
-          } else if (debug)
-            res += ((root.type == Type::Number) ? "(Num) " : "(?) ") +
-                   std::to_string(v);
-          else
-            res += std::to_string(v);
-        },
-        root.value);
+    std::visit(overloaded{
+      [&](std::monostate) -> void {},
+      [&](std::string s) -> void {
+	res = debug ? "(Str) " + s : s;
+      },
+      [&](unsigned long long int n) -> void {
+	auto s = std::to_string(n);
+	res = debug ? "(Num) " + s : s;
+      },
+      [&](signed long long int n) -> void {
+	auto s = std::to_string(n);
+	res = debug ? "(Num) " + s : s;
+      },
+      [&](bool b) -> void {
+	std::string s = b ? "true" : "false";
+	res = debug ? "(Bool) " + s : s;
+      },
+      [&](auto) -> void {}
+    }, root.value);
   }
   return res;
 }

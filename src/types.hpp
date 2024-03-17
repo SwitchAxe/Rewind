@@ -25,6 +25,7 @@ enum class Type {
   Number,
   Boolean,
   List,
+  Function,
   Operator,
   Defunc,
   Funcall,
@@ -64,7 +65,7 @@ struct Symbol {
 };
 
 // function signature for the builtins
-using path = const std::vector<std::string> &;
+using path = std::vector<std::string>;
 
 struct Functor {
   using sig = std::function<Symbol(std::list<Symbol>)>;

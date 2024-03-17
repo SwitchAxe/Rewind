@@ -14,13 +14,14 @@
   You should have received a copy of the GNU General Public License along with
   Rewind. If not, see <https://www.gnu.org/licenses/>.
 */
-#include "procedures.hpp"
 #include "types.hpp"
 #include <cctype>
 #include <exception>
 #include <ios>
 #include <stdexcept>
 #include <vector>
+#include <charconv>
+#include <sstream>
 std::string process_escapes(const std::string &s) {
   std::string r;
   for (int i = 0; i < s.length(); ++i) {
@@ -77,34 +78,59 @@ std::string process_escapes(const std::string &s) {
   }
   return r;
 }
-std::vector<std::string> get_tokens(std::string stream) {
+
+struct Token {
+  std::string tk;
+  int line;
+};
+
+std::vector<Token> get_tokens(std::string stream) {
   bool in_identifier = false;
   bool in_numlit = false;
   bool crossed_lparen = false;
   bool crossed_rparen = false;
-  std::vector<std::string> tokens;
-  std::vector<char> special_tokens = {'[', ']', '(', ')', ',', ';'};
+  std::vector<Token> tokens;
+  std::vector<char> special_tokens = {
+    '[', ']',
+    '(', ')',
+    ',', ';',
+    '{', '}',
+    '|',
+  };
   std::string temp;
+  int line = 0;
   for (int i = 0; i < stream.length(); ++i) {
-    if ((stream[i] == ' ') || (stream[i] == '\t') || (stream[i] == '\n')) {
-      if (in_identifier || in_numlit) {
-        in_identifier = false;
-        in_numlit = false;
-        tokens.push_back(temp);
-        temp = "";
-      }
+    if (stream[i] == '\n') {
+      in_identifier = false;
+      in_numlit = false;
+      if (temp != "")
+	tokens.push_back(Token{.tk = temp, .line = line});
+      temp = "";
+      line++;
+    }
+    if ((stream[i] == ' ') || (stream[i] == '\t')) {
+      if (temp != "")
+        tokens.push_back(Token{.tk = temp, .line = line});
+      in_identifier = false;
+      in_numlit = false;
+      temp = "";
     } else if (isgraph(stream[i])) {
-      if (stream[i] == '.') {
-        if (in_identifier || in_numlit || (temp.empty())) {
-          if (((i + 1) >= stream.length()) || (stream[i + 1] == ' ') ||
-              (stream[i + 1] == '\t') || (stream[i + 1] == '\n')) {
-            tokens.push_back(temp);
-            tokens.push_back(".");
-          } else
-            temp += stream[i];
-        } else
-          tokens.push_back(".");
-      } else if ((stream[i] == '"') || (stream[i] == '\'')) {
+      if (auto s = std::string{stream[i], stream[i+1]}; (s == "'(") || (s == "'[")) {
+	if (temp != "") {
+	  tokens.push_back(Token{.tk = std::string{temp}, .line = line});
+	  temp = "";
+	}
+	tokens.push_back(Token{.tk = s, .line = line});
+	i++;
+      } else if (std::find(special_tokens.begin(), special_tokens.end(),
+                    stream[i]) != special_tokens.end()){
+	if (temp != "") {
+	  tokens.push_back(Token{.tk = std::string{temp}, .line = line});
+	  temp = "";
+	}
+	tokens.push_back(Token{.tk = std::string{stream[i]}, .line = line});
+      }
+      else if ((stream[i] == '"') || (stream[i] == '\'')) {
         if (in_numlit) {
           throw std::logic_error{"Failed to parse the input stream!\n"
                                  "Found double quotes in a numeric literal!\n"};
@@ -125,42 +151,29 @@ std::vector<std::string> get_tokens(std::string stream) {
           }
           std::string tmp = stream.substr(i, e - i + 1);
           i = e;
-          tokens.push_back(tmp);
+          tokens.push_back(Token{.tk = tmp, .line = line});
           tmp = "";
           temp = "";
         }
       } else if (in_identifier) {
-        if (std::find(special_tokens.begin(), special_tokens.end(),
-                      stream[i]) != special_tokens.end()) {
-          in_identifier = false;
-          tokens.push_back(temp);
-          temp = "";
-          tokens.push_back(std::string{stream[i]});
-        } else {
-          temp += stream[i];
-        }
+        temp += stream[i];
       } else if (in_numlit) {
         if (!isdigit(stream[i]))
           throw std::logic_error{"Failed to parse the input stream!\n"
                                  "Found a character in a numeric literal!\n"};
         temp += stream[i];
       } else {
-        if (std::find(special_tokens.begin(), special_tokens.end(),
-                      stream[i]) != special_tokens.end()) {
-          tokens.push_back(std::string{stream[i]});
-        } else {
-          in_identifier = true;
-          temp += stream[i];
-        }
+        in_identifier = true;
+        temp += stream[i];
       }
     }
   }
   if (temp != "") {
-    tokens.push_back(temp);
+    tokens.push_back(Token{.tk = temp, .line = line});
   }
   for (auto &tk : tokens) {
-    if (tk[0] == '"') {
-      tk = process_escapes(tk);
+    if (tk.tk[0] == '"') {
+      tk = Token {.tk = process_escapes(tk.tk), .line = tk.line};
     }
   }
   return tokens;

@@ -27,21 +27,21 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <variant>
-Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line);
-Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH,
+Symbol eval(Symbol root, const path &PATH, int line);
+Symbol eval_primitive_node(Symbol node, const path &PATH,
                            int line = 0);
-Symbol eval_dispatch(Symbol node, const std::vector<std::string> &PATH,
+Symbol eval_dispatch(Symbol node, const path &PATH,
                      int line);
-std::pair<std::string, Symbol>
-check_for_tail_recursion(std::string name, Symbol funcall, path &PATH) {
+std::pair<bool, Symbol>
+check_for_tail_recursion(std::string name, Symbol funcall, const path &PATH) {
   if (funcall.type != Type::List)
-    return {"no", funcall};
+    return {false, funcall};
   auto lst = std::get<std::list<Symbol>>(funcall.value);
   if (lst.empty())
-    return {"no", funcall};
+    return {false, funcall};
   auto fstnode = lst.front();
   if ((fstnode.type != Type::Identifier) && (fstnode.type != Type::Operator)) {
-    return {"no", funcall};
+    return {false, funcall};
   }
   auto nodename = std::get<std::string>(fstnode.value);
   if ((nodename == "if") || (nodename == "cond")) {
@@ -50,74 +50,35 @@ check_for_tail_recursion(std::string name, Symbol funcall, path &PATH) {
     return check_for_tail_recursion(name, branch, PATH);
   }
   if (nodename == name) {
-    return {"yes", funcall};
+    return {true, funcall};
   }
-  return {"no", funcall};
+  return {false, funcall};
 }
 
-Symbol eval_function(Symbol node, const std::vector<std::string> &PATH,
-                     int line) {
-  Symbol result;
-  auto argl = std::get<std::list<Symbol>>(node.value);
-  auto dummy = argl.front();
-  std::string op = std::get<std::string>(argl.front().value);
-  argl.pop_front();
-  if (!user_defined_procedures[user_defined_procedures.size() - 1].contains(
-          op)) {
-    throw std::logic_error{"Unbound procedure " + op + "!\n"};
-  }
-  Symbol condition;
-  Symbol params =
-      user_defined_procedures[user_defined_procedures.size() - 1][op].first;
-  auto paraml = std::get<std::list<Symbol>>(params.value);
-  Symbol body =
-      user_defined_procedures[user_defined_procedures.size() - 1][op].second;
-  if (op.substr(0, 6) == "__re_c") {
-    // we got a conditional lambda, so we must store the condition in its
-    // variable
-    if (paraml.size() != 2) {
-      throw std::logic_error{
-          "Missing condition or arguments in a conditional lambda!\n"};
-    }
-    condition = paraml.back();
-    params = paraml.front();
-    paraml = std::get<std::list<Symbol>>(params.value);
-    auto bodyl = std::get<std::list<Symbol>>(body.value);
-    if (bodyl.size() != 2) {
-      throw std::logic_error{
-          "A conditional lambda can only accept two expressions!\n"};
-    }
-  }
-  if (argl.size() != paraml.size()) {
-    throw std::logic_error{"Wrong amount of arguments to procedure " + op +
-                           "!\n"};
-  }
+Symbol eval_function(Symbol node, const path& PATH, int line) {
+  auto as_list = std::get<std::list<Symbol>>(node.value);
+  Symbol func = *variable_lookup(as_list.front());
+  std::string op = std::get<std::string>(as_list.front().value);
+  auto func_as_l = std::get<std::list<Symbol>>(func.value);
+  // get the various parts of the function
+  auto parameters = std::get<std::list<Symbol>>(func_as_l.front().value);
+  func_as_l.pop_front();
+  auto body = std::get<std::list<Symbol>>(func_as_l.front().value);
+  func_as_l.pop_front();
+  as_list.pop_front();
+
+  if (parameters.size() != as_list.size())
+    throw std::logic_error {"Expected arity ( " +
+			    std::to_string(parameters.size()) + ")" +
+			    " and supplied number of arguments (" +
+			    std::to_string(as_list.size()) +
+			    ") for call to " + op + " don't match!\n"};
   std::map<std::string, Symbol> frame = {};
-  size_t paramls = paraml.size();
-  std::list<std::pair<Symbol, Symbol>> zipped;
-  std::transform(
-      paraml.begin(), paraml.end(), argl.begin(), std::back_inserter(zipped),
-      [](const Symbol &lhs, const Symbol &rhs) -> std::pair<Symbol, Symbol> {
-        return std::make_pair(lhs, rhs);
-      });
-  for (auto p : zipped) {
-    if (p.second.is_lit) {
-      frame.insert_or_assign(std::get<std::string>(p.first.value), p.second);
-    } else if ((p.second.type == Type::RawAst) ||
-               (p.second.type == Type::Number) ||
-               (p.second.type == Type::String) ||
-               (p.second.type == Type::Boolean)) {
-      frame.insert_or_assign(std::get<std::string>(p.first.value), p.second);
-    } else if (p.second.type == Type::Identifier) {
-      if (auto csopt = callstack_variable_lookup(p.second);
-          csopt != std::nullopt) {
-        frame.insert_or_assign(std::get<std::string>(p.first.value), *csopt);
-      } else
-        frame.insert_or_assign(std::get<std::string>(p.first.value),
-                               eval(p.second, PATH, line));
-    } else
-      frame.insert_or_assign(std::get<std::string>(p.first.value),
-                             eval(p.second, PATH, line));
+  while (parameters.size() > 0) {
+    auto p = std::get<std::string>(parameters.front().value);
+    frame.insert(std::make_pair(p, as_list.front()));
+    parameters.pop_front();
+    as_list.pop_front();
   }
 
   if (node.type != Type::RecFunCall)
@@ -127,27 +88,16 @@ Symbol eval_function(Symbol node, const std::vector<std::string> &PATH,
       call_stack.pop_back();
     call_stack.push_back(std::make_pair(op, frame));
   }
-  std::list<Symbol> body_list = std::get<std::list<Symbol>>(body.value);
-  if (op.substr(0, 6) == "__re_c") {
-    Symbol expr;
-    if (convert_value_to_bool(eval(condition, PATH, line))) {
-      expr = body_list.front();
-    } else
-      expr = body_list.back();
-    result = eval(expr, PATH, line);
-    return result;
-  }
-  Symbol last = body_list.back();
-  body_list.pop_back();
-  for (auto e : body_list) {
+  auto last = body.back();
+  body.pop_back();
+  Symbol result;
+  for (auto e : body) {
     result = eval(e, PATH, line);
   }
+
   if (auto last_call = check_for_tail_recursion(op, last, PATH);
-      last_call.first == "no") {
-    if (result.type != Type::RawAst)
+      last_call.first == false) {
       result = eval(last_call.second, PATH, line);
-    else
-      result = last_call.second;
   } else {
     last = last_call.second;
     last.type = Type::RecFunCall;
@@ -158,7 +108,7 @@ Symbol eval_function(Symbol node, const std::vector<std::string> &PATH,
 }
 
 // to use with nodes with only leaf children.
-Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH,
+Symbol eval_primitive_node(Symbol node, const path &PATH,
                            int line) {
   Symbol result;
   std::optional<std::string> absolute; // absolute path of an executable, if any
@@ -167,24 +117,26 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH,
   if (l.empty())
     return node;
   Symbol op = l.front();
-  if ((op.type == Type::Number) || (op.type == Type::String)) {
+  if ((op.type == Type::Number) ||
+      (op.type == Type::String) ||
+      (op.type == Type::Boolean)) {
     return node;
   }
   if (node.type == Type::RawAst) {
     return node;
   }
-  if (((op.type == Type::Identifier) || (op.type == Type::Operator)) &&
-      !user_defined_procedures.empty() &&
-      user_defined_procedures[user_defined_procedures.size() - 1].contains(
-          std::get<std::string>(op.value))) {
-    result = eval_function(node, PATH, line);
-    return result;
-  } else if (op.type == Type::Operator) {
+  if (auto x = variable_lookup(op); x != std::nullopt)
+    if (x->type == Type::Function)
+      return eval_function(node, PATH, line);  
+
+  
+  if (op.type == Type::Operator) {
     l.pop_front();
     node.value = l;
-    if (procedures.contains(std::get<std::string>(op.value))) {
-      Functor fun = procedures[std::get<std::string>(op.value)];
-      if (std::get<std::string>(op.value) == "->") {
+    auto s = std::get<std::string>(op.value);
+    if (procedures.contains(s)) {
+      Functor fun = procedures[s];
+      if (s == "->") {
         l.push_front(Symbol("", node.name != "root", Type::Boolean));
       }
       try {
@@ -202,7 +154,7 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH,
       return result;
     } else
       throw std::logic_error{"Rewind (line" + std::to_string(line) +
-                             "): Unbound procedure!\n"};
+                             "): Unbound procedure " + s + "!\n"};
   } else if (auto lit = std::find_if(
                  l.begin(), l.end(),
                  [&](Symbol &s) -> bool {
@@ -240,7 +192,7 @@ Symbol eval_primitive_node(Symbol node, const std::vector<std::string> &PATH,
   return node;
 }
 
-Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line) {
+Symbol eval(Symbol root, const path &PATH, int line) {
   Symbol result;
   std::stack<Symbol> node_stk;
   Symbol current_node;
@@ -250,8 +202,19 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line) {
   // to compute the value for each node, including the root.
   std::vector<std::list<Symbol>> leaves;
   current_node = root;
-  if (root.is_lit)
+  if (root.is_lit) return root;
+  switch (root.type) {
+  case Type::Number:
+  case Type::String:
+  case Type::Boolean:
+  case Type::Function:
+  case Type::RawAst:
     return root;
+  default: break;
+  }
+  if (root.type == Type::List)
+    if (std::get<std::list<Symbol>>(root.value).empty())
+      return root;
   do {
     // for each node, visit each child and backtrack to the last parent node
     // when the last child is null, and continue with the second last node and
@@ -269,21 +232,11 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line) {
       if (std::get<std::list<Symbol>>(current_node.value).empty()) {
         // if we're back to the root node, and we don't have any
         // children left, we're done.
-        if (leaves.empty()) {
-          if ((current_node.type == Type::List) &&
-              (std::get<std::list<Symbol>>(current_node.value).empty())) {
-            return current_node;
-          }
+        if (leaves.empty())
           break;
-        }
         Symbol eval_temp_arg;
-        // clean up for any function definition...
-        std::erase_if(leaves[leaves.size() - 1], [](Symbol &s) -> bool {
-          return (s.type == Type::Defunc) || (s.type == Type::Command);
-        });
-
         eval_temp_arg =
-            Symbol(current_node.name, leaves[leaves.size() - 1], Type::List);
+          Symbol(current_node.name, leaves[leaves.size() - 1], Type::List);
         result = eval_primitive_node(eval_temp_arg, PATH, line);
         leaves.pop_back();
 
@@ -406,11 +359,12 @@ Symbol eval(Symbol root, const std::vector<std::string> &PATH, int line) {
           node_stk.push(dummy);
         }
       } else if (auto p_opt = callstack_variable_lookup(current_node);
-                 (p_opt != std::nullopt) &&
-                 (current_node.type == Type::Identifier)) {
+                 p_opt != std::nullopt) {
         if (leaves.empty())
           leaves.push_back(std::list<Symbol>{});
-        leaves[leaves.size() - 1].push_back(*p_opt);
+	if (p_opt->type != Type::Function)
+          leaves[leaves.size() - 1].push_back(*p_opt);
+	else leaves[leaves.size() - 1].push_back(current_node);
       } else if (current_node.type == Type::Identifier) {
         if (op[0] == '$') {
           if (auto var_opt =
