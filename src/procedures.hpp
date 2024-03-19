@@ -141,6 +141,14 @@ static const Symbol match_in_list_capture =
                              Symbol("", "l", Type::List)},
            Type::List);
 
+static const Symbol match_head_tail =
+  Symbol("",
+	 std::list<Symbol>{
+	   Symbol("", "cons", Type::Operator),
+	   Symbol("", "a", Type::Identifier),
+	   Symbol("", "b", Type::Identifier)},
+	 Type::List);
+
 bool compare_list_structure(Symbol l, Symbol r) {
   if (l.type != Type::List)
     throw std::logic_error{"First operand to 'compare_list_structure' "
@@ -827,7 +835,7 @@ std::map<std::string, Functor> procedures = {
                                     get_int(e.value), get_int(prev.value));
            continue;
          }
-         is_true = is_true && (e.value == prev.value);
+	 is_true = is_true && (e.value == prev.value);
          prev = e;
        }
        return Symbol("", is_true, Type::Boolean);
@@ -1093,7 +1101,7 @@ std::map<std::string, Functor> procedures = {
            throw std::logic_error{"Invalid empty branch in 'match'!\n"};
          }
          Symbol pattern = branchl.front();
-         branchl.pop_front();
+	 branchl.pop_front();
          if (match_any == pattern) {
            Symbol result;
            variables.push_back(std::map<std::string, Symbol>{});
@@ -1329,7 +1337,31 @@ std::map<std::string, Functor> procedures = {
              return result;
            }
            variables.pop_back();
-         } else if (pattern.type == Type::List) {
+         } else if (weak_compare(match_head_tail, pattern)) {
+	   auto expr = std::get<std::list<Symbol>>(pattern.value);
+	   auto tail = expr.back();
+	   expr.pop_back();
+	   auto head = expr.back();
+	   if (element.type != Type::List)
+	     continue;
+	   auto l = std::get<std::list<Symbol>>(element.value);
+	   std::string a = std::get<std::string>(head.value);
+	   std::string b = std::get<std::string>(tail.value);
+	   head = l.front();
+	   l.pop_front();
+	   tail = element;
+	   tail.value = l;
+	   variables.push_back(std::map<std::string, Symbol>{});
+	   variables[variables.size() - 1].insert(std::make_pair(a, head));
+	   variables[variables.size() - 1].insert(std::make_pair(b, tail));
+	   Symbol result;
+	   
+	   for (auto expr : branchl) {
+             result = eval(expr, PATH);
+           }
+           return result;
+	   
+	 } else if (pattern.type == Type::List) {
            if (!std::holds_alternative<std::list<Symbol>>(element.value)) {
              continue;
            }

@@ -82,7 +82,7 @@ RecInfo parse_list_literal(std::vector<Token> tokens, int si) {
     auto tok = tokens[i];
     auto tk = tok.tk;
     if ((tk == "(") || (tk == "[")) {
-      auto got = parse_list_expr(tokens, i);
+      auto got = parse_list(tokens, i);
       ret.push_back(got.result);
       i = got.end_index;
     } else if ((tk == ")") || (tk == "]")) {
@@ -102,20 +102,10 @@ RecInfo parse_list_literal(std::vector<Token> tokens, int si) {
   throw std::logic_error {format_line(tokens[i-1].line) +
 			  " Unclosed list!\n"};
 }
-
+RecInfo literal_to_expr(RecInfo got);
 RecInfo parse_list_expr(std::vector<Token> tokens, int si) {
   auto got = parse_list_literal(tokens, si);
-  auto l = std::get<std::list<Symbol>>(got.result.value);
-  if (l.empty())
-    throw std::logic_error {"Empty function call!\n"};
-  auto op = l.front();
-  if (op.type != Type::Identifier)
-    throw std::logic_error {"Invalid operator in a list-expression!\n"};
-  l.pop_front();
-  op.type = Type::Operator;
-  l.push_front(op);
-  got.result.value = l;
-  return got;
+  return literal_to_expr(got);
 }
 
 RecInfo parse_block_function(std::vector<Token> tokens, int si) {
@@ -226,17 +216,32 @@ RecInfo parse_function(std::vector<Token> tokens, int si) {
   };
 }
 
+RecInfo literal_to_expr(RecInfo got) {
+  auto l = std::get<std::list<Symbol>>(got.result.value);
+  if (l.empty())
+    throw std::logic_error {format_line(got.line) +
+			    " Empty function call!\n"};
+  auto op = l.front();
+  if (op.type != Type::Identifier)
+    throw std::logic_error {"Invalid operator in a list-expression!\n"};
+  l.pop_front();
+  op.type = Type::Operator;
+  l.push_front(op);
+  got.result.value = l;
+  return got;
+}
+
 // this parses either a list expression or a function definition, depending on
 // what comes after the list
 RecInfo parse_list(std::vector<Token> tks, int i) {
-  auto got = parse_list_expr(tks, i);
+  auto got = parse_list_literal(tks, i);
   auto idx = got.end_index;
   if (tks[idx+1].tk == "=>") {
     // a function.
     return parse_function(tks, i);
   }
   // otherwise, we just parsed a list expression:
-  return got;
+  return literal_to_expr(got);
 }
 
 RecInfo parse_let(std::vector<Token> tokens, int si) {
@@ -284,10 +289,10 @@ RecInfo parse_branch_section(std::vector<Token> tokens, int i, bool expr = false
     part = dispatch_parse(std::vector<Token>{tokens[i]}, 0);
     i++;
     part.end_index = i;
-    part.result = Symbol("", std::list<Symbol>{part.result}, Type::List);
     if (expr)
       if ((tokens[i].tk != ",") && (tokens[i].tk != ";"))
-	throw std::logic_error {"Missing end-or-branch (',' or ';') token!\n"};
+	throw std::logic_error {format_line(tokens[i].line) +
+				" Missing end-or-branch (',' or ';') token!\n"};
   }
   return part;
 }
@@ -298,9 +303,9 @@ RecInfo parse_branch(std::vector<Token> tokens, int i) {
 
   RecInfo cond = parse_branch_section(tokens, i);
   i = cond.end_index;
-  
   if (tokens[i].tk != "=>")
-    throw std::logic_error {"Missing '=>' token in a branch!\n"};
+    throw std::logic_error {format_line(tokens[i].line) +
+			    "Missing '=>' token in a branch!\n"};
   i++;
   RecInfo body = parse_branch_section(tokens, i, true);
   i = body.end_index;
@@ -315,9 +320,8 @@ RecInfo parse_branch(std::vector<Token> tokens, int i) {
 RecInfo parse_match(std::vector<Token> tokens, int i) {
   // we parse a value, and branches afterwards.
   i++; // skip the "match" keyword
-  RecInfo matched = dispatch_parse(tokens, i);
-  i = matched.end_index;
-
+  RecInfo matched = parse_branch_section(tokens, i);
+  i = matched.end_index - 1;
   std::list<Symbol> l = {
     Symbol("", "match", Type::Operator),
     matched.result

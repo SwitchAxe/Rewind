@@ -30,8 +30,6 @@
 Symbol eval(Symbol root, const path &PATH, int line);
 Symbol eval_primitive_node(Symbol node, const path &PATH,
                            int line = 0);
-Symbol eval_dispatch(Symbol node, const path &PATH,
-                     int line);
 std::pair<bool, Symbol>
 check_for_tail_recursion(std::string name, Symbol funcall, const path &PATH) {
   if (funcall.type != Type::List)
@@ -55,10 +53,22 @@ check_for_tail_recursion(std::string name, Symbol funcall, const path &PATH) {
   return {false, funcall};
 }
 
-Symbol eval_function(Symbol node, const path& PATH, int line) {
+Symbol eval_function(Symbol node, const path& PATH, int line,
+		     std::optional<Symbol> f = std::nullopt) {
   auto as_list = std::get<std::list<Symbol>>(node.value);
-  Symbol func = *variable_lookup(as_list.front());
-  std::string op = std::get<std::string>(as_list.front().value);
+  std::string op;
+  
+  Symbol func;
+  if (f == std::nullopt) {
+    if (auto x = variable_lookup(as_list.front()); x != std::nullopt)
+      if (x->type == Type::Function)
+	func = *x;
+    else if (auto x = callstack_variable_lookup(as_list.front()); x != std::nullopt)
+      if (x->type == Type::Function)
+	func = *x;
+    else throw std::logic_error {"Unbound function " + op + "!\n"};
+  }
+  if (f != std::nullopt) func = *f;
   auto func_as_l = std::get<std::list<Symbol>>(func.value);
   // get the various parts of the function
   auto parameters = std::get<std::list<Symbol>>(func_as_l.front().value);
@@ -97,7 +107,7 @@ Symbol eval_function(Symbol node, const path& PATH, int line) {
 
   if (auto last_call = check_for_tail_recursion(op, last, PATH);
       last_call.first == false) {
-      result = eval(last_call.second, PATH, line);
+    result = eval(last_call.second, PATH, line);
   } else {
     last = last_call.second;
     last.type = Type::RecFunCall;
@@ -127,9 +137,10 @@ Symbol eval_primitive_node(Symbol node, const path &PATH,
   }
   if (auto x = variable_lookup(op); x != std::nullopt)
     if (x->type == Type::Function)
-      return eval_function(node, PATH, line);  
-
-  
+      return eval_function(node, PATH, line, *x);
+  if (auto x = callstack_variable_lookup(op); x != std::nullopt)
+    if (x->type == Type::Function)
+      return eval_function(node, PATH, line, *x);
   if (op.type == Type::Operator) {
     l.pop_front();
     node.value = l;
@@ -362,9 +373,13 @@ Symbol eval(Symbol root, const path &PATH, int line) {
                  p_opt != std::nullopt) {
         if (leaves.empty())
           leaves.push_back(std::list<Symbol>{});
-	if (p_opt->type != Type::Function)
-          leaves[leaves.size() - 1].push_back(*p_opt);
-	else leaves[leaves.size() - 1].push_back(current_node);
+	if (p_opt->type != Type::Function) {
+	  leaves[leaves.size() - 1].push_back(*p_opt);
+	} else if (leaves.back().size() > 0) {
+	  leaves[leaves.size() - 1].push_back(*p_opt);
+	} else {
+          leaves[leaves.size() - 1].push_back(current_node);
+	}
       } else if (current_node.type == Type::Identifier) {
         if (op[0] == '$') {
           if (auto var_opt =
