@@ -11,12 +11,9 @@ OBJ     = build/main.o
 $(OUT): $(OBJ)
 	$(CXX) $(FLAGS) $^ -o $@
 
-$(OBJ): $(SRC) $(LIBS) $(SHLIBS) src/matchit.h
+$(OBJ): $(SRC) $(LIBS) $(SHLIBS)
 	mkdir -p build
 	$(CXX) $(FLAGS) -c $< -o $@
-
-src/matchit.h:
-	wget https://raw.githubusercontent.com/BowenFu/matchit.cpp/main/include/matchit.h -O $@
 
 clean:
 	rm -rf build
