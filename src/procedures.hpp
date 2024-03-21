@@ -50,6 +50,7 @@ RecInfo parse(std::vector<Token> tokens, int i);
 std::string rewind_read_file(std::string filename);
 std::vector<std::pair<int, std::string>> rewind_split_file(std::string content);
 std::vector<std::map<std::string, Symbol>> variables;
+std::map<std::string, Symbol> constants;
 std::vector<int> active_pids;
 // this is used to pass single-use environment variables to external programs.
 // if this vector contains more than *number of elements in a pipe* or more than
@@ -349,11 +350,11 @@ std::optional<Symbol> variable_lookup(Symbol id) {
   if (variables.empty()) {
     return std::nullopt;
   }
-  for (auto stk : std::vector<std::map<std::string, Symbol>>(
-           variables.rbegin(), variables.rend())) {
-    if (stk.contains(std::get<std::string>(id.value))) {
-      return std::optional<Symbol>(stk[std::get<std::string>(id.value)]);
-    }
+  if (variables.back().contains(std::get<std::string>(id.value))) {
+    return variables.back()[std::get<std::string>(id.value)];
+  }
+  if (variables[0].contains(std::get<std::string>(id.value))) {
+    return variables[0][std::get<std::string>(id.value)];
   }
   return std::nullopt;
 }
@@ -888,7 +889,7 @@ std::map<std::string, Functor> procedures = {
        for (auto e : args) {
          clause = eval(e, PATH);
          if (clause.type != Type::Boolean) {
-           throw std::logic_error{"Type mismatch in the 'and' operator: Only "
+           throw std::logic_error{"Type mismatch in the 'or' operator: Only "
                                   "booleans are allowed!\n"};
          }
          is_true = is_true || std::get<bool>(clause.value);
@@ -1025,15 +1026,18 @@ std::map<std::string, Functor> procedures = {
        return Symbol("", ret, Type::String);
      }}},
     {"let", {[](std::list<Symbol> args, path PATH) -> Symbol {
+       Symbol global = args.front();
+       args.pop_front();
        Symbol id = args.front();
+       auto s = std::get<std::string>(id.value);
        args.pop_front();
        Symbol result = eval(args.front(), PATH);
-       if (variables.empty()) {
-         variables.push_back(std::map<std::string, Symbol>());
+       if (std::get<bool>(global.value)) {
+         constants.insert(std::pair{s, result});
        }
-       variables[variables.size() - 1].insert_or_assign(
-           std::get<std::string>(id.value), result);
-       return Symbol("", true, Type::Command);
+       Symbol let_env = Symbol("", true, Type::Command);
+       let_env.variables = std::map{std::pair{s, result}};
+       return let_env;
      }}},
     {"if", {[](std::list<Symbol> args, path PATH) -> Symbol {
        // (if <clause> (expr1 ... exprn) (else1 ... elsen))
@@ -1072,7 +1076,7 @@ std::map<std::string, Functor> procedures = {
          std::list<Symbol> branch = std::get<std::list<Symbol>>(e.value);
          Symbol clause = branch.front();
          branch.pop_front();
-         Symbol last = branch.back();
+	 Symbol last = branch.back();
          branch.pop_back();
          Symbol clause_bool = eval(clause, PATH);
          if (convert_value_to_bool(clause_bool)) {
@@ -1104,12 +1108,11 @@ std::map<std::string, Functor> procedures = {
 	 branchl.pop_front();
          if (match_any == pattern) {
            Symbol result;
-           variables.push_back(std::map<std::string, Symbol>{});
-           variables[variables.size() - 1].insert_or_assign("_", element);
+	   result.variables = element.variables;
+	   result.variables.insert(std::pair{"_", element});
            for (auto expr : branchl) {
              result = eval(expr, PATH);
            }
-           variables.pop_back();
            return result;
          } else if (weak_compare(match_less_than, pattern)) {
            Symbol value = std::get<std::list<Symbol>>(pattern.value).back();
@@ -1149,19 +1152,17 @@ std::map<std::string, Functor> procedures = {
            }
            expr.pop_back();
            Symbol id = expr.back();
-           variables.push_back(std::map<std::string, Symbol>{});
-           variables[variables.size() - 1].insert_or_assign(
-               std::get<std::string>(id.value), element);
            if (std::visit([]<class T, class U>(
                               T t, U u) -> bool { return std::cmp_less(t, u); },
                           get_int(element.value), get_int(value.value))) {
              Symbol result;
              for (auto expr : branchl) {
+	       expr.variables = element.variables;
+	       expr.variables.insert(std::pair{std::get<std::string>(id.value), element});
                result = eval(expr, PATH);
              }
              return result;
            }
-           variables.pop_back();
          } else if (weak_compare(match_eq, pattern)) {
            Symbol value = std::get<std::list<Symbol>>(pattern.value).back();
            bool is_true = false;
@@ -1198,17 +1199,15 @@ std::map<std::string, Functor> procedures = {
 
            expr.pop_back();
            auto id = expr.back();
-           variables.push_back(std::map<std::string, Symbol>{});
-           variables[variables.size() - 1].insert_or_assign(
-               std::get<std::string>(id.value), element);
            if (is_true) {
              Symbol result;
              for (auto expr : branchl) {
+	       expr.variables = element.variables;
+	       expr.variables.insert(std::pair{std::get<std::string>(id.value), element});
                result = eval(expr, PATH);
              }
              return result;
            }
-           variables.pop_back();
          } else if (weak_compare(match_neq, pattern)) {
            Symbol value = std::get<std::list<Symbol>>(pattern.value).back();
            bool is_true = false;
@@ -1271,20 +1270,18 @@ std::map<std::string, Functor> procedures = {
            }
            expr.pop_back();
            auto id = expr.back();
-           variables.push_back(std::map<std::string, Symbol>{});
-           variables[variables.size() - 1].insert_or_assign(
-               std::get<std::string>(id.value), element);
            auto l = std::get<std::list<Symbol>>(value.value);
            if (std::find_if(l.begin(), l.end(), [&](const Symbol s) -> bool {
                  return s == element;
                }) != l.end()) {
              Symbol result;
              for (auto expr : branchl) {
+	       expr.variables = element.variables;
+	       expr.variables.insert(std::pair{std::get<std::string>(id.value), element});
                result = eval(expr, PATH);
              }
              return result;
            }
-           variables.pop_back();
          } else if (weak_compare(match_greater_than, pattern)) {
            auto expr = std::get<std::list<Symbol>>(pattern.value);
            auto value = expr.back();
@@ -1329,14 +1326,13 @@ std::map<std::string, Functor> procedures = {
              std::string id;
              expr.pop_back();
              id = std::get<std::string>(expr.back().value);
-             variables.push_back(std::map<std::string, Symbol>{});
-             variables[variables.size() - 1].insert_or_assign(id, element);
              for (auto expr : branchl) {
+	       expr.variables = element.variables;
+	       expr.variables.insert(std::pair{id, element});
                result = eval(expr, PATH);
              }
              return result;
            }
-           variables.pop_back();
          } else if (weak_compare(match_head_tail, pattern)) {
 	   auto expr = std::get<std::list<Symbol>>(pattern.value);
 	   auto tail = expr.back();
@@ -1351,13 +1347,13 @@ std::map<std::string, Functor> procedures = {
 	   l.pop_front();
 	   tail = element;
 	   tail.value = l;
-	   variables.push_back(std::map<std::string, Symbol>{});
-	   variables[variables.size() - 1].insert(std::make_pair(a, head));
-	   variables[variables.size() - 1].insert(std::make_pair(b, tail));
 	   Symbol result;
 	   
 	   for (auto expr : branchl) {
-             result = eval(expr, PATH);
+	     expr.variables = element.variables;
+	     expr.variables.insert(std::pair{a, head});
+	     expr.variables.insert(std::pair{b, tail});
+	     result = eval(expr, PATH);
            }
            return result;
 	   
@@ -1368,13 +1364,13 @@ std::map<std::string, Functor> procedures = {
            bool same_structure = compare_list_structure(pattern, element);
            if (same_structure) {
              auto vars = rec_bind_list(pattern, element);
-             variables.push_back({});
              Symbol result;
-             for (auto p : vars) {
-               variables[variables.size() - 1].insert_or_assign(
-                   std::get<std::string>(p.first.value), p.second);
-             }
              for (auto expr : branchl) {
+	       expr.variables = element.variables;
+	       for (auto p : vars)
+		 expr.variables.insert(std::pair{
+		   std::get<std::string>(p.first.value),
+		   p.second});
                result = eval(expr, PATH);
              }
              return result;
@@ -1795,19 +1791,16 @@ std::map<std::string, Functor> procedures = {
         }
         std::string filename = std::get<std::string>(e.value);
 
-	std::vector<Token> tks = get_tokens(rewind_read_file(filename));
-	RecInfo ast;
-	do {
-	  try {
-	    ast = parse(tks);
-	    last_expr = ast.result;
-	    last_evaluated = eval(last_expr, PATH);
-	  } catch (std::logic_error ex) {
-	    std::string linum = format_line(ast.line);
-	    throw std::logic_error {"(file " + filename + "), " +
-				    linum + ": " + ex.what()};
-	  }
-	} while (ast.end_index < tks.size());
+	      std::vector<Token> tks = get_tokens(rewind_read_file(filename));
+	      Symbol ast;
+	      try {
+	        ast = parse(tks);
+	        last_evaluated = eval(ast, PATH);
+	      } catch (std::logic_error ex) {
+	        std::string linum = format_line(ast.line);
+	        throw std::logic_error {"(file " + filename + "), " +
+			                            linum + ": " + ex.what()};
+        }
       }
       return last_evaluated;
      }}},
@@ -1817,16 +1810,15 @@ std::map<std::string, Functor> procedures = {
           "'eval' expects exactly one string to evaluate!\n"};
       }
       Symbol last_evaluated;
-      Symbol last_expr;
       std::string line = std::get<std::string>(args.front().value);
       if ((line == "exit") || (line == "(exit)")) {
         exit(EXIT_SUCCESS);
         return Symbol("", false, Type::Command);
       }
+      Symbol ast;
       try {
-        RecInfo ast = parse(get_tokens(line));
-	last_expr = ast.result;
-        last_evaluated = eval(last_expr, PATH);
+        ast = parse(get_tokens(line));
+        last_evaluated = eval(ast, PATH);
         if ((last_evaluated.type != Type::Command) &&
             (last_evaluated.type != Type::CommandResult))
           std::cout << rec_print_ast(last_evaluated);
@@ -1834,18 +1826,21 @@ std::map<std::string, Functor> procedures = {
         return Symbol("", ex.what(), Type::Error);
       }
       return last_evaluated;
-     }}},
+    }}},
+    {"return", {[](std::list<Symbol> args) {
+      if (args.size() != 1)
+	throw std::logic_error {"The 'return' builtin expects one argument!\n"};
+      return args.front();
+    }}},
     {"typeof", {[](std::list<Symbol> args, path PATH) -> Symbol {
       if (args.size() != 1) {
         throw std::logic_error{
           "The 'typeof' procedure expects exactly one symbol!\n"};
       }
 
-      RecInfo sym;
       Symbol ast;
       if (args.front().type == Type::RawAst) {
-        sym = parse(get_tokens(rec_print_ast(args.front())));
-	ast = sym.result;
+        ast = parse(get_tokens(rec_print_ast(args.front())));
       } else
         ast = args.front();
       switch (ast.type) {
@@ -1889,15 +1884,15 @@ std::map<std::string, Functor> procedures = {
        input = std::get<std::string>(args.front().value);
        try {
          auto ast = parse(get_tokens(input));
-         if (ast.result.type == Type::List) {
-           ast.result.type = Type::RawAst;
-           auto l = std::get<std::list<Symbol>>(ast.result.value);
+         if (ast.type == Type::List) {
+           ast.type = Type::RawAst;
+           auto l = std::get<std::list<Symbol>>(ast.value);
            for (auto &e : l) {
              e.type = Type::RawAst;
            }
-           ast.result.value = l;
+           ast.value = l;
          }
-         return ast.result;
+         return ast;
        } catch (std::logic_error ex) {
          return Symbol("", std::string(ex.what()), Type::Error);
        };

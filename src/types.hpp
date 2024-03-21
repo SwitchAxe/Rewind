@@ -19,6 +19,7 @@
 #include <string>
 #include <variant>
 #include <vector>
+#include <map>
 
 enum class Type {
   String,
@@ -50,18 +51,23 @@ struct Symbol {
     name = _n;
     value = _v;
     type = _t;
-    is_lit = false;
+    is_global = false;
   }
   Symbol(std::string _n, _Type _v, Type _t, bool _b) {
     name = _n;
     value = _v;
     type = _t;
-    is_lit = _b;
+    is_global = _b;
   }
   std::string name; // empty string if not present
   _Type value;
   Type type;
-  bool is_lit;
+  bool is_block;
+  bool is_global;
+  int line;
+  // this is associated with any symbol, but it's useful for
+  // functions.
+  std::map<std::string, Symbol> variables;
 };
 
 // function signature for the builtins

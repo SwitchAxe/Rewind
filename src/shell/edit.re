@@ -30,30 +30,24 @@ let curs_bwd = (n) => cond
 let curs_erase = "\e[0K";
 
 let getch = () => {
-    let fst_b = (readch);
+    let x = (readch)
     cond
-    | (!= (chtoi $fst_b) 27) => $fst_b,
+    | (!= (chtoi $x) 27) => $x,
     | (!= (chtoi (readch)) 91) => "undefined",
     | _ => (readch);
 }
-let strlen = (s) => length (stol s);
+
+let strlen = (s) => (length (stol s));
 let overwrite = (w c) => { print (curs_bwd (strlen w)) c w $re_color_blank; w; }
-let kind = (x) => typeof (ast x);
+let kind = (x) => (typeof (ast x));
 
-let map = (f l) => {
-    let map-aux = (f l app) =>
-    	cond
-    	| (= l '[]) => app,
-	| _ => (map-aux f (rest l) (++ app (f (first l))));
-    map-aux f l '[];
-}
 
-let space? = (x) => or (= x " ") (= x "\t");
+let space? = (x) => (or (= x " ") (= x "\t"));
 let paren? = (x) => match x
     	     	    | (in '["[", "]", "(", ")"]) => true,
 		    | _ => false;
 
-let operator? = (x) => = (typeof (stoid x)) "operator";
+let operator? = (x) => (= (typeof (stoid x)) "operator");
 
 
 let tokens+blanks = (s) => {
@@ -65,12 +59,20 @@ let tokens+blanks = (s) => {
 	  	     	       	      	   | (= $h '"') =>
 	  	     	       	      	       (aux $t acc (s+ w $h) false),
 					   | _ => (aux $t acc (s+ w $h) true); },
-			       | (space? $h) => (aux $t (++ acc $h) ""),
-	  	     	       | _ => (aux $t acc (s+ w $h)); };
+			       | (space? $h) => (aux $t (++ acc $h) "" false),
+	  	     	       | _ => (aux $t acc (s+ w $h) false); };
 
     aux (stol s) '[] "" false;
 }
 
+
+let map = (f l) => {
+    let aux = (f l app) =>
+    	cond
+    	| (= l '[]) => app,
+	| _ => (aux f (rest l) (++ app (f (first l))));
+    aux f l '[];
+}
 
 let re:visit = (s) => {
     let aux = (s) =>
@@ -80,7 +82,7 @@ let re:visit = (s) => {
     	| (operator? s) => (overwrite s $re_color_purple),
     	| (= (kind s) "string") => (overwrite s $re_color_cyan),
     	| _ => (overwrite sentence $re_color_blank);
-
+    print "aux = " (tos $aux) "\n";
     ltos (map $aux (tokens+blanks s));
 }
 
@@ -111,7 +113,6 @@ let re:handle-right = (a b c d e) =>
     | (< d c) => { print (curs_fwd 1); '[a b c (+ d 1)]; },
     | _ => '[a b c d];
 
-# unused for now
 let re:handle-undefined = (a b c d e) => '[a b c d e];
 
 let re:handle-down = (a b c d e) => '[a b c d e];
@@ -127,7 +128,7 @@ let keypress-dispatch = (c) => cond
 			       | (= c "C") => $re:handle-right,
 			       | (= c "D") => $re:handle-left,
 			       | (= c "undefined") => $re:handle-undefined,
-			       | (or (= (chtoi c) 8) (= chtoi c) 127) =>
+			       | (or (= (chtoi c) 8) (= (chtoi c) 127)) =>
 			       	 $re:handle-backspace,
 			       | _ => $re:handle-printable;
 
@@ -135,28 +136,33 @@ let re:repl = () => {
     let aux = (a b c d) => {
     	flush;
     	let ch = (getch);
-	let f = keypress-dispatch $ch;
-	match (fun a b c d $ch)
-	| [a * c d] => (aux $a $* $c $d),
+	let f = (keypress-dispatch $ch);
+	match (f a b c d $ch)
+	| '[a * c d] => (aux $a $* $c $d),
 	| _ => $_;
     }
     rawmode;
     let r = (aux "" '[] 0 0);
     cookedmode;
-    $r;
+    return $r;
 }
 
 let re:default-prompt = () => (s+ (get PWD) "> ");
 
 let re:display = (p) => cond
-    	      	       	| p => { print p; flush; re:repl; },
-		       	| _ => { print (re:default_prompt); flush; re:repl; };
+    	      	       	| (!= p false) => { print p; flush; },
+		       	| _ => { print (re:default-prompt); flush; };
 
 let loop = (f) => { f; loop f; }
 
 let re:start-repl = () =>
     cond
     | (defined prompt) => (loop () => { print "\n";
-				       	print (eval (re:display (prompt))); }),
+				       	re:display (prompt);
+					eval (re:repl); }),
     | _ => (loop () => { print "\n";
-      	   	     	 print (eval (re:display $re:default-prompt)); });
+      	   	     	 re:display (re:default-prompt);
+			 eval (re:repl); });
+
+
+re:start-repl;

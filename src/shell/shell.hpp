@@ -85,13 +85,14 @@ std::optional<Symbol> rewind_read_config(const path &PATH) {
   auto expr_vec = get_tokens(content);
   Symbol last_evaluated;
   Symbol last_expr;
-  RecInfo ast;
-  do {
-    ast = parse(expr_vec);
-    last_expr = ast.result;
-    last_evaluated = eval(ast.result, PATH);
-  } while (ast.end_index < expr_vec.size());
-  return last_expr;
+  Symbol ast;
+  Symbol last;
+  ast = parse(expr_vec);
+  for (auto x : std::get<std::list<Symbol>>(ast.value)) {
+    last = x;
+    last_evaluated = eval(last, PATH);
+  }
+  return last;
 }
 
 std::optional<std::vector<std::string>> rewind_get_system_PATH() {
@@ -158,8 +159,10 @@ void rewind_sh_loop() {
     if (line.empty())
       continue;
     try {
-      Symbol ast = eval(parse(get_tokens(line)).result, *PATH, 0);
-      std::cout << rec_print_ast(ast) << "\n";
+      Symbol ast = parse(get_tokens(line));
+      ast = std::get<std::list<Symbol>>(ast.value).front();
+      Symbol result = eval(ast, *PATH, ast.line);
+      std::cout << rec_print_ast(result) << "\n";
     } catch (std::logic_error ex) {
       procedures["cookedmode"]({}, {});
       std::cout << ex.what() << "\n";

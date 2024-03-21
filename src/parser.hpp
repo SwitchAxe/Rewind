@@ -86,10 +86,12 @@ RecInfo parse_list_literal(std::vector<Token> tokens, int si) {
       ret.push_back(got.result);
       i = got.end_index;
     } else if ((tk == ")") || (tk == "]")) {
+      Symbol r = Symbol("", ret, Type::List);
+      r.line = tok.line;
       return RecInfo {
-	.result = Symbol("", ret, Type::List),
-	.end_index = i,
-	.line = tok.line };
+	      .result = r,
+	      .end_index = i,
+	      .line = tok.line };
     } else if ((tk == "'(") || (tk == "'[")) {
       auto got = parse_list_literal(tokens, i);
       ret.push_back(got.result);
@@ -113,11 +115,15 @@ RecInfo parse_block_function(std::vector<Token> tokens, int si) {
   int i = 0;
   for (int i = si + 1; i < tokens.size(); ++i) {
     auto tk = tokens[i];
-    if (tk.tk == "}")
+    if (tk.tk == "}") {
+      Symbol block = Symbol("", body, Type::List);
+      block.is_block = true;
+      block.line = tk.line;
       return RecInfo {
-	.result = Symbol("", body, Type::List),
-	.end_index = i,
-	.line = tk.line };
+	      .result = block,
+	      .end_index = i,
+	      .line = tk.line };
+    }
     auto got = dispatch_parse(tokens, i);
     body.push_back(got.result);
     i = got.end_index;
@@ -132,6 +138,7 @@ RecInfo parse_function_call(std::vector<Token> tokens, int si) {
   if (tokens.size() == 1) {
     fcall.push_back(Symbol("", tokens[si].tk, Type::Operator));
     auto sym = Symbol("", fcall, Type::List);
+    sym.line = tokens[si].line;
     return RecInfo {.result = sym, .end_index = si, .line = tokens[si].line};
   }
   int i = 0;
@@ -139,15 +146,16 @@ RecInfo parse_function_call(std::vector<Token> tokens, int si) {
     Token tk = tokens[i];
     if (tk.tk == ";") {
       if (fcall.size() > 0) {
-	auto op = fcall.front();
-	fcall.pop_front();
-	op.type = Type::Operator;
-	fcall.push_front(op);
+	      auto op = fcall.front();
+	      fcall.pop_front();
+	      op.type = Type::Operator;
+        op.line = tk.line;
+	      fcall.push_front(op);
       }
       return RecInfo {
-	.result = Symbol("", fcall, Type::List),
-	.end_index = i,
-	.line = tk.line };
+	      .result = Symbol("", fcall, Type::List),
+	      .end_index = i,
+	      .line = tk.line };
     }
 
     if ((tk.tk == "(") || (tk.tk == "[")) {
@@ -160,6 +168,7 @@ RecInfo parse_function_call(std::vector<Token> tokens, int si) {
       i = got.end_index;
     } else {
       auto got = dispatch_parse(std::vector<Token>{tk}, 0);
+      got.result.line = tk.line;
       fcall.push_back(got.result);
     }
   }
@@ -209,8 +218,10 @@ RecInfo parse_function(std::vector<Token> tokens, int si) {
   auto v = body.result;
   si = body.end_index;
   f.push_back(v);
+  auto fun = Symbol("", f, Type::Function);
+  fun.line = body.line;
   return RecInfo {
-    .result = Symbol("", f, Type::Function),
+    .result = fun,
     .end_index = si,
     .line = tokens[si-1].line
   };
@@ -275,10 +286,14 @@ RecInfo parse_branch_section(std::vector<Token> tokens, int i, bool expr = false
   RecInfo part;
   if ((tokens[i].tk == "(") || (tokens[i].tk == "[")) {
     part = parse_list_expr(tokens, i);
+    if (expr)
+      part.result = Symbol("", std::list<Symbol>{part.result}, Type::List);
     part.end_index++;
   }
   else if ((tokens[i].tk == "'(") || (tokens[i].tk == "'[")) {
     part = parse_list_literal(tokens, i);
+    if (expr)
+      part.result = Symbol("", std::list<Symbol>{part.result}, Type::List);
     part.end_index++;
   } else if (tokens[i].tk == "{") {
     part = parse_block_function(tokens, i);
@@ -309,7 +324,12 @@ RecInfo parse_branch(std::vector<Token> tokens, int i) {
   i++;
   RecInfo body = parse_branch_section(tokens, i, true);
   i = body.end_index;
-  l = {cond.result, body.result};
+  l = {cond.result};
+  if (body.result.type == Type::List) {
+    for (auto x : std::get<std::list<Symbol>>(body.result.value))
+      l.push_back(x);
+  }
+  else l = {cond.result, body.result};
   return RecInfo {
     .result = Symbol("", l, Type::List),
     .end_index = i,
@@ -400,11 +420,23 @@ RecInfo dispatch_parse(std::vector<Token> tks, int i) {
   throw std::logic_error {"Doesn't reach here!\n"};
 }
 
-// .result contains the result of the parsing.
-// .end_index is needed if we plan to parse multiple consecutive
-// expressions, so that we know where we left off the last time.
-RecInfo parse(std::vector<Token> tokens, int i = 0) {
-  return dispatch_parse(tokens, i);
+// returns a tree of the whole program.
+// the root node is the root of the program.
+// subtrees at depth 1 are considered to be "global"
+// trees, so they have the global flag set.
+// the Symbol returned by this procedure can be
+// evaluated directly.
+Symbol parse(std::vector<Token> tokens) {
+  RecInfo cur;
+  int i = 0;
+  std::list<Symbol> program;
+  do {
+    cur = dispatch_parse(tokens, i);
+    cur.result.is_global = true;
+    i = cur.end_index;
+    program.push_back(cur.result);
+  } while (i < tokens.size());
+  return Symbol("", program, Type::List);
 }
 
 // DEBUG PURPOSES ONLY and for printing the final result until i

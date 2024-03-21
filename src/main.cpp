@@ -52,9 +52,8 @@ int main(int argc, char **argv) {
     path p = {};
     if (PATH != std::nullopt) p = *PATH;
     try {
-      RecInfo got = parse(get_tokens(std::string{argv[2]}));
-      Symbol ast = got.result;
-      std::cout << rec_print_ast(eval(ast, p, got.line)) << "\n";
+      Symbol ast = parse(get_tokens(std::string{argv[2]}));
+      std::cout << rec_print_ast(eval(ast, p, 0)) << "\n";
     } catch (std::exception e) {
       std::cout << "Exception: " << e.what() << "\n";
     }
@@ -83,15 +82,12 @@ int main(int argc, char **argv) {
     }
     path p = {};
     if (PATH != std::nullopt) p = *PATH;
-    RecInfo got;
     std::vector<Token> tokens = get_tokens(expr);
-    int i = 0;
-    do {
-      got = parse(tokens, i);
-      Symbol result = eval(got.result, p, got.line);
-      std::cout << rec_print_ast(result) << "\n";
-      i = got.end_index + 1;
-    } while (i < tokens.size());
+    Symbol ast = parse(tokens);
+    Symbol result;
+    for (auto x : std::get<std::list<Symbol>>(ast.value))
+      result = eval(x, p, x.line);
+    std::cout << rec_print_ast(result) << "\n";
     tcsetattr(STDIN_FILENO, TCSANOW, &original);
     return 0;
   } else if (argc > 1) {
@@ -99,16 +95,12 @@ int main(int argc, char **argv) {
     std::string expr = rewind_read_file(filename);
     path p = {};
     if (PATH != std::nullopt) p = *PATH;
-    RecInfo got;
-    std::vector<Token> tokens = get_tokens(expr);
-    int i = 0;
-    do {
-      got = parse(tokens, i);
-      i = got.end_index + 1;
-      Symbol result = eval(got.result, p, got.line);
-      if ((result.type != Type::Command) && (result.type != Type::Defunc))
-	std::cout << rec_print_ast(result) << "\n";
-    } while (i < tokens.size());
+    auto tokens = get_tokens(expr);
+    Symbol ast = parse(tokens);
+    Symbol result;
+    for (auto x : std::get<std::list<Symbol>>(ast.value))
+      result = eval(x, p, x.line);
+    std::cout << rec_print_ast(result) << "\n";
     tcsetattr(STDIN_FILENO, TCSANOW, &original);
     return 0;
   }

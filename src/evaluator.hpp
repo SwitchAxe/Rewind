@@ -78,11 +78,13 @@ Symbol eval_function(Symbol node, const path& PATH, int line,
   as_list.pop_front();
 
   if (parameters.size() != as_list.size())
-    throw std::logic_error {"Expected arity ( " +
+    throw std::logic_error {"Expected arity (" +
 			    std::to_string(parameters.size()) + ")" +
 			    " and supplied number of arguments (" +
 			    std::to_string(as_list.size()) +
-			    ") for call to " + op + " don't match!\n"};
+			    ") for call to " + rec_print_ast(func) +
+			    " don't match!\n" + "the call was: " +
+			    rec_print_ast(node) + "\n"};
   std::map<std::string, Symbol> frame = {};
   while (parameters.size() > 0) {
     auto p = std::get<std::string>(parameters.front().value);
@@ -90,17 +92,20 @@ Symbol eval_function(Symbol node, const path& PATH, int line,
     parameters.pop_front();
     as_list.pop_front();
   }
-
   if (node.type != Type::RecFunCall)
     call_stack.push_back(std::make_pair(op, frame));
   else {
     if (!call_stack.empty())
       call_stack.pop_back();
     call_stack.push_back(std::make_pair(op, frame));
+    if (variables.size() > 1) {
+      variables.pop_back();
+    }
   }
   auto last = body.back();
   body.pop_back();
   Symbol result;
+  variables.push_back({});
   for (auto e : body) {
     result = eval(e, PATH, line);
   }
@@ -114,6 +119,8 @@ Symbol eval_function(Symbol node, const path& PATH, int line,
     return last;
   }
   call_stack.pop_back();
+  if (variables.size() > 1)
+    variables.pop_back();
   return result;
 }
 
@@ -147,8 +154,8 @@ Symbol eval_primitive_node(Symbol node, const path &PATH,
     auto s = std::get<std::string>(op.value);
     if (procedures.contains(s)) {
       Functor fun = procedures[s];
-      if (s == "->") {
-        l.push_front(Symbol("", node.name != "root", Type::Boolean));
+      if ((s == "->") || (s == "let")) {
+        l.push_front(Symbol("", node.is_global, Type::Boolean));
       }
       try {
         result = fun(l, PATH);
@@ -159,8 +166,6 @@ Symbol eval_primitive_node(Symbol node, const path &PATH,
       if (result.type == Type::RawAst) {
         return result;
       }
-      if (result.is_lit)
-        return result;
       result = eval(result, PATH, line);
       return result;
     } else
@@ -213,7 +218,6 @@ Symbol eval(Symbol root, const path &PATH, int line) {
   // to compute the value for each node, including the root.
   std::vector<std::list<Symbol>> leaves;
   current_node = root;
-  if (root.is_lit) return root;
   switch (root.type) {
   case Type::Number:
   case Type::String:
@@ -230,15 +234,8 @@ Symbol eval(Symbol root, const path &PATH, int line) {
     // for each node, visit each child and backtrack to the last parent node
     // when the last child is null, and continue with the second last node and
     // so on
-    if (current_node.is_lit) {
-      if (node_stk.empty())
-        return current_node;
-      if (leaves.empty())
-        leaves.push_back({});
-      leaves[leaves.size() - 1].push_back(current_node);
-      current_node = node_stk.top();
-      node_stk.pop();
-    }
+    current_node.variables = root.variables;
+    std::cout << "cur = " << rec_print_ast(current_node) << "\n";
     if (current_node.type == Type::List) {
       if (std::get<std::list<Symbol>>(current_node.value).empty()) {
         // if we're back to the root node, and we don't have any
@@ -248,8 +245,17 @@ Symbol eval(Symbol root, const path &PATH, int line) {
         Symbol eval_temp_arg;
         eval_temp_arg =
           Symbol(current_node.name, leaves[leaves.size() - 1], Type::List);
-        result = eval_primitive_node(eval_temp_arg, PATH, line);
-        leaves.pop_back();
+        
+        if (root.is_global)
+          eval_temp_arg.is_global = true;
+        
+        if (root.is_block)
+          eval_temp_arg.variables = root.variables;
+              result = eval_primitive_node(eval_temp_arg, PATH, line);
+        if (root.is_block)
+          for (auto [k, v] : result.variables)
+            root.variables.insert(std::pair{k, v});
+              leaves.pop_back();
 
         // main trampoline
         if (result.type == Type::RecFunCall) {
@@ -264,12 +270,6 @@ Symbol eval(Symbol root, const path &PATH, int line) {
         if (!node_stk.empty()) {
           current_node = node_stk.top();
           node_stk.pop();
-          if (std::holds_alternative<std::list<Symbol>>(current_node.value) &&
-              std::get<std::list<Symbol>>(current_node.value).empty()) {
-            if (variables.size() > 1) {
-              variables.pop_back();
-            }
-          }
         } else
           return result;
       } else {
@@ -382,12 +382,11 @@ Symbol eval(Symbol root, const path &PATH, int line) {
 	}
       } else if (current_node.type == Type::Identifier) {
         if (op[0] == '$') {
-          if (auto var_opt =
-                  variable_lookup(Symbol("", op.substr(1), Type::Identifier));
-              var_opt != std::nullopt) {
+          if (root.variables.contains(op.substr(1))) {
+	    auto var = root.variables[op.substr(1)];
             if (leaves.empty())
               leaves.push_back(std::list<Symbol>{});
-            leaves[leaves.size() - 1].push_back(*var_opt);
+            leaves[leaves.size() - 1].push_back(var);
           } else
             throw std::logic_error{"Unbound variable " + op.substr(1) + "!"};
         } else {
