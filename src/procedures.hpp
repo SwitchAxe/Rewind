@@ -49,8 +49,7 @@ std::string rec_print_ast(Symbol root, bool debug = false);
 RecInfo parse(std::vector<Token> tokens, int i);
 std::string rewind_read_file(std::string filename);
 std::vector<std::pair<int, std::string>> rewind_split_file(std::string content);
-std::vector<std::map<std::string, Symbol>> variables;
-std::map<std::string, Symbol> constants;
+variables constants;
 std::vector<int> active_pids;
 // this is used to pass single-use environment variables to external programs.
 // if this vector contains more than *number of elements in a pipe* or more than
@@ -342,22 +341,9 @@ Symbol rewind_redirect_append(Symbol node,
 Symbol rewind_redirect_overwrite(Symbol node,
                                  const std::vector<std::string> &PATH);
 
-Symbol eval(Symbol root, const path &PATH, int line = 0);
+Symbol eval(Symbol root, const path &PATH, variables& vars = constants,
+            int line = 0);
 
-std::optional<Symbol> variable_lookup(Symbol id) {
-  if (!std::holds_alternative<std::string>(id.value))
-    return std::nullopt;
-  if (variables.empty()) {
-    return std::nullopt;
-  }
-  if (variables.back().contains(std::get<std::string>(id.value))) {
-    return variables.back()[std::get<std::string>(id.value)];
-  }
-  if (variables[0].contains(std::get<std::string>(id.value))) {
-    return variables[0][std::get<std::string>(id.value)];
-  }
-  return std::nullopt;
-}
 
 std::optional<std::pair<Symbol, Symbol>> procedure_lookup(Symbol id) {
   if (!std::holds_alternative<std::string>(id.value))
@@ -384,27 +370,21 @@ std::optional<Symbol> callstack_variable_lookup(Symbol id) {
 }
 
 bool convert_value_to_bool(Symbol sym) {
-  auto maybe_id = variable_lookup(sym);
-  auto maybe_cs_id = callstack_variable_lookup(sym);
   bool clause;
-  if (maybe_cs_id != std::nullopt) {
-    clause = convert_value_to_bool(*maybe_cs_id);
-  } else if (maybe_id != std::nullopt) {
-    clause = convert_value_to_bool(*maybe_id);
-  } else
-    clause = std::visit(overloaded {
-      [](std::string s) { return !s.empty(); },
-      [](signed long long int x) { return x != 0; },
-      [](unsigned long long int x) { return x != 0; },
-      [](bool b) { return b; },
-      [](std::list<Symbol> l) { return !l.empty(); },
-      [](std::monostate) { return false; }
-    }, sym.value);
+  clause = std::visit(overloaded {
+    [](std::string s) { return !s.empty(); },
+    [](signed long long int x) { return x != 0; },
+    [](unsigned long long int x) { return x != 0; },
+    [](bool b) { return b; },
+    [](std::list<Symbol> l) { return !l.empty(); },
+    [](std::monostate) { return false; }
+  }, sym.value);
   return clause;
 }
 
+
 std::map<std::string, Functor> procedures = {
-    {"cd", {[](std::list<Symbol> args) -> Symbol {
+    std::pair{"cd", Functor{[](std::list<Symbol> args) -> Symbol {
        if ((args.size() != 1) || ((args.front().type != Type::Identifier) &&
                                   (args.front().type != Type::String)))
          throw std::logic_error{
@@ -424,7 +404,7 @@ std::map<std::string, Functor> procedures = {
        setenv("PWD", std::string{fs::current_path()}.c_str(), 1);
        return Symbol("", fs::current_path(), Type::Command);
      }}},
-    {"set", {[](std::list<Symbol> args) -> Symbol {
+    std::pair{"set", Functor{[](std::list<Symbol> args) -> Symbol {
        if (args.size() != 2)
          throw std::logic_error{"The 'set' builtin command expects "
                                 "precisely two arguments!\n"};
@@ -432,7 +412,7 @@ std::map<std::string, Functor> procedures = {
        std::string val = std::get<std::string>(args.back().value);
        return Symbol("", setenv(var.c_str(), val.c_str(), 1), Type::Number);
      }}},
-    {"get", {[](std::list<Symbol> args) -> Symbol {
+    std::pair{"get", Functor{[](std::list<Symbol> args) -> Symbol {
        if (args.size() != 1)
          throw std::logic_error{
              "The 'get' builtin command expects precisely one argument!"};
@@ -441,7 +421,7 @@ std::map<std::string, Functor> procedures = {
          return Symbol("", std::string(s), Type::String);
        return Symbol("", "Nil", Type::String);
      }}},
-    {"->", {[](std::list<Symbol> args, path PATH) -> Symbol {
+    std::pair{"->", Functor{[](std::list<Symbol> args, path PATH) -> Symbol {
        bool must_read = std::get<bool>(args.front().value);
        args.pop_front();
        for (auto &e : args) {
@@ -475,7 +455,7 @@ std::map<std::string, Functor> procedures = {
        Symbol result = rewind_pipe(node, PATH, must_read);
        return Symbol("", result.value, result.type);
      }}},
-    {">", {[](std::list<Symbol> args, path PATH) -> Symbol {
+    std::pair{">", Functor{[](std::list<Symbol> args, path PATH) -> Symbol {
        if (args.size() != 2) {
          throw std::logic_error{
              "Expected exactly two arguments to the '>' operator!\n"};
@@ -498,7 +478,7 @@ std::map<std::string, Functor> procedures = {
        std::cout.rdbuf(backup);
        return Symbol("", true, Type::Command);
      }}},
-    {">>", {[](std::list<Symbol> args) -> Symbol {
+    std::pair{">>", Functor{[](std::list<Symbol> args) -> Symbol {
        if (args.size() != 2) {
          throw std::logic_error{
              "Expected exactly two arguments to the '>>' operator!\n"};
@@ -522,180 +502,7 @@ std::map<std::string, Functor> procedures = {
        std::cout.rdbuf(backup);
        return Symbol("", true, Type::Command);
      }}},
-    {"<<<", {[](std::list<Symbol> args, path PATH) -> Symbol {
-       // manually pipe, write the string (args[1]) and execute
-       // the program/pipe (args[0]):
-       int fd[2];     // parent write() -> child read()
-       int readfd[2]; // child write () -> parent read()
-       auto ext = std::get<std::list<Symbol>>(args.front().value);
-       args.pop_front();
-       Symbol s;
-       if (args.front().type != Type::String) {
-         s = eval(args.front(), PATH);
-       } else
-         s = args.front();
-       std::string str = std::get<std::string>(s.value);
-       // parse the program call stored in 'ext'
-       if (ext.front() == Symbol("", "->", Type::Operator)) {
-         // pipe
-         ext.pop_front();
-         for (auto &e : ext) {
-           auto progl = std::get<std::list<Symbol>>(e.value);
-           auto lit =
-               std::find_if(progl.begin(), progl.end(), [&](Symbol &s) -> bool {
-                 return std::holds_alternative<std::string>(s.value) &&
-                        get_absolute_path(std::get<std::string>(s.value),
-                                          PATH) != std::nullopt;
-               });
-           std::string prog = std::get<std::string>(lit->value);
-           auto rest = std::list<Symbol>(lit, progl.end());
-           rest.pop_front();
-           auto ext = *lit;
-           get_env_vars(e, PATH);
-           auto abs = get_absolute_path(prog, PATH);
-           if (abs == std::nullopt) {
-             throw std::logic_error{"Unknown executable " + prog + "!\n"};
-           }
-           std::string full_path;
-           if (procedures.contains(prog))
-             full_path = prog;
-           else
-             full_path = *abs;
-           ext.value = full_path;
-           rest.push_front(ext);
-           e.value = rest;
-         }
-         std::reverse(environment_variables.begin(),
-                      environment_variables.end());
-         if (pipe(fd) == -1)
-	   throw std::logic_error{"Pipe error!\n"};
-	 if (pipe(readfd) == -1)
-	   throw std::logic_error{"Pipe error!\n"};
-         if (write(fd[1], str.c_str(), str.size()) == -1)
-	    throw std::logic_error{"Write error!\n"};
-         if (ext.empty()) {
-           throw std::logic_error{
-               "Exception in '<<<' (here-string): Invalid pipe!\n"};
-         }
-         Symbol first = ext.front();
-         ext.pop_front();
-         if (ext.empty()) {
-           close(fd[1]);
-           PidSym status =
-               rewind_call_ext_program(first, PATH, true, readfd[1], fd[0]);
-           while (waitpid(status.pid, nullptr, 0) != -1)
-             ;
-           close(readfd[1]);
-           char buf[1024];
-           std::string result;
-           int cnt = 0;
-
-           while ((cnt = read(readfd[0], buf, 1023))) {
-             if (cnt == -1) {
-               throw std::logic_error{"failed read in '<<<'!\n"};
-             }
-             if (cnt == 0) {
-               break;
-             }
-             buf[cnt] = '\0';
-             std::string tmp{buf};
-             result += tmp;
-           }
-           close(readfd[0]);
-           close(fd[0]);
-           while (wait(nullptr) != -1)
-             ;
-           return Symbol("", result, Type::String);
-         }
-         close(fd[1]);
-         PidSym status =
-             rewind_call_ext_program(first, PATH, true, readfd[1], fd[0]);
-         Symbol last = ext.back();
-         ext.pop_back();
-         int old_read_end;
-         for (Symbol cmd : ext) {
-           old_read_end = dup(readfd[0]);
-           if (pipe(readfd) == -1)
-	      throw std::logic_error{"Pipe error!\n"};
-           status = rewind_call_ext_program(cmd, PATH, true, readfd[1],
-                                            old_read_end);
-         }
-         old_read_end = dup(readfd[0]);
-         if (pipe(readfd) == -1)
-	    throw std::logic_error{"Pipe error!\n"};
-         status =
-             rewind_call_ext_program(last, PATH, true, readfd[1], old_read_end);
-         close(readfd[1]);
-         close(old_read_end);
-         std::string result;
-         int cnt;
-         char buf[1024];
-         while ((cnt = read(readfd[0], buf, 1023))) {
-           buf[cnt] = '\0';
-           if (cnt == 0) {
-             break;
-           }
-           std::string tmp{buf};
-           result += tmp;
-         }
-         while (wait(nullptr) != -1)
-           ;
-         close(fd[0]);
-         return Symbol("", result, Type::String);
-       }
-       // not a pipe
-       if (pipe(fd) == -1)
-	 throw std::logic_error{"Pipe error!\n"};
-       if (pipe(readfd) == -1)
-	 throw std::logic_error{"Pipe error!\n"};
-       if (write(fd[1], str.c_str(), str.size()))
-	  throw std::logic_error{"Write error!\n"};
-       auto lit = std::find_if(ext.begin(), ext.end(), [&](Symbol &s) -> bool {
-         bool is_local_executable =
-	   std::holds_alternative<std::string>(s.value) &&
-	   (std::get<std::string>(s.value).substr(0, 2) == "./");
-         bool is_in_path = std::holds_alternative<std::string>(s.value) &&
-	   get_absolute_path(std::get<std::string>(s.value),
-			     PATH) != std::nullopt;
-         return is_local_executable || is_in_path;
-       });
-       if (lit == ext.end()) {
-         throw std::logic_error{"Unknown executable!\n"};
-       }
-       get_env_vars(Symbol("", ext, Type::List), PATH);
-       auto rest = std::list<Symbol>(lit, ext.end());
-       close(fd[1]);
-       rest.pop_front();
-       Symbol prog = Symbol(
-           "", *get_absolute_path(std::get<std::string>(lit->value), PATH),
-           Type::Identifier);
-       rest.push_front(prog);
-       PidSym status = rewind_call_ext_program(Symbol("", rest, Type::List),
-                                               PATH, true, readfd[1], fd[0]);
-       while (waitpid(status.pid, nullptr, 0) != -1)
-         ;
-       close(readfd[1]);
-       std::string result;
-       int cnt;
-       char buf[1024];
-       while ((cnt = read(readfd[0], buf, 1023))) {
-         if (cnt == -1) {
-           throw std::logic_error{"Read failed in '<<<' (here-string!)\n"};
-         }
-         if (cnt == 0) {
-           break;
-         }
-         buf[cnt] = '\0';
-         std::string tmp{buf};
-         result += tmp;
-       }
-       close(readfd[0]);
-       close(fd[0]);
-       while (wait(nullptr) != -1)
-         ;
-       return Symbol("", result, Type::String);
-     }}},
-    {"+", {[](std::list<Symbol> args) -> Symbol {
+    std::pair{"+", Functor{[](std::list<Symbol> args) -> Symbol {
        int r = 0;
        for (auto e : args) {
 	 if (e.type == Type::Defunc)
@@ -711,7 +518,7 @@ std::map<std::string, Functor> procedures = {
        Symbol ret("", r, Type::Number);
        return ret;
      }}},
-    {"-", {[](std::list<Symbol> args) -> Symbol {
+    std::pair{"-", Functor{[](std::list<Symbol> args) -> Symbol {
        long long int r;
        if (args.front().type != Type::Number) {
          throw std::logic_error{"Unexpected operand to the '-' procedure!\n"};
@@ -735,7 +542,7 @@ std::map<std::string, Functor> procedures = {
        Symbol ret("", r, Type::Number);
        return ret;
      }}},
-    {"/", {[](std::list<Symbol> args) -> Symbol {
+    std::pair{"/", Functor{[](std::list<Symbol> args) -> Symbol {
        int r;
        if (args.front().type != Type::Number) {
          throw std::logic_error{"Unexpected operand to the '/' procedure!\n"};
@@ -760,7 +567,7 @@ std::map<std::string, Functor> procedures = {
        Symbol ret("", r, Type::Number);
        return ret;
      }}},
-    {"%", {[](std::list<Symbol> args) -> Symbol {
+    std::pair{"%", Functor{[](std::list<Symbol> args) -> Symbol {
        if ((args.size() != 2) || (args.front().type != args.back().type) ||
            (args.front().type != Type::Number) ||
            (args.back().type != Type::Number)) {
@@ -776,7 +583,7 @@ std::map<std::string, Functor> procedures = {
                          get_int(args.back().value)),
                      Type::Number);
      }}},
-    {"*", {[](std::list<Symbol> args) -> Symbol {
+    std::pair{"*", Functor{[](std::list<Symbol> args) -> Symbol {
        int r;
        if (args.front().type != Type::Number) {
          throw std::logic_error{"Unexpected operand to the '*' procedure!\n"};
@@ -800,7 +607,7 @@ std::map<std::string, Functor> procedures = {
        Symbol ret("", r, Type::Number);
        return ret;
      }}},
-    {"<", {[](std::list<Symbol> args) -> Symbol {
+    std::pair{"<", Functor{[](std::list<Symbol> args) -> Symbol {
        bool is_true = true;
        if (args.empty())
          return Symbol("", true, Type::Boolean);
@@ -823,7 +630,7 @@ std::map<std::string, Functor> procedures = {
        }
        return Symbol("", is_true, Type::Boolean);
      }}},
-    {"=", {[](std::list<Symbol> args, path PATH) -> Symbol {
+    std::pair{"=", Functor{[](std::list<Symbol> args, path PATH) -> Symbol {
        bool is_true = true;
        Symbol prev = args.front();
        args.pop_front();
@@ -841,7 +648,7 @@ std::map<std::string, Functor> procedures = {
        }
        return Symbol("", is_true, Type::Boolean);
      }}},
-    {"!=", {[](std::list<Symbol> args, path PATH) -> Symbol {
+    std::pair{"!=", Functor{[](std::list<Symbol> args, path PATH) -> Symbol {
        bool is_true = true;
        Symbol prev = args.front();
        args.pop_front();
@@ -867,7 +674,7 @@ std::map<std::string, Functor> procedures = {
        }
        return Symbol("", is_true, Type::Boolean);
      }}},
-    {"and", {[](std::list<Symbol> args, path PATH) -> Symbol {
+    std::pair{"and", Functor{[](std::list<Symbol> args, path PATH) -> Symbol {
        bool is_true = true;
        Symbol clause;
        for (auto e : args) {
@@ -883,7 +690,7 @@ std::map<std::string, Functor> procedures = {
        }
        return Symbol("", is_true, Type::Boolean);
      }}},
-    {"or", {[](std::list<Symbol> args, path PATH) -> Symbol {
+    std::pair{"or", Functor{[](std::list<Symbol> args, path PATH) -> Symbol {
        bool is_true = false;
        Symbol clause;
        for (auto e : args) {
@@ -899,7 +706,7 @@ std::map<std::string, Functor> procedures = {
        }
        return Symbol("", is_true, Type::Boolean);
      }}},
-    {"not", {[](std::list<Symbol> args) -> Symbol {
+    std::pair{"not", Functor{[](std::list<Symbol> args) -> Symbol {
        if (args.size() > 1) {
          throw std::logic_error{
              "Exception: the 'not' operator only accepts 0 or 1 arguments!\n"};
@@ -913,7 +720,7 @@ std::map<std::string, Functor> procedures = {
        }
        return Symbol("", !std::get<bool>(args.front().value), Type::Boolean);
      }}},
-    {"s+", {[](std::list<Symbol> args) -> Symbol {
+    std::pair{"s+", Functor{[](std::list<Symbol> args) -> Symbol {
        const auto is_strlit = [](const std::string &s) -> bool {
          return (s.size() > 1) && (s[0] == '"') && (s[s.length() - 1] == '"');
        };
@@ -932,7 +739,7 @@ std::map<std::string, Functor> procedures = {
        }
        return Symbol("", ret, Type::String);
      }}},
-    {"toi", {[](std::list<Symbol> args) -> Symbol {
+    std::pair{"toi", Functor{[](std::list<Symbol> args) -> Symbol {
        if (args.size() != 1) {
          throw std::logic_error{"'toi' expects precisely one string to try and "
                                 "convert to an integer!\n"};
@@ -949,14 +756,14 @@ std::map<std::string, Functor> procedures = {
        }
        return Symbol("", n, Type::Number);
      }}},
-    {"tos", {[](std::list<Symbol> args) -> Symbol {
+    std::pair{"tos", Functor{[](std::list<Symbol> args) -> Symbol {
        if (args.size() != 1) {
          throw std::logic_error{
              "Exception in 'tos': This function accepts only one argument!\n"};
        }
        return Symbol("", rec_print_ast(args.front()), Type::String);
      }}},
-    {"chtoi", {[](std::list<Symbol> args) -> Symbol {
+    std::pair{"chtoi", Functor{[](std::list<Symbol> args) -> Symbol {
        if (args.size() != 1) {
          throw std::logic_error{
              "Exception in 'chtoi': The function expects a single character!"};
@@ -973,7 +780,7 @@ std::map<std::string, Functor> procedures = {
        }
        return Symbol("", static_cast<long long signed int>(s[0]), Type::Number);
      }}},
-    {"stol", {[](std::list<Symbol> args) -> Symbol {
+    std::pair{"stol", Functor{[](std::list<Symbol> args) -> Symbol {
        const auto is_strlit = [](const std::string &s) -> bool {
          return (s.size() > 1) && (s[0] == '"') && (s[s.size() - 1] == '"');
        };
@@ -992,7 +799,7 @@ std::map<std::string, Functor> procedures = {
        }
        return Symbol("", l, Type::List, true);
      }}},
-    {"stoid", {[](std::list<Symbol> args) -> Symbol {
+    std::pair{"stoid", Functor{[](std::list<Symbol> args) -> Symbol {
        if ((args.size() != 1) || (args.front().type != Type::String)) {
          throw std::logic_error{
              "The 'stoid' function accepts a single string!\n"};
@@ -1007,7 +814,7 @@ std::map<std::string, Functor> procedures = {
        return Symbol(
            "", s, procedures.contains(s) ? Type::Operator : Type::Identifier);
      }}},
-    {"ltos", {[](std::list<Symbol> args) -> Symbol {
+    std::pair{"ltos", Functor{[](std::list<Symbol> args) -> Symbol {
        if ((args.size() != 1) ||
            (!std::holds_alternative<std::list<Symbol>>(args.front().value))) {
          throw std::logic_error{
@@ -1025,39 +832,20 @@ std::map<std::string, Functor> procedures = {
        }
        return Symbol("", ret, Type::String);
      }}},
-    {"let", {[](std::list<Symbol> args, path PATH) -> Symbol {
+    std::pair{"let", Functor{[](std::list<Symbol> args, path PATH, variables& vars) -> Symbol {
        Symbol global = args.front();
        args.pop_front();
        Symbol id = args.front();
        auto s = std::get<std::string>(id.value);
        args.pop_front();
-       Symbol result = eval(args.front(), PATH);
+       Symbol result = eval(args.front(), PATH, vars);
        if (std::get<bool>(global.value)) {
          constants.insert(std::pair{s, result});
-       }
-       Symbol let_env = Symbol("", true, Type::Command);
-       let_env.variables = std::map{std::pair{s, result}};
-       return let_env;
+       } else
+         vars.insert(std::pair{s, result});
+       return Symbol("", true, Type::Command);
      }}},
-    {"if", {[](std::list<Symbol> args, path PATH) -> Symbol {
-       // (if <clause> (expr1 ... exprn) (else1 ... elsen))
-       // if <clause> converts to Cpp's "true" then return
-       // (expr1 ... exprn) to the caller, and the other
-       // list otherwise
-       if (args.size() != 3) {
-         throw std::logic_error{
-             "An if statement must have precisely three arguments!\n"};
-       }
-       Symbol clause_expr = eval(args.front(), PATH);
-       bool clause = convert_value_to_bool(clause_expr);
-       args.pop_front();
-       if (clause) {
-         return args.front();
-       }
-       args.pop_front();
-       return args.front();
-     }}},
-    {"cond", {[](std::list<Symbol> args, path PATH) -> Symbol {
+    std::pair{"cond", Functor{[](std::list<Symbol> args, path PATH, variables& vars) -> Symbol {
        // the arguments are a sequence of lists of the form:
        // (<clause> <consequent>). Only no <clause>s can match, or
        // one does, and if this happens, the corresponding <consequent>
@@ -1078,22 +866,23 @@ std::map<std::string, Functor> procedures = {
          branch.pop_front();
 	 Symbol last = branch.back();
          branch.pop_back();
-         Symbol clause_bool = eval(clause, PATH);
+         Symbol clause_bool = eval(clause, PATH, vars);
          if (convert_value_to_bool(clause_bool)) {
            for (auto e : branch) {
-             result = eval(e, PATH);
+             result = eval(e, PATH, vars);
            }
            return last;
          }
        }
        return Symbol("", std::list<Symbol>(), Type::List);
      }}},
-    {"match", {[](std::list<Symbol> args, path PATH) -> Symbol {
+    std::pair{"match", Functor{[](std::list<Symbol> args, path PATH, variables& vars) -> Symbol {
        if (args.size() < 2) {
          throw std::logic_error{
              "The 'match' procedure expects at least two arguments!\n"};
        }
        Symbol element = eval(args.front(), PATH);
+       variables bound = vars;
        args.pop_front();
        for (auto branch : args) {
          if (branch.type != Type::List) {
@@ -1105,13 +894,12 @@ std::map<std::string, Functor> procedures = {
            throw std::logic_error{"Invalid empty branch in 'match'!\n"};
          }
          Symbol pattern = branchl.front();
-	 branchl.pop_front();
+	       branchl.pop_front();
          if (match_any == pattern) {
            Symbol result;
-	   result.variables = element.variables;
-	   result.variables.insert(std::pair{"_", element});
+	         bound.insert(std::pair{"_", element});
            for (auto expr : branchl) {
-             result = eval(expr, PATH);
+             result = eval(expr, PATH, bound);
            }
            return result;
          } else if (weak_compare(match_less_than, pattern)) {
@@ -1156,10 +944,9 @@ std::map<std::string, Functor> procedures = {
                               T t, U u) -> bool { return std::cmp_less(t, u); },
                           get_int(element.value), get_int(value.value))) {
              Symbol result;
+             bound.insert(std::pair{std::get<std::string>(id.value), element});
              for (auto expr : branchl) {
-	       expr.variables = element.variables;
-	       expr.variables.insert(std::pair{std::get<std::string>(id.value), element});
-               result = eval(expr, PATH);
+               result = eval(expr, PATH, bound);
              }
              return result;
            }
@@ -1201,9 +988,8 @@ std::map<std::string, Functor> procedures = {
            auto id = expr.back();
            if (is_true) {
              Symbol result;
+             bound.insert(std::pair{std::get<std::string>(id.value), element});
              for (auto expr : branchl) {
-	       expr.variables = element.variables;
-	       expr.variables.insert(std::pair{std::get<std::string>(id.value), element});
                result = eval(expr, PATH);
              }
              return result;
@@ -1275,9 +1061,8 @@ std::map<std::string, Functor> procedures = {
                  return s == element;
                }) != l.end()) {
              Symbol result;
+             bound.insert(std::pair{std::get<std::string>(id.value), element});
              for (auto expr : branchl) {
-	       expr.variables = element.variables;
-	       expr.variables.insert(std::pair{std::get<std::string>(id.value), element});
                result = eval(expr, PATH);
              }
              return result;
@@ -1326,38 +1111,35 @@ std::map<std::string, Functor> procedures = {
              std::string id;
              expr.pop_back();
              id = std::get<std::string>(expr.back().value);
+             bound.insert(std::pair{id, element});
              for (auto expr : branchl) {
-	       expr.variables = element.variables;
-	       expr.variables.insert(std::pair{id, element});
                result = eval(expr, PATH);
              }
              return result;
            }
          } else if (weak_compare(match_head_tail, pattern)) {
-	   auto expr = std::get<std::list<Symbol>>(pattern.value);
-	   auto tail = expr.back();
-	   expr.pop_back();
-	   auto head = expr.back();
-	   if (element.type != Type::List)
-	     continue;
-	   auto l = std::get<std::list<Symbol>>(element.value);
-	   std::string a = std::get<std::string>(head.value);
-	   std::string b = std::get<std::string>(tail.value);
-	   head = l.front();
-	   l.pop_front();
-	   tail = element;
-	   tail.value = l;
-	   Symbol result;
+            auto expr = std::get<std::list<Symbol>>(pattern.value);
+            auto tail = expr.back();
+            expr.pop_back();
+            auto head = expr.back();
+            if (element.type != Type::List)
+              continue;
+            auto l = std::get<std::list<Symbol>>(element.value);
+            std::string a = std::get<std::string>(head.value);
+            std::string b = std::get<std::string>(tail.value);
+            head = l.front();
+            l.pop_front();
+            tail = element;
+            tail.value = l;
+            Symbol result;
+            bound.insert(std::pair{a, head});
+            bound.insert(std::pair{b, tail});
+            for (auto expr : branchl) {
+              result = eval(expr, PATH);
+            }
+            return result;
 	   
-	   for (auto expr : branchl) {
-	     expr.variables = element.variables;
-	     expr.variables.insert(std::pair{a, head});
-	     expr.variables.insert(std::pair{b, tail});
-	     result = eval(expr, PATH);
-           }
-           return result;
-	   
-	 } else if (pattern.type == Type::List) {
+	       } else if (pattern.type == Type::List) {
            if (!std::holds_alternative<std::list<Symbol>>(element.value)) {
              continue;
            }
@@ -1365,13 +1147,12 @@ std::map<std::string, Functor> procedures = {
            if (same_structure) {
              auto vars = rec_bind_list(pattern, element);
              Symbol result;
+             for (auto p : vars)
+		            bound.insert(std::pair{
+		                          std::get<std::string>(p.first.value),
+		                          p.second});
              for (auto expr : branchl) {
-	       expr.variables = element.variables;
-	       for (auto p : vars)
-		 expr.variables.insert(std::pair{
-		   std::get<std::string>(p.first.value),
-		   p.second});
-               result = eval(expr, PATH);
+	            result = eval(expr, PATH);
              }
              return result;
            }
@@ -1379,51 +1160,46 @@ std::map<std::string, Functor> procedures = {
        }
        return Symbol("", false, Type::Boolean);
      }}},
-    {"$", {[](std::list<Symbol> args) -> Symbol {
+    std::pair{"$", Functor{[](std::list<Symbol> args, variables& vars) -> Symbol {
        if (args.size() != 1) {
          throw std::logic_error{
              "the reference '$' operator expects a variable!\n"};
        }
-       auto var = variable_lookup(args.front());
        auto cs = callstack_variable_lookup(args.front());
-       if (var != std::nullopt) {
-         return Symbol((*var).name, (*var).value, (*var).type);
-       } else if (cs != std::nullopt) {
-         return Symbol((*cs).name, (*cs).value, (*cs).type);
+       if (cs != std::nullopt) {
+         return *cs;
        }
-       return (Symbol("", "", Type::String));
+       if (auto s = std::get<std::string>(args.front().value); vars.contains(s))
+         return vars[s];
+       throw std::logic_error {"Exception in the '$' operator: unbound "
+                               "variable " + rec_print_ast(args.front()) +
+                               "!\n"};
      }}},
-    {"defined", {[](std::list<Symbol> args, path PATH) -> Symbol {
+    std::pair{"defined", Functor{[](std::list<Symbol> args, path PATH, variables vars) -> Symbol {
        if (args.size() != 1) {
          throw std::logic_error{"the 'defined' boolean procedure expects "
                                 "exactly one name to look up!\n"};
        }
        Symbol maybe_eval;
+       std::string name;
        if ((args.front().type != Type::String) &&
            (args.front().type != Type::Identifier)) {
          if (args.front().type == Type::List) {
            maybe_eval = eval(args.front(), PATH);
+           if ((maybe_eval.type != Type::String) &&
+               (maybe_eval.type != Type::Identifier))
+            throw std::logic_error {"Exception in 'defined':\n"
+                                    "expected a string!\n"};
+           name = std::get<std::string>(maybe_eval.value);
          } else
            throw std::logic_error{"the 'defined' boolean procedure expects an "
-                                  "identifier or a string literal!\n"};
-       }
-       std::string name;
-       if (std::holds_alternative<std::string>(maybe_eval.value)) {
-         name = std::get<std::string>(maybe_eval.value);
-       } else
-         name = std::get<std::string>(args.front().value);
-       if (!user_defined_procedures.empty() &&
-           user_defined_procedures[user_defined_procedures.size() - 1].contains(
-               name)) {
-         return Symbol("", true, Type::Boolean);
-       }
-       if (variable_lookup(Symbol("", name, Type::Identifier)) !=
-           std::nullopt) {
-         return Symbol("", true, Type::Boolean);
-       }
+                                  "identifier or a string!\n"};
+       } else name = std::get<std::string>(args.front().value);
+       if (constants.contains(name)) return Symbol("", true, Type::Boolean);
+       if (vars.contains(name)) return Symbol("", true, Type::Boolean);
        return Symbol("", false, Type::Boolean);
      }}},
-    {"print", {[](std::list<Symbol> args, path PATH) -> Symbol {
+    std::pair{"print", Functor{[](std::list<Symbol> args, path PATH) -> Symbol {
        for (auto e : args) {
          if (e.type == Type::Defunc)
            continue;
@@ -1431,14 +1207,14 @@ std::map<std::string, Functor> procedures = {
        }
        return Symbol("", false, Type::Command);
      }}},
-    {"flush", {[](std::list<Symbol> args) -> Symbol {
+    std::pair{"flush", Functor{[](std::list<Symbol> args) -> Symbol {
        std::flush(std::cout);
        return Symbol("", false, Type::Command);
      }}},
-    {"read", {[](std::list<Symbol> args) -> Symbol {
-       if (args.size() > 1) {
+    std::pair{"read", Functor{[](std::list<Symbol> args) -> Symbol {
+       if (args.size() > 0) {
          throw std::logic_error{
-             "The 'read' utility expects zero or more identifiers!\n"};
+             "The 'read' utility expects no arguments!\n"};
        }
        signed long long int s = 0;
        unsigned long long int us = 0;
@@ -1466,29 +1242,17 @@ std::map<std::string, Functor> procedures = {
          ret.value = in;
          ret.name = "";
        }
-       if (args.empty()) {
-         return ret;
-       }
-       if (variables.empty()) {
-         throw std::logic_error{"Exception in 'read'! I tried to read into a "
-                                "variable while having no defined names.\n"};
-       }
-       if (!variables[variables.size() - 1].contains(in)) {
-         throw std::logic_error{"Exception in 'read'! I tried to read into a "
-                                "variable that doesn't exist.\n"};
-       }
-       variables[variables.size() - 1].insert_or_assign(in, ret);
        return ret;
      }}},
-    {"rawmode", {[](std::list<Symbol> args) -> Symbol {
+    std::pair{"rawmode", Functor{[](std::list<Symbol> args) -> Symbol {
        tcsetattr(STDIN_FILENO, TCSANOW, &immediate);
        return Symbol("", false, Type::Command);
      }}},
-    {"cookedmode", {[](std::list<Symbol> args) -> Symbol {
+    std::pair{"cookedmode", Functor{[](std::list<Symbol> args) -> Symbol {
        tcsetattr(STDIN_FILENO, TCSANOW, &original);
        return Symbol("", false, Type::Command);
      }}},
-    {"readch", {[](std::list<Symbol> args) -> Symbol {
+    std::pair{"readch", Functor{[](std::list<Symbol> args) -> Symbol {
        // read the character
        int ch;
        int tmp[1];
@@ -1499,7 +1263,7 @@ std::map<std::string, Functor> procedures = {
        auto ret = Symbol("", std::string{static_cast<char>(ch)}, Type::String);
        return ret;
      }}},
-    {"strip", {[](std::list<Symbol> args) -> Symbol {
+    std::pair{"strip", Functor{[](std::list<Symbol> args) -> Symbol {
        const auto is_strlit = [](const std::string &s) -> bool {
          return (s.size() > 1) && (s[0] == '"') && (s[s.length() - 1] == '"');
        };
@@ -1526,7 +1290,7 @@ std::map<std::string, Functor> procedures = {
        str = str.substr(0, str.size() - 1);
        return Symbol(args.front().name, str, args.front().type);
      }}},
-    {"cmd", {[](std::list<Symbol> args) -> Symbol {
+    std::pair{"cmd", Functor{[](std::list<Symbol> args) -> Symbol {
        if (args.size() != 1) {
          throw std::logic_error{"'cmd' expects exactly one command argument "
                                 "name (a number) to get the value of!\n"};
@@ -1550,7 +1314,17 @@ std::map<std::string, Functor> procedures = {
        }
        return Symbol("", "", Type::String);
      }}},
-    {"hd", {[](std::list<Symbol> args) -> Symbol {
+    std::pair{"hd", Functor{[](std::list<Symbol> args) -> Symbol {
+       if (args.size() == 1) {
+        if (args.front().type == Type::List) {
+          auto l = std::get<std::list<Symbol>>(args.front().value);
+          if (l.empty()) return args.front();
+          return l.front();
+        } else
+          throw std::logic_error {
+            "Wrong argument type in 'hd': Expected a list!\n" };
+       }
+       
        if (args.front().type != Type::Number) {
          throw std::logic_error{
              "The first argument to 'hd' must be a number!\n"};
@@ -1574,9 +1348,20 @@ std::map<std::string, Functor> procedures = {
          ret.push_back(lst.front());
          lst.pop_front();
        }
-       return Symbol("", ret, args.front().type, true);
+       return Symbol("", ret, args.front().type);
      }}},
-    {"tl", {[](std::list<Symbol> args) -> Symbol {
+    std::pair{"tl", Functor{[](std::list<Symbol> args) -> Symbol {
+       if (args.size() == 1) {
+        if (args.front().type == Type::List) {
+          auto l = std::get<std::list<Symbol>>(args.front().value);
+          if (l.empty()) return args.front();
+          l.pop_front();
+          return Symbol("", l, Type::List);
+        } else
+          throw std::logic_error {
+            "Wrong argument type in 'hd': Expected a list!\n" };
+       }
+       
        if (args.front().type != Type::Number) {
          throw std::logic_error{
              "The first argument to 'tl' must be a number!\n"};
@@ -1592,66 +1377,17 @@ std::map<std::string, Functor> procedures = {
              "The second argument to 'tl' must be a list!\n"};
        }
        auto lst = std::get<std::list<Symbol>>(args.front().value);
-       std::reverse(lst.begin(), lst.end());
        if (n > lst.size()) {
          return Symbol("", lst, args.front().type);
        }
        auto ret = std::list<Symbol>{};
        for (int i = 0; i < n; ++i) {
-         ret.push_back(lst.front());
          lst.pop_front();
        }
-       Symbol rets = Symbol("", ret, args.front().type, true);
+       Symbol rets = Symbol("", lst, args.front().type);
        return rets;
      }}},
-    {"first", {[](std::list<Symbol> args) -> Symbol {
-       if (args.empty()) {
-         return Symbol("", std::list<Symbol>{}, Type::List);
-       }
-       if ((!std::holds_alternative<std::list<Symbol>>(args.front().value)) ||
-           (args.size() > 1)) {
-         throw std::logic_error{"'first' expects a list of which to return "
-                                "the first element!\n"};
-       }
-       auto lst = std::get<std::list<Symbol>>(args.front().value);
-       if (lst.empty()) {
-         return Symbol("", lst, Type::List);
-       }
-       return lst.front();
-     }}},
-    {"rest", {[](std::list<Symbol> args) -> Symbol {
-       int n = 0;
-       if (args.empty())
-         throw std::logic_error{
-             "'rest' expects only two arguments (a list, which is obligatory, "
-             "and an integer, optionally)!\n"};
-       if (args.size() > 2)
-         throw std::logic_error{
-             "'rest' expects only two arguments (a list, which is obligatory, "
-             "and an integer, optionally)!\n"};
-
-       auto sym = args.front();
-       args.pop_front();
-       if (!std::holds_alternative<std::list<Symbol>>(sym.value)) {
-         throw std::logic_error{"'rest' expects a single list of which to "
-                                "return all elements but the first!\n"};
-       }
-       auto l = std::get<std::list<Symbol>>(sym.value);
-       if (args.size() == 1) {
-         if (args.front().type != Type::Number) {
-           throw std::logic_error{
-               "The optional second argument to 'rest' must be an integer!\n"};
-         }
-         n = std::visit([](auto num) -> int { return num; },
-                        get_int(args.front().value));
-         for (int i = 0; i < n; ++i)
-           l.pop_front();
-         return Symbol("", l, sym.type);
-       }
-       l.pop_front();
-       return Symbol("", l, sym.type, true);
-     }}},
-    {"delete", {[](std::list<Symbol> args) -> Symbol {
+    std::pair{"delete", Functor{[](std::list<Symbol> args) -> Symbol {
        if ((args.size() != 2) ||
            (!std::holds_alternative<std::list<Symbol>>(args.front().value)) ||
            (args.back().type != Type::Number)) {
@@ -1660,43 +1396,20 @@ std::map<std::string, Functor> procedures = {
        }
        auto l = std::get<std::list<Symbol>>(args.front().value);
        args.pop_front();
-       return
-	 std::visit([&]<class T>(T x) -> Symbol {
-	     if constexpr (std::is_same_v<T, long long unsigned int> ||
-			   std::is_same_v<T, long long signed int>) {
-	       if (l.empty()) {
-		 if (x == 0) return Symbol("", std::list<Symbol>{}, Type::List);
-		 throw std::logic_error {"Trying to delete an element at"
-					 " an index > 0, in an empty list!\n"};
-	       }
-
-	       if (x > l.size()) {
-		 throw std::logic_error {
-		   "Trying to delete a list element but "
-		   "the index is > the length of the list!"
-		 };
-	       }
-
-	       if (x == l.size()) {
-		 // delete at the end
-		 l.pop_back();
-		 return Symbol("", l, Type::List);
-	       }
-	       
-	       size_t idx = 0;
-	       for (auto it = l.begin(); it != l.end(); ++it) {
-		 if (idx == x) {
-		   l.erase(it);
-		   break;
-		 }
-		 idx++;
-	       }
-	       return Symbol("", l, Type::List);
-	     }
-	     throw std::logic_error {"Invalid index for list deletion!\n"};
-	   }, args.back().value);
+       if (args.front().type != Type::Number)
+        throw std::logic_error {"Exception: the second argument to 'delete'"
+                                " must be an integer!\n"};
+       signed long long int n = std::visit(overloaded {
+        [](long long int n) -> long long int { return n; },
+        [](unsigned long long int n) -> long long int { return n; },
+        [](auto) -> long long int { return 0; }}, args.front().value);
+        std::list<Symbol>::iterator it;
+        int idx = 0;
+        while (idx++ < n) it++;
+        l.erase(it);
+        return Symbol("", l, Type::List);
     }}},
-    {"insert", {[](std::list<Symbol> args) -> Symbol {
+    std::pair{"insert", Functor{[](std::list<Symbol> args) -> Symbol {
        if ((args.size() != 3) ||
            (!std::holds_alternative<std::list<Symbol>>(args.front().value)) ||
            (args.back().type != Type::Number)) {
@@ -1705,40 +1418,23 @@ std::map<std::string, Functor> procedures = {
        }
        auto l = std::get<std::list<Symbol>>(args.front().value);
        args.pop_front();
-       return
-	 std::visit([&]<class T>(T x) -> Symbol {
-	     if constexpr (std::is_same_v<T, long long unsigned int> ||
-			   std::is_same_v<T, long long signed int>) {
-	       if (l.empty()) {
-		 if (x == 0) return Symbol("", std::list<Symbol>{args.front()}, Type::List);
-		 throw std::logic_error {"Trying to insert an element at"
-					 " an index > 0, in an empty list!\n"};
-	       }
-	       if (x > l.size()) {
-		 throw std::logic_error {"Trying to insert an element at "
-					 "an index greater than the len(l)!"};
-	       }
-
-	       if (x == l.size()) {
-		 // insert at the end
-		 l.push_back(args.front());
-		 return Symbol("", l, Type::List);
-	       }
-	       
-	       size_t idx = 0;
-	       for (auto it = l.begin(); it != l.end(); ++it) {
-		 if (idx == x) {
-		   l.insert(it, args.front());
-		   break;
-		 }
-		 idx++;
-	       }
-	       return Symbol("", l, Type::List);
-	     }
-	     throw std::logic_error {"Invalid index for list insert!\n"};
-	 }, args.back().value);
+       auto e = args.front();
+       args.pop_front();
+       if (args.front().type != Type::Number)
+        throw std::logic_error {"Exception: The third argument to 'insert'"
+                                " must be an integer!\n"};
+       long long int n = std::visit(overloaded {
+        [](long long int n) -> long long int { return n; },
+        [](unsigned long long int n) -> long long int { return n; },
+        [](auto) -> long long int { return 0; }
+       }, args.front().value);
+       int idx = 0;
+       std::list<Symbol>::iterator it;
+       while (idx++ < n) it++;
+       l.insert(it, e);
+       return Symbol("", l, Type::List);
      }}},
-    {"reverse", {[](std::list<Symbol> args) -> Symbol {
+    std::pair{"reverse", Functor{[](std::list<Symbol> args) -> Symbol {
        if ((args.size() != 1) ||
            (!std::holds_alternative<std::list<Symbol>>(args.front().value))) {
          throw std::logic_error{
@@ -1748,7 +1444,7 @@ std::map<std::string, Functor> procedures = {
        std::reverse(l.begin(), l.end());
        return Symbol("", l, args.front().type);
      }}},
-    {"length", {[](std::list<Symbol> args) -> Symbol {
+    std::pair{"length", Functor{[](std::list<Symbol> args) -> Symbol {
        if (args.empty()) {
          return Symbol("", 0, Type::Number);
        }
@@ -1764,7 +1460,7 @@ std::map<std::string, Functor> procedures = {
        return Symbol("", static_cast<long long unsigned int>(lst.size()),
                      Type::Number);
      }}},
-    {"++", {[](std::list<Symbol> args) -> Symbol {
+    std::pair{"++", Functor{[](std::list<Symbol> args) -> Symbol {
        std::list<Symbol> l;
        bool must_ret_ast = false;
        for (auto e : args) {
@@ -1781,7 +1477,7 @@ std::map<std::string, Functor> procedures = {
        }
        return Symbol("", l, (must_ret_ast) ? Type::RawAst : Type::List, true);
      }}},
-    {"load", {[](std::list<Symbol> args, path PATH) -> Symbol {
+    std::pair{"load", Functor{[](std::list<Symbol> args, path PATH, variables& vars) -> Symbol {
       Symbol last_evaluated;
       Symbol last_expr;
       for (auto e : args) {
@@ -1793,18 +1489,20 @@ std::map<std::string, Functor> procedures = {
 
 	      std::vector<Token> tks = get_tokens(rewind_read_file(filename));
 	      Symbol ast;
-	      try {
+          try {
 	        ast = parse(tks);
-	        last_evaluated = eval(ast, PATH);
-	      } catch (std::logic_error ex) {
-	        std::string linum = format_line(ast.line);
-	        throw std::logic_error {"(file " + filename + "), " +
-			                            linum + ": " + ex.what()};
+          } catch (std::logic_error ex) { throw std::logic_error {"(file " +
+                                                                  filename + ")" + ex.what() }; }
+          for (auto x : std::get<std::list<Symbol>>(ast.value))
+            try {
+              last_evaluated = eval(x, PATH, vars, x.line);
+            } catch (std::logic_error ex) {
+              throw std::logic_error {"(file " + filename + ")\n" + ex.what()};
+            }
         }
-      }
-      return last_evaluated;
+        return last_evaluated;
      }}},
-    {"eval", {[](std::list<Symbol> args, path PATH) -> Symbol {
+    std::pair{"eval", Functor{[](std::list<Symbol> args, path PATH) -> Symbol {
       if ((args.size() != 1) || (args.front().type != Type::String)) {
         throw std::logic_error{
           "'eval' expects exactly one string to evaluate!\n"};
@@ -1816,9 +1514,11 @@ std::map<std::string, Functor> procedures = {
         return Symbol("", false, Type::Command);
       }
       Symbol ast;
+      variables vars = constants;
       try {
         ast = parse(get_tokens(line));
-        last_evaluated = eval(ast, PATH);
+        ast = std::get<std::list<Symbol>>(ast.value).front();
+        last_evaluated = eval(ast, PATH, vars, ast.line);
         if ((last_evaluated.type != Type::Command) &&
             (last_evaluated.type != Type::CommandResult))
           std::cout << rec_print_ast(last_evaluated);
@@ -1827,12 +1527,12 @@ std::map<std::string, Functor> procedures = {
       }
       return last_evaluated;
     }}},
-    {"return", {[](std::list<Symbol> args) {
+    std::pair{"return", Functor{[](std::list<Symbol> args) {
       if (args.size() != 1)
 	throw std::logic_error {"The 'return' builtin expects one argument!\n"};
       return args.front();
     }}},
-    {"typeof", {[](std::list<Symbol> args, path PATH) -> Symbol {
+    std::pair{"typeof", Functor{[](std::list<Symbol> args) -> Symbol {
       if (args.size() != 1) {
         throw std::logic_error{
           "The 'typeof' procedure expects exactly one symbol!\n"};
@@ -1841,6 +1541,7 @@ std::map<std::string, Functor> procedures = {
       Symbol ast;
       if (args.front().type == Type::RawAst) {
         ast = parse(get_tokens(rec_print_ast(args.front())));
+        ast = std::get<std::list<Symbol>>(ast.value).front();
       } else
         ast = args.front();
       switch (ast.type) {
@@ -1868,36 +1569,7 @@ std::map<std::string, Functor> procedures = {
         return Symbol("", "undefined", Type::String);
       }
      }}},
-    {"ast", {[](std::list<Symbol> args, path PATH) -> Symbol {
-       // what this function  does is, it takes a single string as input,
-       // and it generates an ast representation of it to be used in coupling
-       // with the "typeof" operator or otherwise for parsing purposes.
-       std::string input;
-       if (args.size() != 1) {
-         throw std::logic_error{
-             "Exception: The 'ast' procedure expects a single string!\n"};
-       }
-       if (args.front().type != Type::String) {
-         throw std::logic_error{
-             "Exception: The 'ast' procedure expects a single string!\n"};
-       }
-       input = std::get<std::string>(args.front().value);
-       try {
-         auto ast = parse(get_tokens(input));
-         if (ast.type == Type::List) {
-           ast.type = Type::RawAst;
-           auto l = std::get<std::list<Symbol>>(ast.value);
-           for (auto &e : l) {
-             e.type = Type::RawAst;
-           }
-           ast.value = l;
-         }
-         return ast;
-       } catch (std::logic_error ex) {
-         return Symbol("", std::string(ex.what()), Type::Error);
-       };
-     }}},
-    {"tokens", {[](std::list<Symbol> args) -> Symbol {
+    std::pair{"tokens", Functor{[](std::list<Symbol> args) -> Symbol {
        // returns a list of tokens from a single string given as argument,
        // as if it went throught the ordinary lexing of some Rewind input
        // (because this is exactly what we're doing here)

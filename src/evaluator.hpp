@@ -27,9 +27,9 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <variant>
-Symbol eval(Symbol root, const path &PATH, int line);
+Symbol eval(Symbol root, const path &PATH, variables& vars, int line);
 Symbol eval_primitive_node(Symbol node, const path &PATH,
-                           int line = 0);
+                           variables& vars = constants, int line = 0);
 std::pair<bool, Symbol>
 check_for_tail_recursion(std::string name, Symbol funcall, const path &PATH) {
   if (funcall.type != Type::List)
@@ -54,18 +54,18 @@ check_for_tail_recursion(std::string name, Symbol funcall, const path &PATH) {
 }
 
 Symbol eval_function(Symbol node, const path& PATH, int line,
-		     std::optional<Symbol> f = std::nullopt) {
+		                 std::optional<Symbol> f = std::nullopt) {
   auto as_list = std::get<std::list<Symbol>>(node.value);
-  std::string op;
-  
+  std::string op = std::get<std::string>(as_list.front().value);
+  variables vars = constants;
   Symbol func;
   if (f == std::nullopt) {
-    if (auto x = variable_lookup(as_list.front()); x != std::nullopt)
-      if (x->type == Type::Function)
-	func = *x;
+    if (constants.contains(op))
+      if (constants[op].type == Type::Function)
+	      func = constants[op];
     else if (auto x = callstack_variable_lookup(as_list.front()); x != std::nullopt)
       if (x->type == Type::Function)
-	func = *x;
+	      func = *x;
     else throw std::logic_error {"Unbound function " + op + "!\n"};
   }
   if (f != std::nullopt) func = *f;
@@ -98,35 +98,29 @@ Symbol eval_function(Symbol node, const path& PATH, int line,
     if (!call_stack.empty())
       call_stack.pop_back();
     call_stack.push_back(std::make_pair(op, frame));
-    if (variables.size() > 1) {
-      variables.pop_back();
-    }
   }
   auto last = body.back();
   body.pop_back();
   Symbol result;
-  variables.push_back({});
   for (auto e : body) {
-    result = eval(e, PATH, line);
+    result = eval(e, PATH, vars, line);
   }
 
   if (auto last_call = check_for_tail_recursion(op, last, PATH);
       last_call.first == false) {
-    result = eval(last_call.second, PATH, line);
+    result = eval(last_call.second, PATH, vars, line);
   } else {
     last = last_call.second;
     last.type = Type::RecFunCall;
     return last;
   }
   call_stack.pop_back();
-  if (variables.size() > 1)
-    variables.pop_back();
   return result;
 }
 
 // to use with nodes with only leaf children.
 Symbol eval_primitive_node(Symbol node, const path &PATH,
-                           int line) {
+                           variables& vars, int line) {
   Symbol result;
   std::optional<std::string> absolute; // absolute path of an executable, if any
   auto it = PATH.begin();
@@ -142,9 +136,10 @@ Symbol eval_primitive_node(Symbol node, const path &PATH,
   if (node.type == Type::RawAst) {
     return node;
   }
-  if (auto x = variable_lookup(op); x != std::nullopt)
-    if (x->type == Type::Function)
-      return eval_function(node, PATH, line, *x);
+  if (op.type == Type::Operator)
+    if (auto s = std::get<std::string>(op.value); constants.contains(s))
+      if (auto x = constants[s]; x.type == Type::Function)
+        return eval_function(node, PATH, line, x);
   if (auto x = callstack_variable_lookup(op); x != std::nullopt)
     if (x->type == Type::Function)
       return eval_function(node, PATH, line, *x);
@@ -158,7 +153,7 @@ Symbol eval_primitive_node(Symbol node, const path &PATH,
         l.push_front(Symbol("", node.is_global, Type::Boolean));
       }
       try {
-        result = fun(l, PATH);
+        result = fun(l, PATH, vars);
       } catch (std::logic_error ex) {
         throw std::logic_error{"Rewind (line " + std::to_string(line) +
                                "): " + ex.what()};
@@ -166,49 +161,16 @@ Symbol eval_primitive_node(Symbol node, const path &PATH,
       if (result.type == Type::RawAst) {
         return result;
       }
-      result = eval(result, PATH, line);
+      result = eval(result, PATH, vars, line);
       return result;
     } else
       throw std::logic_error{"Rewind (line" + std::to_string(line) +
                              "): Unbound procedure " + s + "!\n"};
-  } else if (auto lit = std::find_if(
-                 l.begin(), l.end(),
-                 [&](Symbol &s) -> bool {
-                   bool is_local_executable =
-                       std::holds_alternative<std::string>(s.value) &&
-                       (std::get<std::string>(s.value).substr(0, 2) == "./");
-                   bool is_in_path =
-                       std::holds_alternative<std::string>(s.value) &&
-                       get_absolute_path(std::get<std::string>(s.value),
-                                         PATH) != std::nullopt;
-                   return is_local_executable || is_in_path;
-                 });
-             lit != l.end()) {
-    get_env_vars(node, PATH);
-    auto rest = std::list<Symbol>(lit, l.end());
-    rest.pop_front();
-    auto ext = *lit;
-    if (std::get<std::string>((*lit).value).substr(0, 2) != "./")
-      ext.value = *get_absolute_path(std::get<std::string>((*lit).value), PATH);
-    rest.push_front(ext);
-    Symbol pipel = Symbol("", rest, Type::List);
-    tcsetattr(STDIN_FILENO, TCSANOW, &original);
-    if (node.name != "root") {
-      pipel = Symbol("", std::list<Symbol>{pipel}, Type::List);
-      auto result = rewind_pipe(pipel, PATH, true);
-      active_pids = {};
-      return result;
-    }
-    auto result = rewind_call_ext_program(pipel, PATH, false);
-    while (waitpid(result.pid, nullptr, 0) > 0)
-      ;
-    active_pids = {};
-    return result.s;
   }
   return node;
 }
 
-Symbol eval(Symbol root, const path &PATH, int line) {
+Symbol eval(Symbol root, const path &PATH, variables& vars, int line) {
   Symbol result;
   std::stack<Symbol> node_stk;
   Symbol current_node;
@@ -235,7 +197,6 @@ Symbol eval(Symbol root, const path &PATH, int line) {
     // when the last child is null, and continue with the second last node and
     // so on
     current_node.variables = root.variables;
-    std::cout << "cur = " << rec_print_ast(current_node) << "\n";
     if (current_node.type == Type::List) {
       if (std::get<std::list<Symbol>>(current_node.value).empty()) {
         // if we're back to the root node, and we don't have any
@@ -248,14 +209,8 @@ Symbol eval(Symbol root, const path &PATH, int line) {
         
         if (root.is_global)
           eval_temp_arg.is_global = true;
-        
-        if (root.is_block)
-          eval_temp_arg.variables = root.variables;
-              result = eval_primitive_node(eval_temp_arg, PATH, line);
-        if (root.is_block)
-          for (auto [k, v] : result.variables)
-            root.variables.insert(std::pair{k, v});
-              leaves.pop_back();
+        result = eval_primitive_node(eval_temp_arg, PATH, vars, line);
+        leaves.pop_back();
 
         // main trampoline
         if (result.type == Type::RecFunCall) {
@@ -382,8 +337,13 @@ Symbol eval(Symbol root, const path &PATH, int line) {
 	}
       } else if (current_node.type == Type::Identifier) {
         if (op[0] == '$') {
-          if (root.variables.contains(op.substr(1))) {
-	    auto var = root.variables[op.substr(1)];
+          if (constants.contains(op.substr(1))) {
+	          auto var = constants[op.substr(1)];
+            if (leaves.empty())
+              leaves.push_back(std::list<Symbol>{});
+            leaves[leaves.size() - 1].push_back(var);
+          } else if (vars.contains(op.substr(1))) {
+            auto var = vars[op.substr(1)];
             if (leaves.empty())
               leaves.push_back(std::list<Symbol>{});
             leaves[leaves.size() - 1].push_back(var);

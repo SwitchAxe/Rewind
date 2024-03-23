@@ -433,7 +433,7 @@ Symbol parse(std::vector<Token> tokens) {
   do {
     cur = dispatch_parse(tokens, i);
     cur.result.is_global = true;
-    i = cur.end_index;
+    i = cur.end_index + 1;
     program.push_back(cur.result);
   } while (i < tokens.size());
   return Symbol("", program, Type::List);

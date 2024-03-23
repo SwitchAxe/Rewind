@@ -53,7 +53,8 @@ int main(int argc, char **argv) {
     if (PATH != std::nullopt) p = *PATH;
     try {
       Symbol ast = parse(get_tokens(std::string{argv[2]}));
-      std::cout << rec_print_ast(eval(ast, p, 0)) << "\n";
+      variables vs = {};
+      std::cout << rec_print_ast(eval(ast, p, vs, 0)) << "\n";
     } catch (std::exception e) {
       std::cout << "Exception: " << e.what() << "\n";
     }
@@ -85,8 +86,9 @@ int main(int argc, char **argv) {
     std::vector<Token> tokens = get_tokens(expr);
     Symbol ast = parse(tokens);
     Symbol result;
+    variables vs = {};
     for (auto x : std::get<std::list<Symbol>>(ast.value))
-      result = eval(x, p, x.line);
+      result = eval(x, p, vs, x.line);
     std::cout << rec_print_ast(result) << "\n";
     tcsetattr(STDIN_FILENO, TCSANOW, &original);
     return 0;
@@ -97,9 +99,10 @@ int main(int argc, char **argv) {
     if (PATH != std::nullopt) p = *PATH;
     auto tokens = get_tokens(expr);
     Symbol ast = parse(tokens);
+    variables vs = {};
     Symbol result;
     for (auto x : std::get<std::list<Symbol>>(ast.value))
-      result = eval(x, p, x.line);
+      result = eval(x, p, vs, x.line);
     std::cout << rec_print_ast(result) << "\n";
     tcsetattr(STDIN_FILENO, TCSANOW, &original);
     return 0;

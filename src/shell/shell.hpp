@@ -152,6 +152,7 @@ void rewind_sh_loop() {
   if (PATH == std::nullopt)
     throw std::logic_error{
         "The system PATH is empty! I can't proceed. Aborting... \n"};
+  variables vs = {};
   do {
     line = rewind_readline(maybe_prompt, PATH);
     if ((line == "exit") || (line == "(exit)"))
@@ -161,10 +162,10 @@ void rewind_sh_loop() {
     try {
       Symbol ast = parse(get_tokens(line));
       ast = std::get<std::list<Symbol>>(ast.value).front();
-      Symbol result = eval(ast, *PATH, ast.line);
+      Symbol result = eval(ast, *PATH, vs, ast.line);
       std::cout << rec_print_ast(result) << "\n";
     } catch (std::logic_error ex) {
-      procedures["cookedmode"]({}, {});
+      procedures["cookedmode"](std::list<Symbol>{}, path{});
       std::cout << ex.what() << "\n";
       continue;
     }

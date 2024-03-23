@@ -72,28 +72,39 @@ struct Symbol {
 
 // function signature for the builtins
 using path = std::vector<std::string>;
-
+using variables = std::map<std::string, Symbol>;
 struct Functor {
   using sig = std::function<Symbol(std::list<Symbol>)>;
-  using psig = std::function<Symbol(std::list<Symbol>, path P)>;
-  Functor()
-      : _fn([](std::list<Symbol> l) -> Symbol {
-          return Symbol("", "Dummy", Type::String);
-        }),
-        _Pfn([](std::list<Symbol> l, path PATH) -> Symbol {
-          return Symbol("", "Dummy", Type::String);
-        }) {}
-  Functor(sig f) { _fn = f; };
-  Functor(psig f) { _Pfn = f; };
-  // Functor(Functor& other) { _fn = other._fn; _Pfn = other._Pfn; }
+  using psig = std::function<Symbol(std::list<Symbol>, path)>;
+  using pvsig = std::function<Symbol(std::list<Symbol>, path, variables&)>;
+  using vsig = std::function<Symbol(std::list<Symbol>, variables&)>;
+  Functor() : _fn([](std::list<Symbol>) {return Symbol();}),
+              _Pfn([](std::list<Symbol>, path) { return Symbol(); }),
+              _PVfn([](std::list<Symbol>, path, variables&) {
+                return Symbol();
+              }) {}
+  Functor(sig&& s) : _fn(s) {}
+  Functor(psig&& s) : _Pfn(s) {}
+  Functor(pvsig&& s) : _PVfn(s) {}
+  Functor(vsig&& s) : _Vfn(s) {}
+  auto operator()(std::list<Symbol> l, path P, variables& v) {
+    if (_PVfn) return _PVfn(l, P, v);
+    if (_Pfn) return _Pfn(l, P);
+    return _fn(l);
+  }
+
+  auto operator()(std::list<Symbol> l, variables& V) -> Symbol {
+    return (_Vfn) ? _Vfn(l, V) : _fn(l);
+  };
+
   auto operator()(std::list<Symbol> l, path P) -> Symbol {
     return (_Pfn) ? _Pfn(l, P) : _fn(l);
   };
   auto operator()(std::list<Symbol> l) -> Symbol { return _fn(l); };
-
-private:
   sig _fn;
   psig _Pfn;
+  pvsig _PVfn;
+  vsig _Vfn;
 };
 
 template <class T>
