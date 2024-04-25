@@ -358,7 +358,7 @@ patterns = {
   std::pair{match_head_tail, [](Symbol matched, std::list<Symbol> l, variables vs,
 				const path& PATH,
 				std::list<Symbol> body) -> std::optional<Symbol> {
-    if (matched.type != Type::ListLiteral)
+    if ((matched.type != Type::List) && (matched.type != Type::ListLiteral))
       throw std::logic_error {"in 'cons' (match): expected a list to destructure!\n"};
     auto x = std::get<std::list<Symbol>>(matched.value);
     l.pop_front();

@@ -70,6 +70,7 @@ Symbol eval_function(Symbol node, const path& PATH, int line,
     else throw std::logic_error {"Unbound function " + op + "!\n"};
   }
   if (f != std::nullopt) func = *f;
+  vars.insert({op, func}); // to enable the use of recursive local functions
   auto func_as_l = std::get<std::list<Symbol>>(func.value);
   // get the various parts of the function
   auto parameters = std::get<std::list<Symbol>>(func_as_l.front().value);

@@ -57,13 +57,15 @@ std::map<std::string, Functor> boolean = {
     }
     return Symbol("", is_true, Type::Boolean);
   }}},
-  std::pair{"and", Functor{[](std::list<Symbol> args) -> Symbol {
+  std::pair{"and", Functor{[](std::list<Symbol> args, const path& PATH, variables vs) -> Symbol {
     bool is_true = true;
     Symbol clause;
     for (auto e : args) {
       if (e.type != Type::Boolean) {
-        throw std::logic_error{"Type mismatch in the 'and' operator: Only "
-                               "booleans are allowed!\n"};
+	e = eval(e, PATH, vs);
+	if (e.type != Type::Boolean)
+          throw std::logic_error{"Type mismatch in the 'and' operator: Only "
+				 "booleans are allowed!\n"};
       }
       is_true = is_true && std::get<bool>(e.value);
       if (!is_true) {
@@ -72,13 +74,15 @@ std::map<std::string, Functor> boolean = {
     }
     return Symbol("", is_true, Type::Boolean);
   }}},
-  std::pair{"or", Functor{[](std::list<Symbol> args) -> Symbol {
+  std::pair{"or", Functor{[](std::list<Symbol> args, const path& PATH, variables vs) -> Symbol {
     bool is_true = false;
     Symbol clause;
     for (auto e : args) {
       if (e.type != Type::Boolean) {
-        throw std::logic_error{"Type mismatch in the 'or' operator: Only "
-                               "booleans are allowed!\n"};
+	e = eval(e, PATH, vs);
+	if (e.type != Type::Boolean)
+	  throw std::logic_error{"Type mismatch in the 'or' operator: Only "
+				 "booleans are allowed!\n"};
       }
       is_true = is_true || std::get<bool>(e.value);
       if (is_true) {

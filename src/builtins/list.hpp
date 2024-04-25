@@ -5,27 +5,27 @@
 
 std::map<std::string, Functor> list = {
     std::pair{"hd", Functor{[](std::list<Symbol> args) -> Symbol {
-      if (args.front().type != Type::List)
+      if ((args.front().type != Type::List) && (args.front().type != Type::ListLiteral))
         throw std::logic_error {"'hd': Expected a list!\n"};
       auto l = std::get<std::list<Symbol>>(args.front().value);
       return l.front();
     }}},
     std::pair{"tl", Functor{[](std::list<Symbol> args) -> Symbol {
-      if (args.front().type != Type::List)
+      if ((args.front().type != Type::List) && (args.front().type != Type::ListLiteral))
         throw std::logic_error {"'tl': Expected a list!\n"};
       auto l = std::get<std::list<Symbol>>(args.front().value);
       l.pop_front();
       return Symbol("", l, Type::List);
     }}},
     std::pair{"reverse", Functor{[](std::list<Symbol> args) -> Symbol {
-      if (args.front().type != Type::List)
+      if ((args.front().type != Type::List) && (args.front().type != Type::ListLiteral))
         throw std::logic_error {"'reverse': Expected a list!\n"};
       auto l = std::get<std::list<Symbol>>(args.front().value);
       std::reverse(l.begin(), l.end());
       return Symbol("", l, Type::List);
     }}},
     std::pair{"delete", Functor{[](std::list<Symbol> args) -> Symbol {
-      if (args.front().type != Type::List)
+      if ((args.front().type != Type::List) && (args.front().type != Type::ListLiteral))
         throw std::logic_error {"'delete': Expected a list as"
                                 " first argument!\n"};
       auto l = std::get<std::list<Symbol>>(args.front().value);
@@ -50,7 +50,7 @@ std::map<std::string, Functor> list = {
     std::pair{"insert", Functor{[](std::list<Symbol> args) -> Symbol {
       if (args.size() != 3)
         throw std::logic_error {"'insert': expected 3 argumets!\n"};
-      if (args.front().type != Type::List)
+      if ((args.front().type != Type::List) && (args.front().type != Type::ListLiteral))
         throw std::logic_error {"'insert': Expected a list as"
                                 " first argument!\n"};
       auto l = std::get<std::list<Symbol>>(args.front().value);
@@ -79,7 +79,7 @@ std::map<std::string, Functor> list = {
     std::pair{"ltos", Functor{[](std::list<Symbol> args) -> Symbol {
       if (args.size() != 1)
         throw std::logic_error {"'ltos': Expected one argument!\n"};
-      if (args.front().type != Type::List)
+      if ((args.front().type != Type::List) && (args.front().type != Type::ListLiteral))
         throw std::logic_error {"'ltos': Expected a list!\n"};
       std::string s;
       for (auto x : std::get<std::list<Symbol>>(args.front().value)) {
