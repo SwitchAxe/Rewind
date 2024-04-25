@@ -137,10 +137,16 @@ Symbol eval_primitive_node(Symbol node, const path &PATH,
   if (node.type == Type::RawAst) {
     return node;
   }
-  if (op.type == Type::Operator)
-    if (auto s = std::get<std::string>(op.value); constants.contains(s))
+  if (op.type == Type::Operator) {
+    if (auto s = std::get<std::string>(op.value); constants.contains(s)) {
       if (auto x = constants[s]; x.type == Type::Function)
         return eval_function(node, PATH, line, x);
+    } else if (vars.contains(s)) {
+      if (auto x = vars[s]; x.type == Type::Function)
+	return eval_function(node, PATH, line, x);
+    }
+  }
+
   if (auto x = callstack_variable_lookup(op); x != std::nullopt)
     if (x->type == Type::Function)
       return eval_function(node, PATH, line, *x);
