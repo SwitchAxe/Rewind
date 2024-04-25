@@ -23,11 +23,7 @@
 #include <optional>
 
 
-template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
-template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
-
-
-std::string rec_print_ast(Symbol root, bool debug);
+std::string rec_print_ast(Symbol root, bool debug = false);
 
 bool is_strlit(std::string s) {
   return (s.size() > 1) && (((s[0] == '\'') && (s.back() == '\'')) ||
@@ -54,20 +50,28 @@ std::string format_line(int l) { return "(line " + std::to_string(l) + ")"; }
 
 RecInfo dispatch_parse(std::vector<Token> tokens, int si);
 
-Symbol parse_identifier(std::string tk) {
-  return Symbol("", tk, Type::Identifier);
+Symbol parse_identifier(std::string tk, int line = 0) {
+  Symbol ret = Symbol("", tk, Type::Identifier);
+  ret.line = line;
+  return ret;
 }
 
-Symbol parse_number(signed long long int n) {
-  return Symbol("", n, Type::Number);
+Symbol parse_number(signed long long int n, int line = 0) {
+  Symbol ret = Symbol("", n, Type::Number);
+  ret.line = line;
+  return ret;
 }
 
-Symbol parse_strlit(std::string tk) {
-  return Symbol("", tk.substr(1, tk.size() - 2), Type::String);
+Symbol parse_strlit(std::string tk, int line = 0) {
+  Symbol ret = Symbol("", tk.substr(1, tk.size() - 2), Type::String);
+  ret.line = line;
+  return ret;
 }
 
-Symbol parse_bool(std::string tk) {
-  return Symbol("", tk == "true" ? true : false, Type::Boolean);
+Symbol parse_bool(std::string tk, int line = 0) {
+  Symbol ret = Symbol("", tk == "true" ? true : false, Type::Boolean);
+  ret.line = line;
+  return ret;
 }
 
 RecInfo parse_list_expr(std::vector<Token> tokens, int si);
@@ -83,10 +87,11 @@ RecInfo parse_list_literal(std::vector<Token> tokens, int si) {
     auto tk = tok.tk;
     if ((tk == "(") || (tk == "[")) {
       auto got = parse_list(tokens, i);
+      got.result.line = tok.line;
       ret.push_back(got.result);
       i = got.end_index;
     } else if ((tk == ")") || (tk == "]")) {
-      Symbol r = Symbol("", ret, Type::List);
+      Symbol r = Symbol("", ret, Type::ListLiteral);
       r.line = tok.line;
       return RecInfo {
 	      .result = r,
@@ -94,6 +99,7 @@ RecInfo parse_list_literal(std::vector<Token> tokens, int si) {
 	      .line = tok.line };
     } else if ((tk == "'(") || (tk == "'[")) {
       auto got = parse_list_literal(tokens, i);
+      got.result.line = tok.line;
       ret.push_back(got.result);
       i = got.end_index;
     } else {
@@ -125,6 +131,7 @@ RecInfo parse_block_function(std::vector<Token> tokens, int si) {
 	      .line = tk.line };
     }
     auto got = dispatch_parse(tokens, i);
+    got.result.line = tk.line;
     body.push_back(got.result);
     i = got.end_index;
   }
@@ -160,10 +167,12 @@ RecInfo parse_function_call(std::vector<Token> tokens, int si) {
 
     if ((tk.tk == "(") || (tk.tk == "[")) {
       auto got = parse_list(tokens, i);
+      got.result.line = tk.line;
       fcall.push_back(got.result);
       i = got.end_index;
     } else if ((tk.tk == "'(") || (tk.tk == "'[")) {
       auto got = parse_list_literal(tokens, i);
+      got.result.line = tk.line;
       fcall.push_back(got.result);
       i = got.end_index;
     } else {
@@ -177,6 +186,7 @@ RecInfo parse_function_call(std::vector<Token> tokens, int si) {
       auto op = fcall.front();
       fcall.pop_front();
       op.type = Type::Operator;
+      op.line = tokens[i-1].line;
       fcall.push_front(op);
     }
     return RecInfo {
@@ -239,6 +249,7 @@ RecInfo literal_to_expr(RecInfo got) {
   op.type = Type::Operator;
   l.push_front(op);
   got.result.value = l;
+  got.result.type = Type::List;
   return got;
 }
 
@@ -257,6 +268,7 @@ RecInfo parse_list(std::vector<Token> tks, int i) {
 
 RecInfo parse_let(std::vector<Token> tokens, int si) {
   // let <name> = <any value, also functions>
+  auto orig = si;
   si++; // skip the "let" keyword
   Symbol name = parse_identifier(tokens[si].tk);
   si++;
@@ -275,9 +287,10 @@ RecInfo parse_let(std::vector<Token> tokens, int si) {
     name,
     any_v.result
   };
-
+  Symbol rets = Symbol("", ret, Type::List);
+  rets.line = tokens[orig].line;
   return RecInfo {
-    .result = Symbol("", ret, Type::List),
+    .result = rets,
     .end_index = si,
     .line = tokens[si].line };
 }
@@ -289,21 +302,25 @@ RecInfo parse_branch_section(std::vector<Token> tokens, int i, bool expr = false
     if (expr)
       part.result = Symbol("", std::list<Symbol>{part.result}, Type::List);
     part.end_index++;
+    part.result.line = tokens[i].line;
   }
   else if ((tokens[i].tk == "'(") || (tokens[i].tk == "'[")) {
     part = parse_list_literal(tokens, i);
     if (expr)
       part.result = Symbol("", std::list<Symbol>{part.result}, Type::List);
     part.end_index++;
+    part.result.line = tokens[i].line;
   } else if (tokens[i].tk == "{") {
     part = parse_block_function(tokens, i);
     part.end_index++;
+    part.result.line = tokens[i].line;
   }
   else {
     // if it's not a list, we assume that it's not a function call!
     part = dispatch_parse(std::vector<Token>{tokens[i]}, 0);
     i++;
     part.end_index = i;
+    part.result.line = tokens[i].line;
     if (expr)
       if ((tokens[i].tk != ",") && (tokens[i].tk != ";"))
 	throw std::logic_error {format_line(tokens[i].line) +
@@ -314,6 +331,7 @@ RecInfo parse_branch_section(std::vector<Token> tokens, int i, bool expr = false
 
 RecInfo parse_branch(std::vector<Token> tokens, int i) {
   std::list<Symbol> l = {};
+  auto orig = i;
   i++; // skip the "|"
 
   RecInfo cond = parse_branch_section(tokens, i);
@@ -330,8 +348,10 @@ RecInfo parse_branch(std::vector<Token> tokens, int i) {
       l.push_back(x);
   }
   else l = {cond.result, body.result};
+  auto ret = Symbol("", l, Type::List);
+  ret.line = tokens[orig].line;
   return RecInfo {
-    .result = Symbol("", l, Type::List),
+    .result = ret,
     .end_index = i,
     .line = tokens[i].line
   };
@@ -340,6 +360,7 @@ RecInfo parse_branch(std::vector<Token> tokens, int i) {
 RecInfo parse_match(std::vector<Token> tokens, int i) {
   // we parse a value, and branches afterwards.
   i++; // skip the "match" keyword
+  auto orig = i;
   RecInfo matched = parse_branch_section(tokens, i);
   i = matched.end_index - 1;
   std::list<Symbol> l = {
@@ -352,9 +373,10 @@ RecInfo parse_match(std::vector<Token> tokens, int i) {
     i = got.end_index;
     l.push_back(got.result);
   } while (tokens[i].tk != ";");
-
+  Symbol ret = Symbol("", l, Type::List);
+  ret.line = tokens[orig].line;
   return RecInfo {
-    .result = Symbol("", l, Type::List),
+    .result = ret,
     .end_index = i,
     .line = tokens[i].line
   };
@@ -363,13 +385,16 @@ RecInfo parse_match(std::vector<Token> tokens, int i) {
 RecInfo parse_cond(std::vector<Token> tokens, int i) {
   auto l = std::list<Symbol>{Symbol("", "cond", Type::Operator)};
   RecInfo got;
+  auto orig = i;
   do {
     got = parse_branch(tokens, i + 1);
     i = got.end_index;
     l.push_back(got.result);
   } while (tokens[i].tk != ";");
+  auto ret = Symbol("", l, Type::List);
+  ret.line = tokens[orig].line;
   return RecInfo {
-    .result = Symbol("", l, Type::List),
+    .result = ret,
     .end_index = i,
     .line = tokens[i].line
   };

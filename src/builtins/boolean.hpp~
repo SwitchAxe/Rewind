@@ -1,0 +1,14 @@
+#include "../include.hpp"
+
+bool convert_value_to_bool(Symbol sym) {
+  bool clause;
+  clause = std::visit(overloaded {
+    [](std::string s) { return !s.empty(); },
+    [](signed long long int x) { return x != 0; },
+    [](unsigned long long int x) { return x != 0; },
+    [](bool b) { return b; },
+    [](std::list<Symbol> l) { return !l.empty(); },
+    [](std::monostate) { return false; }
+  }, sym.value);
+  return clause;
+}

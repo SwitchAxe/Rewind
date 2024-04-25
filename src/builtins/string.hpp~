@@ -1,0 +1,97 @@
+#include "../include.hpp"
+
+std::map<std::string, Functor> string = {
+  std::pair{"s+", Functor{[](std::list<Symbol> args) -> Symbol {
+    const auto is_strlit = [](const std::string &s) -> bool {
+      return (s.size() > 1) && (s[0] == '"') && (s[s.length() - 1] == '"');
+    };
+    std::string ret;
+    for (auto e : args) {
+      if (!std::holds_alternative<std::string>(e.value)) {
+        throw std::logic_error{"Expected a string in 's+'!\n"};
+      }
+      if (is_strlit(std::get<std::string>(e.value))) {
+        std::string no_strlit = std::get<std::string>(e.value);
+        no_strlit = no_strlit.substr(1, no_strlit.length() - 2);
+        ret += no_strlit;
+        continue;
+      }
+      ret += std::get<std::string>(e.value);
+    }
+    return Symbol("", ret, Type::String);
+  }}},
+  std::pair{"toi", Functor{[](std::list<Symbol> args) -> Symbol {
+    if (args.size() != 1) {
+      throw std::logic_error{"'toi' expects precisely one string to try and "
+                             "convert to an integer!\n"};
+    }
+    if (args.front().type != Type::String) {
+      throw std::logic_error{"'toi' expects a string!\n"};
+    }
+    std::string s = std::get<std::string>(args.front().value);
+    long long unsigned int n = 0;
+    auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.length(), n);
+    if (ec != std::errc()) {
+      throw std::logic_error{"Exception in 'toi': Failed to convert the "
+                             "string to an integer!\n"};
+    }
+    return Symbol("", n, Type::Number);
+  }}},
+  std::pair{"tos", Functor{[](std::list<Symbol> args) -> Symbol {
+    if (args.size() != 1) {
+      throw std::logic_error{
+        "Exception in 'tos': This function accepts only one argument!\n"};
+    }
+    return Symbol("", rec_print_ast(args.front()), Type::String);
+  }}},
+  std::pair{"chtoi", Functor{[](std::list<Symbol> args) -> Symbol {
+    if (args.size() != 1) {
+      throw std::logic_error{
+        "Exception in 'chtoi': The function expects a single character!"};
+    }
+    if ((args.front().type != Type::Identifier) &&
+        (args.front().type != Type::String)) {
+      throw std::logic_error{
+        "Exception in 'chtoi': The function expects a single character!"};
+    }
+    std::string s = std::get<std::string>(args.front().value);
+    if (s.size() != 1) {
+      throw std::logic_error{
+        "Exception in 'chtoi': The function expects a single character!"};
+    }
+    return Symbol("", static_cast<long long signed int>(s[0]), Type::Number);
+  }}},
+  std::pair{"stoid", Functor{[](std::list<Symbol> args) -> Symbol {
+    if ((args.size() != 1) || (args.front().type != Type::String)) {
+      throw std::logic_error{
+        "The 'stoid' function accepts a single string!\n"};
+    }
+    auto s = std::get<std::string>(args.front().value);
+    const auto is_strlit = [](std::string s) -> bool {
+      return (s.size() > 1) && (s[0] == '"') && (s.back() == '"');
+    };
+    if (is_strlit(s)) {
+      s = s.substr(1, s.size() - 2);
+    }
+    return Symbol("", s, args.front().type);
+  }}},
+  std::pair{"stol", Functor{[](std::list<Symbol> args) -> Symbol {
+    const auto is_strlit = [](const std::string &s) -> bool {
+      return (s.size() > 1) && (s[0] == '"') && (s[s.size() - 1] == '"');
+    };
+
+    if ((args.size() > 1) || (args.front().type != Type::String)) {
+      throw std::logic_error{
+        "'stol' expects a single string to turn into a list!\n"};
+    }
+    std::string s = std::get<std::string>(args.front().value);
+    if (is_strlit(s)) {
+      s = s.substr(1, s.size() - 2);
+    }
+    std::list<Symbol> l;
+    for (auto ch : s) {
+      l.push_back(Symbol("", std::string{ch}, Type::String));
+    }
+    return Symbol("", l, Type::List, true);
+  }}},
+}

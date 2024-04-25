@@ -18,6 +18,7 @@
 #include "procedures.hpp"
 #include "src/external.hpp"
 #include "src/types.hpp"
+#include "src/builtins/include.hpp"
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
@@ -186,6 +187,7 @@ Symbol eval(Symbol root, const path &PATH, variables& vars, int line) {
   case Type::Boolean:
   case Type::Function:
   case Type::RawAst:
+  case Type::ListLiteral:
     return root;
   default: break;
   }
@@ -196,7 +198,6 @@ Symbol eval(Symbol root, const path &PATH, variables& vars, int line) {
     // for each node, visit each child and backtrack to the last parent node
     // when the last child is null, and continue with the second last node and
     // so on
-    current_node.variables = root.variables;
     if (current_node.type == Type::List) {
       if (std::get<std::list<Symbol>>(current_node.value).empty()) {
         // if we're back to the root node, and we don't have any

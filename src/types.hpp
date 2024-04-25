@@ -20,12 +20,14 @@
 #include <variant>
 #include <vector>
 #include <map>
+#include "utils.hpp"
 
 enum class Type {
   String,
   Number,
   Boolean,
   List,
+  ListLiteral,
   Function,
   Operator,
   Defunc,
