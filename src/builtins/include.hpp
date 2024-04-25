@@ -7,6 +7,7 @@
 #include "boolean.hpp"
 #include "misc.hpp"
 #include "source.hpp"
+#include "shell.hpp"
 
 static std::map<std::string, Functor> procedures =
   combine(branching,
@@ -15,4 +16,5 @@ static std::map<std::string, Functor> procedures =
 			  combine(numeric,
 				  combine(list,
 					  combine(code,
-						  misc))))));
+						  combine(boolean,
+							  combine(misc, shell))))))));
