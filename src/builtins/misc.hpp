@@ -22,6 +22,27 @@ std::map<std::string, Functor> misc = {
     }
     return Symbol("", ret, Type::List, true);
   }}},
+  std::pair{"ast", Functor{[](std::list<Symbol> args) -> Symbol {
+    if (args.size() != 1)
+      throw std::logic_error {"The 'ast' function accepts a single list of tokens!\n"};
+    if ((args.front().type != Type::List) && (args.front().type != Type::ListLiteral))
+      throw std::logic_error {"The 'ast' function accepts a single list of tokens!\n"};
+    auto l = std::get<std::list<Symbol>>(args.front().value);
+    std::vector<Token> tks;
+    for (auto x : l) {
+      tks.push_back(Token {.tk = std::get<std::string>(x.value),
+                          .line = x.line });
+    }
+    try {
+      Symbol ast = parse(tks);
+      if (ast.type != Type::List) return ast;
+      auto l = std::get<std::list<Symbol>>(ast.value);
+      if (l.empty()) return ast;
+      return l.front();
+    } catch (std::logic_error e) {
+      return Symbol("", std::list<Symbol>{}, Type::List);
+    }
+  }}},
   std::pair{"typeof", Functor{[](std::list<Symbol> args) -> Symbol {
     if (args.size() != 1) {
       throw std::logic_error{

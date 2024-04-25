@@ -213,7 +213,7 @@ patterns = {
 			      const path& PATH,
 			      std::list<Symbol> body) -> std::optional<Symbol> {
     auto s = l.back();
-    if (s.type != Type::List)
+    if ((s.type != Type::List) && (s.type != Type::ListLiteral))
       throw std::logic_error {"'in' (match): expected a list!\n"};
     auto x = std::get<std::list<Symbol>>(s.value);
     if (std::find_if(x.begin(), x.end(),

@@ -93,6 +93,16 @@ std::map<std::string, Functor> list = {
       }
       return Symbol("", s, Type::String);
     }}},
+    std::pair{"ltof", Functor{[](std::list<Symbol> args) -> Symbol {
+      if (args.size() != 1)
+        throw std::logic_error {"'ltof': Expected one argument!\n"};
+      if ((args.front().type != Type::List) && (args.front().type != Type::ListLiteral))
+        throw std::logic_error {"'ltof': Expected a list!\n"};
+      auto l = std::get<std::list<Symbol>>(args.front().value);
+      if (l.size() != 2)
+	throw std::logic_error {"'ltof': The correct format is '[<arguments> <body>]"};
+      return Symbol("", args.front().value, Type::Function);
+    }}},
     std::pair{"++", Functor{[](std::list<Symbol> args) -> Symbol {
       std::list<Symbol> l;
       for (auto x : args) {
