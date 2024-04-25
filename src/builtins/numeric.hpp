@@ -133,14 +133,11 @@ std::map<std::string, Functor> numeric = {
         throw std::logic_error{"The '<' operator only accepts integers!\n"};
       }
       // uses (in)equality operator overloads for integer variants
-      if ((e.type == first.type) && (e.type == Type::Number)) {
-        is_true = is_true && std::visit(
-					[]<class T, class U>(T t, U u) -> bool {
-					  return std::cmp_greater(t, u);
-					},
-					get_int(e.value), get_int(first.value));
-        continue;
-      }
+      is_true = is_true && std::visit(
+				      []<class T, class U>(T t, U u) -> bool {
+					return std::cmp_greater(t, u);
+				      },
+				      get_int(e.value), get_int(first.value));
       first = e;
     }
     return Symbol("", is_true, Type::Boolean);

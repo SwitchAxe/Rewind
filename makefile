@@ -2,7 +2,7 @@ CXX     = g++
 FLAGS   = -std=c++20 -I. -lreadline -ggdb -ltinfo
 OUT     = rewind
 SRC     = src/main.cpp
-LIBS    = src/*.hpp
+LIBS    = src/*.hpp src/builtins/*.hpp
 SHLIBS  = src/shell/*.hpp
 OBJ     = build/main.o
 

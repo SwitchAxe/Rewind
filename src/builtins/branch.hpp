@@ -398,7 +398,7 @@ std::map<std::string, Functor> branching = {
   std::pair{"cond",
             Functor{[](std::list<Symbol> args,
                        const path& PATH,
-                       variables& vs) -> Symbol {
+                       variables& vs) {
               Symbol result = Symbol("", false, Type::Boolean);
               for (auto e: args) {
                 if (e.type != Type::List) {
@@ -415,10 +415,11 @@ std::map<std::string, Functor> branching = {
                 Symbol clause = l.front();
                 l.pop_front();
                 clause = eval(clause, PATH, vs, clause.line);
-                if (convert_value_to_bool(clause))
+                if (convert_value_to_bool(clause)) {
                   for (auto e : l)
                     result = eval(e, PATH, vs, e.line);
-                break;
+                  break;
+		}
               }
               return result;
             }}},

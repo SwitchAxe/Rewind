@@ -32,7 +32,7 @@ Symbol eval(Symbol root, const path &PATH, variables& vars, int line);
 Symbol eval_primitive_node(Symbol node, const path &PATH,
                            variables& vars = constants, int line = 0);
 std::pair<bool, Symbol>
-check_for_tail_recursion(std::string name, Symbol funcall, const path &PATH) {
+check_for_tail_recursion(std::string name, Symbol funcall, const path &PATH, variables vs) {
   if (funcall.type != Type::List)
     return {false, funcall};
   auto lst = std::get<std::list<Symbol>>(funcall.value);
@@ -45,8 +45,8 @@ check_for_tail_recursion(std::string name, Symbol funcall, const path &PATH) {
   auto nodename = std::get<std::string>(fstnode.value);
   if ((nodename == "if") || (nodename == "cond")) {
     lst.pop_front();
-    auto branch = procedures[nodename](lst, PATH);
-    return check_for_tail_recursion(name, branch, PATH);
+    auto branch = procedures[nodename](lst, PATH, vs);
+    return check_for_tail_recursion(name, branch, PATH, vs);
   }
   if (nodename == name) {
     return {true, funcall};
@@ -107,7 +107,7 @@ Symbol eval_function(Symbol node, const path& PATH, int line,
     result = eval(e, PATH, vars, line);
   }
 
-  if (auto last_call = check_for_tail_recursion(op, last, PATH);
+  if (auto last_call = check_for_tail_recursion(op, last, PATH, vars);
       last_call.first == false) {
     result = eval(last_call.second, PATH, vars, line);
   } else {
