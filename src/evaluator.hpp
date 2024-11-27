@@ -194,8 +194,13 @@ Symbol eval(Symbol root, const path &PATH, variables& vars, int line) {
   case Type::Boolean:
   case Type::Function:
   case Type::RawAst:
-  case Type::ListLiteral:
     return root;
+  case Type::ListLiteral: {
+    auto l = std::get<std::list<Symbol>>(root.value);
+    for (auto& x: l) x = eval(x, PATH, vars, x.line);
+    root.value = l;
+    return root;
+  }
   default: break;
   }
   if (root.type == Type::List)
