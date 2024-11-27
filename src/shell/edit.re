@@ -39,7 +39,7 @@ let getch = () => {
 
 let strlen = (s) => (length (stol s));
 let overwrite = (w c) => { print (curs_bwd (strlen w)) c w $re_color_blank; w; }
-let kind = (x) => (typeof (ast x));
+let kind = (x) => (typeof (ast (tokens x)));
 
 
 let space? = (x) => (or (= x " ") (= x "\t"));
@@ -68,9 +68,9 @@ let tokens+blanks = (s) => {
 
 let map = (f l) => {
     let aux = (f l app) =>
-    	cond
-    	| (= l '[]) => app,
-	| _ => (aux f (rest l) (++ app (f (first l))));
+    	match l
+    	  | '[] => app,
+    	  | (cons h t) => (aux f $t (++ app (f $h)));
     aux f l '[];
 }
 
@@ -97,10 +97,10 @@ let re:handle-backspace = (s l len ins c) =>
     | _ => '[s l len ins];
 
 let re:handle-printable = (s l len ins c) => {
-    let ns = (ltos (insert l c ins));
+    let ns = (ltos (insert l ins c));
     let fmt = (re:visit $ns);
     print (curs_bwd (- len ins));
-    '[$ns (stol $ns) (+ len 1) (+ ins 1)];
+    return '[$ns (stol $ns) (+ len 1) (+ ins 1)];
 }
 
 let re:handle-left = (a b c d e) =>
@@ -121,48 +121,51 @@ let re:handle-up = (a b c d e) => '[a b c d e];
 
 let re:handle-newline = (a b c d e) => a;
 
-let keypress-dispatch = (c) => cond
-    		      	       | (= c "\n") => $re:handle-newline,
-			       | (= c "A") => $re:handle-up,
-			       | (= c "B") => $re:handle-down,
-			       | (= c "C") => $re:handle-right,
-			       | (= c "D") => $re:handle-left,
-			       | (= c "undefined") => $re:handle-undefined,
-			       | (or (= (chtoi c) 8) (= (chtoi c) 127)) =>
-			       	 $re:handle-backspace,
-			       | _ => $re:handle-printable;
+let keypress-dispatch = (c) =>
+	cond
+      | (= c "\n") => $re:handle-newline,
+	  | (= c "A") => $re:handle-up,
+	  | (= c "B") => $re:handle-down,
+	  | (= c "C") => $re:handle-right,
+	  | (= c "D") => $re:handle-left,
+	  | (= c "undefined") => $re:handle-undefined,
+	  | (or (= (chtoi c) 8) (= (chtoi c) 127)) =>
+		$re:handle-backspace,
+	  | _ => $re:handle-printable;
 
 let re:repl = () => {
     let aux = (a b c d) => {
     	flush;
     	let ch = (getch);
-	let f = (keypress-dispatch $ch);
-	match (f a b c d $ch)
-	| '[a * c d] => (aux $a $* $c $d),
-	| _ => $_;
+	    let f = (keypress-dispatch $ch);
+	    let ret = match (f a b c d $ch)
+	      | '[a _ c d] => (aux $a $_ $c $d),
+	      | _ => $_;
+		return $ret;
     }
     rawmode;
     let r = (aux "" '[] 0 0);
     cookedmode;
+    print "r is " $r "\n";
     return $r;
 }
 
 let re:default-prompt = () => (s+ (get PWD) "> ");
 
 let re:display = (p) => cond
-    	      	       	| (!= p false) => { print p; flush; },
-		       	| _ => { print (re:default-prompt); flush; };
+    	      	       	  | (!= p false) => { print p; flush; },
+		       	          | _ => { print (re:default-prompt); flush; };
 
 let loop = (f) => { f; loop f; }
 
 let re:start-repl = () =>
     cond
-    | (defined prompt) => (loop () => { print "\n";
-				       	re:display (prompt);
-					eval (re:repl); }),
-    | _ => (loop () => { print "\n";
-      	   	     	 re:display (re:default-prompt);
-			 eval (re:repl); });
+      | (defined prompt) => (loop () => { print "\n";
+				       	                  re:display (prompt);
+										  eval (re:repl); }),
+      | _ => (loop () => { print "\n";
+      	   	     	       re:display (re:default-prompt);
+			               eval (re:repl); });
 
 
 re:start-repl;
