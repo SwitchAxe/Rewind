@@ -1,5 +1,5 @@
 CXX     = g++
-FLAGS   = -std=c++20 -I. -lreadline -ggdb -ltinfo
+FLAGS   = -std=c++23 -I. -lreadline -ggdb -ltinfo
 OUT     = rewind
 SRC     = src/main.cpp
 LIBS    = src/*.hpp src/builtins/*.hpp
