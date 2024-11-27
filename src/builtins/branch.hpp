@@ -180,7 +180,7 @@ std::list<std::pair<Symbol, Symbol>> rec_bind_list(Symbol lhs, Symbol rhs) {
 // following map.
 
 std::optional<bool> do_ordering_match(Symbol s1, Symbol s2,
-				      std::strong_ordering ord) {
+                                      std::strong_ordering ord) {
   if (ord == std::strong_ordering::equal)
     return std::optional<bool>{s1.value == s2.value};
   if (s2.type != Type::Number)
